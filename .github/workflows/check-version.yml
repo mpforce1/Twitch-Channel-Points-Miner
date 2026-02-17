@@ -1,0 +1,51 @@
+# Checks if the version number has changed
+name: check-version
+
+# Triggered when we change the project version or manually
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - TwitchChannelPointsMiner/__init__.py
+      - pyproject.toml
+  workflow_dispatch:
+
+jobs:
+  check-version:
+    name: Ensure Version Has Changed
+    runs-on: ubuntu-latest
+
+    # Write permissions to allow creating a repository dispatch
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6.0.2
+
+      - name: Get Last Tag Version
+        # Gets the last tag version number, assumes only version tags exist
+        id: getlastversion
+        run: |
+          echo "last_version=$(git describe --abbrev=0 --tag)" >> $GITHUB_OUTPUT
+
+      - name: Get Next Version
+        # Gets the version number from the proproject.toml
+        id: getnextversion
+        uses: ./.github/actions/get-version-action
+
+      - name: Compare Versions + Optionally Trigger Build
+        # Checks if the versions are different
+        run: |
+          if [ "${{ steps.getlastversion.outputs.last_version }}" != "${{ steps.getnextversion.outputs.next_version }}" ]; then \
+            echo "Version Changed, Triggering Build Workflow"
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              /repos/${{ github.repository }}/dispatches \
+               -f 'event_type=build_deploy' -F "client_payload[version]=${{ steps.getnextversion.outputs.next_version }}""
+          else \
+            echo "Version Unchanged, Skipping Build Workflow"
+          fi

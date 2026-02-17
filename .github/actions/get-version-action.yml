@@ -1,0 +1,16 @@
+name: get-version
+description: Reusable action that can get the version number from the pyproject.toml file.
+
+outputs:
+  version:
+    description: "Version Number"
+    value: ${{ steps.getversion.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get Version
+      # Gets the version number from the proproject.toml
+      id: getversion
+      run: |
+        echo "version=$(cat pyproject.toml | grep "version" | cut -d'"' -f 2)" >> $GITHUB_OUTPUT

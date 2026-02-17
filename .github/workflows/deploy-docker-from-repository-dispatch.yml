@@ -1,0 +1,23 @@
+# Builds and publishes the project to Docker Hub and GitHub Container Registry
+name: deploy-docker-from-repository-dispatch
+
+# Triggered when we receive a `build_deploy` dispatch
+on:
+  repository_dispatch:
+    types:
+      - build_deploy
+
+jobs:
+  deploy-docker:
+    name: Deploy To Docker Hub + GitHub Container Registry
+    runs-on: ubuntu-latest
+
+    # Packages write permission to allow publishing GitHub package
+    permissions:
+      packages: write
+
+    steps:
+      - name: deploy
+        uses: ./.github/actions/deploy-action.yml
+        with:
+          version: ${{ github.event.client_payload.version }}

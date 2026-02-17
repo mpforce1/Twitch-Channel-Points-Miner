@@ -1,15 +1,19 @@
-name: deploy-docker
+name: deploy-action
+description: |
+  Reusable action that can build and publish Docker images,
+  update the Docker Hub description,
+  and tag the Git repository with the version number.
 
-on:
-  workflow_dispatch:
+inputs:
+  version:
+    description: "Next Version Number"
+    type: string
+    required: true
 
 jobs:
   deploy-docker:
-    name: Deploy To Docker Hub + Release To GitHub
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: write
+    name: Deploy To Docker Hub + GitHub Container Registry
+    runs-on: "composite"
     steps:
       - name: Checkout source
         uses: actions/checkout@v6.0.2
@@ -33,11 +37,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3.12.0
 
-      - name: Read Version
-        # Gets the version number from the proproject.toml
-        id: getversion
-        run: echo "version=$(cat pyproject.toml | grep "version" | cut -d'"' -f 2)" >> $GITHUB_OUTPUT
-
       - name: Docker meta
         # Create image tags and labels
         id: meta
@@ -47,7 +46,7 @@ jobs:
             mpforce1/twitch-channel-points-miner
             ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=${{ steps.getversion.outputs.version }}
+            type=raw,value=${{ inputs.version }}
             type=sha
             type=sha,format=long
             type=raw,value=latest
@@ -66,38 +65,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Pull GHCR Image
-        # Pull images for each platform
-        run: |
-          docker pull --platform=linux/amd64 ghcr.io/mpforce1/twitch-channel-points-miner:latest
-          docker pull --platform=linux/arm64 ghcr.io/mpforce1/twitch-channel-points-miner:latest
-          docker pull --platform=linux/arm/v7 ghcr.io/mpforce1/twitch-channel-points-miner:latest
-
-      - name: Create Tarballs
-        # Saves the images to separate gzipped tarballs
-        run: |
-          mkdir output
-          docker image save \
-          --platform=linux/amd64 \
-          ghcr.io/mpforce1/twitch-channel-points-miner:latest | \
-          gzip > ./output/twitch-channel-points-miner-linux-amd64.tar.gz
-          docker image save \
-          --platform=linux/arm64 \
-          ghcr.io/mpforce1/twitch-channel-points-miner:latest | \
-          gzip > ./output/twitch-channel-points-miner-linux-arm64.tar.gz
-          docker image save \
-          --platform=linux/arm/v7 \
-          ghcr.io/mpforce1/twitch-channel-points-miner:latest | \
-          gzip > ./output/twitch-channel-points-miner-linux-arm-v7.tar.gz
-
-      - name: Create GitHub Release
-        # Create a draft release for manual review
-        uses: softprops/action-gh-release@v2.5.0
-        with:
-          generate_release_notes: true
-          files: ./output/**/*
-          draft: true
-
       - name: Docker Hub Description
         # Update docker hub description
         uses: peter-evans/dockerhub-description@v5.0.0
@@ -105,6 +72,15 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
           repository: mpforce1/twitch-channel-points-miner
+          enable-url-completion: true
+
+      - name: Create Tag
+        # Creates a tag for the new version
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git tag ${{ inputs.version }}
+          git push origin ${{ inputs.version }}
 
       - name: Image digest AMD64, ARM64, ARMv7
         # Print digest

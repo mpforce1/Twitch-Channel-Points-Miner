@@ -1,0 +1,40 @@
+# Runs tests for the project
+name: test
+
+# Triggered either when you push to any branch or manually
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Project Tests
+    runs-on: ubuntu-latest
+
+    # Run tests for each targeted platform
+    strategy:
+      matrix:
+        platform: [ linux/amd64, linux/arm64, linux/arm/v7 ]
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.7.0
+
+      # Builds the tester image for the given platform
+      - name: Build test image
+        run: |
+          docker buildx build \
+          --platform ${{ matrix.platform }} \
+          --target tester \
+          --tag mpforce1/twitch-channel-points-miner-tester \
+          .
+
+      # Runs the built tester image
+      - name: Run tests
+        run: |
+          docker run \
+          --platform ${{ matrix.platform }} \
+          mpforce1/twitch-channel-points-miner-tester
