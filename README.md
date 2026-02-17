@@ -6,6 +6,7 @@
 <a href="https://hits.sh/github.com/mpforce1/Twitch-Channel-Points-Miner/"><img alt="GitHub Traffic" src="https://hits.sh/github.com/mpforce1/hits.svg?style=flat&label=views"/></a>
 <a href="https://github.com/mpforce1/Twitch-Channel-Points-Miner/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/mpforce1/Twitch-Channel-Points-Miner-v2?style=flat&color=black&logo=unlicense&logoColor=white"></a>
 <a href="https://github.com/mpforce1/Twitch-Channel-Points-Miner"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/mpforce1/Twitch-Channel-Points-Miner-v2?style=flat&color=lightyellow&logo=github&logoColor=white"></a>
+<a href="https://github.com/mpforce1/Twitch-Channel-Points-Miner/actions/workflows/test.yml"><img alt="Test Status" src="https://img.shields.io/github/actions/workflow/status/mpforce1/Twitch-Channel-Points-Miner/test.yml?branch=main&label=Tests"></a>
 </p>
 
 
