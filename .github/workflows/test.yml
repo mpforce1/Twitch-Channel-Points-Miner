@@ -4,6 +4,20 @@ name: test
 # Triggered either when you push to any branch or manually
 on:
   push:
+    # Only trigger on pushes for files that can affect tests
+    paths:
+      # The miner code
+      - TwitchChannelPointsMiner/**
+      # The test code
+      - tests/**
+      # The deployment files
+      - Dockerfile
+      # The dependencies
+      - pyproject.toml
+      - uv.lock
+      - .python-version
+      # This file
+      - .github/workflows/test.yml
   workflow_dispatch:
 
 jobs:
