@@ -17,9 +17,9 @@ jobs:
     steps:
       - name: Get Next Version
         id: getnextversion
-        uses: ./.github/actions/get-version-action.yml
+        uses: ./.github/actions/get-version
 
-      - name: deploy
-        uses: ./.github/actions/deploy-action.yml
+      - name: Deploy
+        uses: ./.github/actions/deploy
         with:
           version: ${{ steps.getnextversion.outputs.version }}

@@ -33,7 +33,7 @@ jobs:
       - name: Get Next Version
         # Gets the version number from the proproject.toml
         id: getnextversion
-        uses: ./.github/actions/get-version-action
+        uses: ./.github/actions/get-version
 
       - name: Compare Versions + Optionally Trigger Build
         # Checks if the versions are different

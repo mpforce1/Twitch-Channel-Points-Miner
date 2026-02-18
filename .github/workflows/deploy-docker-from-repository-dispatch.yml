@@ -18,6 +18,6 @@ jobs:
 
     steps:
       - name: deploy
-        uses: ./.github/actions/deploy-action.yml
+        uses: ./.github/actions/deploy
         with:
           version: ${{ github.event.client_payload.version }}

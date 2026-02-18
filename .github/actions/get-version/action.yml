@@ -12,5 +12,5 @@ runs:
     - name: Get Version
       # Gets the version number from the proproject.toml
       id: getversion
-      run: |
-        echo "version=$(cat pyproject.toml | grep "version" | cut -d'"' -f 2)" >> $GITHUB_OUTPUT
+      shell: bash
+      run: echo "version=$(cat pyproject.toml | grep "version" | cut -d'"' -f 2)" >> $GITHUB_OUTPUT
