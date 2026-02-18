@@ -97,6 +97,12 @@ miner startup logs will prompt you with a URL you can use to log in.
 If you need to run multiple containers you will need to bind different ports per container (only if you need also use
 the analytics) and mount different run.py file.
 
+The miner works best when used in isolation. If you're using the miner's account with Twitch services (website, app,
+etc...) at the same time as the miner you may see discrepancies in the miner's logs. For example, if the miner has
+decided to watch `streamer1` and `streamer2`, but you're watching `streamer3` on the website, you'll run into Twitch's 2
+stream watch limit. Twitch will decide internally to award channel points on 2 of the 3 streams at any given time. The
+result for the miner may be that you don't get as many points for `streamer1` and `streamer2`.
+
 ## Disclaimer
 
 This project comes with no guarantee or warranty. You are responsible for whatever happens from using this project. It
