@@ -118,8 +118,11 @@ prioritises streamers in the reverse of the order they are defined.
 
 ##### `PriorityGroupSelector`
 
-This selector takes a `list[str]` (Twitch usernames) and a `PrioritySelector`. It will select only streamers with the
-given usernames using the given selector. For example:
+This selector applies a given `PrioritySelector` to a particular group of streamers. The streamers can be configured in
+several different ways:
+
+It can take a `list[str]` (Twitch usernames). It will select only streamers with the given usernames using the given
+selector. For example:
 
 ```python3
 PriorityGroupSelector(
@@ -132,7 +135,59 @@ PriorityGroupSelector(
 
 This will attempt to select only `streamer1` or `streamer2` in that order.
 
-You can also not specify `streamers` in which case it will consider all streamers.
+You can also not specify `streamers` in which case it will consider all streamers:
+
+```python3
+PriorityGroupSelector(
+    selector=PrioritySelector(
+        priorities=[Priority.Order]
+    )
+)
+```
+
+The same thing happens if you supply `streamers` with an empty list (`[]`):
+
+```python3
+PriorityGroupSelector(
+    streamers=[],
+    selector=PrioritySelector(
+        priorities=[Priority.Order]
+    )
+)
+```
+
+You can also specify a `StreamerSource` to consider only streamers that were sourced in the given way:
+
+```python3
+PriorityGroupSelector(
+    streamers=StreamerSource.Streamers,
+    selector=PrioritySelector(
+        priorities=[Priority.Order]
+    )
+)
+```
+
+`StreamerSource.Streamers` means all streamers specified in your `streamers` list, not including followers,
+see [here](#streamers) for details. `StreamerSource.Followers` means all streamers that your account follows, see
+[here](#followers) for details.
+
+You may also specify an arbitrary filter function:
+
+> [!IMPORTANT]
+> Please test that your filter function works the way you expect. We can't help debug code that's not part of the
+> project.
+
+```python3
+PriorityGroupSelector(
+    streamers=lambda streamer: streamer.channel_points < 5000,
+    selector=PrioritySelector(
+        priorities=[Priority.Order]
+    )
+)
+```
+
+In this case we've specified a function that takes a `Streamer` and returns `True` if they have fewer than 5000 channel
+points. You can replace that function with anything that takes a `Streamer` and returns a `bool`.
 
 ##### `NestedSelector`
 
