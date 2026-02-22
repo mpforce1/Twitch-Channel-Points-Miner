@@ -1,10 +1,11 @@
 import datetime
 import time
+from typing import Sequence, Callable
 from unittest.mock import MagicMock
 
 import pytest
 
-from TwitchChannelPointsMiner.classes.Settings import Priority, PriorityGroup
+from TwitchChannelPointsMiner.classes.Settings import Priority, StreamerSource
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
     PriorityGroupSelector,
     PrioritySelector,
@@ -603,11 +604,11 @@ def test_priority_subscribed(
     assert streamer_ids == expected_ids
 
 
-def priority_selects_none(streamers: list[Streamer], max_amount: int) -> list[str]:
+def priority_selects_none(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
     return []
 
 
-def priority_selects_first(streamers: list[Streamer], max_amount: int) -> list[str]:
+def priority_selects_first(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
     return [streamers[0].channel_id]
 
 
@@ -700,46 +701,39 @@ class TestPrioritySelector:
 
 
 class TestPriorityGroupSelector:
-    basic_priorities = [Priority.STREAK, Priority.SUBSCRIBED, Priority.ORDER]
-
-    streamer_a = Streamer("1", "a")
-    streamer_b = Streamer("2", "b")
-    streamer_c = Streamer("3", "c")
+    streamer_a = Streamer("1", "a", source=StreamerSource.Streamers)
+    streamer_b = Streamer("2", "b", source=StreamerSource.Followers)
+    streamer_c = Streamer("3", "c", source=StreamerSource.Streamers)
 
     select_from_all_data = [
-        [[], 0, PriorityGroup([]), [], []],
-        [[], 1, PriorityGroup([]), [], []],
-        [[], 2, PriorityGroup([]), [], []],
-        [[], 0, PriorityGroup(basic_priorities), [], []],
-        [[], 1, PriorityGroup(basic_priorities), [], []],
-        [[], 2, PriorityGroup(basic_priorities), [], []],
+        [[], 0, [], [], []],
+        [[], 1, [], [], []],
+        [[], 2, [], [], []],
         [
             [streamer_a],
             0,
-            PriorityGroup(
-                basic_priorities,
-            ),
+            [],
             [streamer_a],
             [],
         ],
         [
             [streamer_a],
             1,
-            PriorityGroup(basic_priorities),
+            [],
             [streamer_a],
             ["a"],
         ],
         [
             [streamer_a],
             1,
-            PriorityGroup(basic_priorities),
+            [],
             [streamer_a],
             [],
         ],
         [
             [streamer_a, streamer_b],
             2,
-            PriorityGroup(basic_priorities),
+            [],
             [streamer_a, streamer_b],
             ["a", "b"],
         ],
@@ -747,42 +741,142 @@ class TestPriorityGroupSelector:
         [
             [streamer_a, streamer_b],
             2,
-            PriorityGroup(basic_priorities, ["a"]),
+            ["1"],
             [streamer_a],
             ["a"],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             2,
-            PriorityGroup(basic_priorities, ["a", "b", "c"]),
+            ["1", "2", "3"],
             [streamer_a, streamer_b, streamer_c],
             ["a", "b"],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             2,
-            PriorityGroup(basic_priorities, ["c"]),
+            ["3"],
             [streamer_c],
             ["c"],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             2,
-            PriorityGroup(basic_priorities, ["b", "c"]),
+            ["2", "3"],
             [streamer_b, streamer_c],
             ["b", "c"],
+        ],
+        # StreamerSource.Streamers
+        [
+            [streamer_a, streamer_b, streamer_c],
+            0,
+            StreamerSource.Streamers,
+            [streamer_a, streamer_c],
+            []
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            1,
+            StreamerSource.Streamers,
+            [streamer_a, streamer_c],
+            ["a"]
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            2,
+            StreamerSource.Streamers,
+            [streamer_a, streamer_c],
+            ["a", "c"]
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            3,
+            StreamerSource.Streamers,
+            [streamer_a, streamer_c],
+            ["a", "c"]
+        ],
+        # StreamerSource.Followers
+        [
+            [streamer_a, streamer_b, streamer_c],
+            0,
+            StreamerSource.Followers,
+            [streamer_b],
+            []
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            1,
+            StreamerSource.Followers,
+            [streamer_b],
+            ["b"]
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            2,
+            StreamerSource.Followers,
+            [streamer_b],
+            ["b"]
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            3,
+            StreamerSource.Followers,
+            [streamer_b],
+            ["b"]
+        ],
+        # Arbitrary Callable Filter
+        [
+            [streamer_a, streamer_b, streamer_c],
+            0,
+            lambda s: s.channel_id in [],
+            [],
+            []
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            1,
+            lambda s: s.channel_id in [],
+            [],
+            []
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            1,
+            lambda s: s.channel_id in ["d"],
+            [],
+            []
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            2,
+            lambda s: s.channel_id in ["a", "b", "c"],
+            [streamer_a, streamer_b, streamer_c],
+            ["a", "b"],
+        ],        [
+            [streamer_a, streamer_b, streamer_c],
+            2,
+            lambda s: s.channel_id in ["b", "c"],
+            [streamer_b, streamer_c],
+            ["b", "c"],
+        ],
+        [
+            [streamer_a, streamer_b, streamer_c],
+            3,
+            lambda s: s.channel_id in ["a", "c"],
+            [streamer_a, streamer_c],
+            ["a", "c"],
         ],
     ]
 
     @pytest.mark.parametrize(
-        "streamers,max_amount,group,expected_filtered_ids,expected_ids",
+        "streamers,max_amount,streamer_filter,expected_filtered_ids,expected_ids",
         select_from_all_data,
     )
     def test_select(
         self,
         streamers: list[Streamer],
         max_amount: int,
-        group: PriorityGroup,
+        streamer_filter: list[str] | StreamerSource | Callable[[Streamer], bool] | None,
         expected_filtered_ids: list[str],
         expected_ids: list[str],
     ):
@@ -793,7 +887,7 @@ class TestPriorityGroupSelector:
 
         # Test
 
-        streamer_ids = PriorityGroupSelector(group.streamers, selector).select(
+        streamer_ids = PriorityGroupSelector(streamer_filter, selector).select(
             streamers, max_amount
         )
 
@@ -809,7 +903,7 @@ class SelectAmount(StreamerSelector):
     def __init__(self, amount: int):
         self.amount = amount
 
-    def select(self, streamers: list[Streamer], max_amount: int) -> list[str]:
+    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
         return [
             streamer.channel_id
             for streamer in streamers[: min(self.amount, max_amount)]
