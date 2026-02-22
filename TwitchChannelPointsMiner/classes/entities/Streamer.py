@@ -8,7 +8,7 @@ from threading import Lock
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings, DelayMode
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
-from TwitchChannelPointsMiner.classes.Settings import Events, Settings
+from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.gql import Properties
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
@@ -74,6 +74,7 @@ class Streamer(object):
         "username",
         "channel_id",
         "settings",
+        "source",
         "is_online",
         "stream_up",
         "online_at",
@@ -105,10 +106,12 @@ class Streamer(object):
         offline_at: float | None = None,
         active_multipliers: list[Properties.Multiplier] | None = None,
         settings: StreamerSettings | None = None,
+        source: StreamerSource = StreamerSource.Streamers,
     ):
         self.username: str = username.lower().strip()
         self.channel_id: str = channel_id if channel_id is not None else ""
         self.settings = settings
+        self.source = source
         self.is_online = False
         self.stream_up = 0
         self.online_at = online_at if online_at is not None else 0.0

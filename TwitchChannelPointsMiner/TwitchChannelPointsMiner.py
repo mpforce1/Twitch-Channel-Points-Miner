@@ -16,7 +16,7 @@ import TwitchChannelPointsMiner.classes.websocket.hermes.data as hermes_data
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
-from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings
+from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
     StreamerSelector,
     PrioritySelector,
@@ -284,8 +284,8 @@ class TwitchChannelPointsMiner:
             def normalize_login(name: str) -> str:
                 return name.lower().strip().replace(" ", "")
 
-            streamers_name: list = []
-            streamers_dict: dict = {}
+            streamers_pre_loaded: list[tuple[str, StreamerSource]] = []
+            streamers_dict: dict[str, str | Streamer] = {}
 
             for streamer in streamers_input:
                 username = (
@@ -294,7 +294,7 @@ class TwitchChannelPointsMiner:
                     else normalize_login(str(streamer))
                 )
                 if username not in blacklist_input:
-                    streamers_name.append(username)
+                    streamers_pre_loaded.append((username, StreamerSource.Streamers))
                     streamers_dict[username] = streamer
 
             if followers is True:
@@ -309,22 +309,23 @@ class TwitchChannelPointsMiner:
                         and normalize_login(username) not in blacklist_input
                     ):
                         norm = normalize_login(username)
-                        streamers_name.append(norm)
+                        streamers_pre_loaded.append((norm, StreamerSource.Followers))
                         streamers_dict[norm] = norm
 
             logger.info(
-                f"Loading data for {len(streamers_name)} streamers. Please wait...",
+                f"Loading data for {len(streamers_pre_loaded)} streamers. Please wait...",
                 extra={"emoji": ":nerd_face:"},
             )
-            load_workers = max(1, min(10, len(streamers_name))) if streamers_name else 0
+            load_workers = max(1, min(10, len(streamers_pre_loaded))) if streamers_pre_loaded else 0
 
-            def build_streamer(username: str):
+            def build_streamer(username: str, source: StreamerSource):
                 streamer_obj = streamers_dict[username]
-                streamer = (
+                streamer: Streamer = (
                     streamer_obj
-                    if isinstance(streamer_obj, Streamer) is True
+                    if isinstance(streamer_obj, Streamer)
                     else Streamer(username)
                 )
+                streamer.source = source
                 streamer.channel_id = self.twitch.get_channel_id(username)
                 streamer.settings = set_default_settings(
                     streamer.settings, Settings.streamer_settings
@@ -340,16 +341,16 @@ class TwitchChannelPointsMiner:
                     )
                 return streamer
 
-            streamers_loaded: list[None | Streamer] = [None] * len(streamers_name)
-            if streamers_name:
+            streamers_loaded: list[None | Streamer] = [None] * len(streamers_pre_loaded)
+            if streamers_pre_loaded:
                 with ThreadPoolExecutor(max_workers=load_workers or 1) as executor:
                     futures = {
-                        executor.submit(build_streamer, username): index
-                        for index, username in enumerate(streamers_name)
+                        executor.submit(build_streamer, username, source): index
+                        for index, (username, source) in enumerate(streamers_pre_loaded)
                     }
                     for future in as_completed(futures):
                         index = futures[future]
-                        username = streamers_name[index]
+                        username = streamers_pre_loaded[index]
                         try:
                             streamers_loaded[index] = future.result()
                         except StreamerDoesNotExistException:

@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import Enum, auto, StrEnum
 
 
 class Priority(Enum):
@@ -10,16 +10,12 @@ class Priority(Enum):
     POINTS_DESCENDING = auto()
 
 
-class PriorityGroup:
-    """Priority(s) to be applied over a given list of streamers."""
-
-    def __init__(
-        self, priority: list[Priority], streamers: list[str] | None = None
-    ) -> None:
-        self.priority = priority
-        """The priority(s) of the streamers(s) to select."""
-        self.streamers = streamers
-        """The streamers in the group. Applies to all streamers if None."""
+class StreamerSource(StrEnum):
+    """ Represents the source of a Streamer. """
+    Streamers = "streamers"
+    """ The streamer came from the streamers list """
+    Followers = "followers"
+    """ The streamer came from the followers list """
 
 
 class FollowersOrder(Enum):
