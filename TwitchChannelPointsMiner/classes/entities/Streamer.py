@@ -12,6 +12,7 @@ from TwitchChannelPointsMiner.classes.Settings import Events, Settings, Streamer
 from TwitchChannelPointsMiner.classes.gql import Properties
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
+from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,13 @@ class Streamer(object):
                 "event": Events.STREAMER_ONLINE,
             },
         )
+        reasons = []
+        if not self.channel_points_enabled:
+            reasons.append("Channel Points are disabled for this channel")
+        if self.chat_banned:
+            reasons.append("your account is banned in this channel's chat")
+        if len(reasons) > 0:
+            logger.warning(f"Cannot mine {self} because {oxford_comma_list(reasons)}.")
 
     def print_history(self):
         return "; ".join(

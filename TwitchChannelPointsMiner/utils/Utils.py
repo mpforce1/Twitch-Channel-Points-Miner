@@ -7,7 +7,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from os import path
 from random import randrange
-from typing import TypeVar, Iterable, Callable
+from typing import Sequence, TypeVar, Iterable, Callable
 
 import requests
 from millify import millify as package_millify
@@ -319,3 +319,26 @@ def interruptible_repeating_task(
             next_sleep_duration = max(0.0, next_run_time - time.time())
         else:
             break
+
+def oxford_comma_list(items: Sequence[str]) -> str:
+    """
+    Formats a list of strings as an Oxford comma list. i.e.
+
+    `[]` -> `""`
+
+    `["a"]` -> `"a"`
+
+    `["a", "b"]` -> `"a and b"`
+
+    `["a", "b", "c"]` -> `"a, b, and c"`
+
+    :param items: The items to format.
+    :return: The formatted string.
+    """
+    if len(items) == 0:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"

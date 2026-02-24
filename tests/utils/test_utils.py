@@ -6,8 +6,7 @@ import pytest
 
 from TwitchChannelPointsMiner.utils.Utils import (
     interruptible_repeating_task,
-    interruptible_sleep,
-    percentage,
+    interruptible_sleep, oxford_comma_list,
 )
 
 test_interruptible_sleep_uninterrupted_data = [
@@ -221,3 +220,17 @@ def test_interruptible_repeating_task_execute_twice():
     assert run.call_count == 11
     assert thread.is_alive() is False
     assert task.call_count == 2
+
+
+test_oxford_comma_list_data = [
+    [[], ""],
+    [["item 1"], "item 1"],
+    [["item 1", "item 2"], "item 1 and item 2"],
+    [["item 1", "item 2", "item 3"], "item 1, item 2, and item 3"],
+    [["item 1", "item 2", "item 3", "item 4"], "item 1, item 2, item 3, and item 4"],
+]
+
+
+@pytest.mark.parametrize("items,expected", test_oxford_comma_list_data)
+def test_oxford_comma_list(items: list[str], expected: str) -> None:
+    assert oxford_comma_list(items) == expected
