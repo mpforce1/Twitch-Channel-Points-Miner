@@ -7,6 +7,7 @@ from typing import Iterable
 from websocket import WebSocketConnectionClosedException
 
 from TwitchChannelPointsMiner.classes.PubSub import MessageListener
+from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
 from TwitchChannelPointsMiner.classes.entities.Message import Message
@@ -251,7 +252,10 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
             self.__reconnect(client)
         else:
             # Don't pass the error since we can't actually confirm it's an Exception
-            logger.error(f"{client.describe()} - WebSocket error: {error}", exc_info=isinstance(error, BaseException))
+            logger.error(
+                f"{client.describe()} - WebSocket error: {error}",
+                exc_info=(not Settings.logger.less) and isinstance(error, BaseException)
+            )
 
     def start(self):
         logger.debug(f"Starting Hermes WebSocket Pool")
