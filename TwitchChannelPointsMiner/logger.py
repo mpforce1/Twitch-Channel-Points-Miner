@@ -83,7 +83,8 @@ class LoggerSettings:
         "pushover",
         "gotify",
         "hooks",
-        "username"
+        "username",
+        "redact_secrets",
     ]
 
     def __init__(
@@ -105,7 +106,8 @@ class LoggerSettings:
         pushover: Pushover | None = None,
         gotify: Gotify |None = None,
         hooks: list[EventHook] | None = None,
-        username: str | None = None
+        username: str | None = None,
+        redact_secrets: bool = False,
     ):
         self.save = save
         self.less = less
@@ -128,6 +130,7 @@ class LoggerSettings:
                                                self.gotify]
         self.hooks.extend(hook for hook in named_hooks if hook is not None)
         self.username = username
+        self.redact_secrets = redact_secrets
 
 
 class FileFormatter(logging.Formatter):

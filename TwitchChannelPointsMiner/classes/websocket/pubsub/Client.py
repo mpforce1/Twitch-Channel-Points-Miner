@@ -4,6 +4,7 @@ import time
 
 from websocket import WebSocketApp, WebSocketConnectionClosedException
 
+from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.utils import create_nonce
 
 logger = logging.getLogger(__name__)
@@ -48,9 +49,34 @@ class PubSubWebSocket(WebSocketApp):
         self.send({"type": "PING"})
         self.last_ping = time.time()
 
-    def send(self, request):
+    @staticmethod
+    def _redact_request(request: dict):
+        """
+        Redacts the auth token from the given request in place.
+
+        :param request: The request to redact.
+        """
+        if "data" in request:
+            data = request["data"]
+            if "auth_token" in data:
+                data["auth_token"] = "REDACTED"
+
+    @staticmethod
+    def _format_request(request: dict):
+        """
+        Formats the given request into a JSON string.
+
+        :param request: The request to format.
+        :return: The formatted request.
+        """
+        return json.dumps(request, separators=(",", ":"))
+
+    def send(self, request: dict):
         try:
-            request_str = json.dumps(request, separators=(",", ":"))
+            request_str = self._format_request(request)
+            if Settings.logger.redact_secrets:
+                self._redact_request(request)
+                request_str = self._format_request(request)
             logger.debug(f"#{self.index} - Send: {request_str}")
             super().send(request_str)
         except WebSocketConnectionClosedException:
