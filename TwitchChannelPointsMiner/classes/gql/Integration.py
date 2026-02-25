@@ -384,6 +384,7 @@ class GQL:
             "isVod": False,
             "vodID": "",
             "playerType": "site",
+            "platform": "web",
         }
         return self.post_gql_request_single(
             GQLOperations.PlaybackAccessToken["operationName"],

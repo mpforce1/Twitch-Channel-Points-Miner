@@ -2,8 +2,6 @@
 # https://www.apollographql.com/docs/
 # https://github.com/mauricew/twitch-graphql-api
 # Full list of available methods: https://azr.ivr.fi/schema/query.doc.html (a bit outdated)
-
-
 import logging
 import os
 import random
@@ -15,6 +13,7 @@ from pathlib import Path
 from secrets import choice, token_hex
 
 import requests
+import validators
 
 from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
@@ -425,6 +424,75 @@ class Twitch(object):
                     )
 
                     try:
+                        # Get signature and value using the post_gql_request method
+                        try:
+                            response_playback_access_token = self.gql.get_playback_access_token(streamer.username)
+                            logger.debug(f"Sent PlaybackAccessToken request for {streamer}")
+
+                            signature = response_playback_access_token.signature
+                            value = response_playback_access_token.value
+
+                            if not signature or not value:
+                                logger.error(f"Missing signature or value in Twitch response: {response_playback_access_token}")
+                                continue
+
+                        except Exception as e:
+                            logger.error(
+                                f"Error fetching PlaybackAccessToken for {streamer}: {str(e)}")
+                            continue
+
+                        # Construct the URL for the broadcast qualities
+                        request_broadcast_qualities_url = f"https://usher.ttvnw.net/api/channel/hls/{streamer.username}.m3u8?sig={signature}&token={value}"
+
+                        # Get list of video qualities
+                        response_broadcast_qualities = requests.get(
+                            request_broadcast_qualities_url,
+                            headers={"User-Agent": self.client_session.user_agent},
+                            timeout=20,
+                        )  # timeout=60
+                        logger.debug(
+                            f"Send RequestBroadcastQualitiesURL request for {streamer} - Status code: {response_broadcast_qualities.status_code}"
+                        )
+                        if response_broadcast_qualities.status_code != 200:
+                            continue
+                        broadcast_qualities = response_broadcast_qualities.text
+
+                        # Just takes the last line, which should be the URL for the lowest quality
+                        broadcast_lowest_quality_url = broadcast_qualities.split("\n")[-1]
+                        if not validators.url(broadcast_lowest_quality_url):
+                            continue
+
+                        # Get list of video URLs
+                        response_stream_url_list = requests.get(
+                            broadcast_lowest_quality_url,
+                            headers={"User-Agent": self.client_session.user_agent},
+                            timeout=20,
+                        )  # timeout=60
+                        logger.debug(
+                            f"Send BroadcastLowestQualityURL request for {streamer} - Status code: {response_stream_url_list.status_code}"
+                        )
+                        if response_stream_url_list.status_code != 200:
+                            continue
+                        stream_url_list = response_stream_url_list.text
+
+                        # Just takes the last line, which should be the URL for the lowest quality
+                        stream_lowest_quality_url = stream_url_list.split("\n")[-2]
+                        if not validators.url(stream_lowest_quality_url):
+                            continue
+
+                        # Perform a HEAD request to simulate watching the stream
+                        response_stream_lowest_quality_url = requests.head(
+                            stream_lowest_quality_url,
+                            headers={"User-Agent": self.client_session.user_agent},
+                            timeout=20,
+                        )
+                        logger.debug(
+                            f"Send StreamLowestQualityURL request for {streamer} - Status code: {response_stream_lowest_quality_url.status_code}"
+                        )
+                        if response_stream_lowest_quality_url.status_code != 200:
+                            continue
+                        # End of fix for 2024/5 API Change
+                        ##################################
                         response = requests.post(
                             streamer.stream.spade_url,  # pyright: ignore [reportArgumentType]
                             data=streamer.stream.encode_payload(),
