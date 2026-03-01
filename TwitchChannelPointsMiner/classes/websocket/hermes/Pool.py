@@ -133,6 +133,9 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
         Reconnects the given client.
         :param client: The client to reconnect.
         """
+        # Don't reconnect if the pool is closed
+        if self.force_close:
+            return
         with self.__lock:
             # First ensure that the client is closed as a catch-all for dangling clients
             client.close()
@@ -238,6 +241,9 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
         :param client: The client that's errored.
         :param error: The error Exception.
         """
+        # Ignore errors if the pool is closed
+        if self.force_close:
+            return
         # Ignore the stack trace for socket closures, we'll get additional info in the on_close
         is_closed_error = isinstance(error, WebSocketConnectionClosedException)
         if is_closed_error:
@@ -262,6 +268,9 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
             self.clients.clear()
 
     def check_stale_connections(self):
+        # Don't check if the pool is closed
+        if self.force_close:
+            return
         logger.debug(f"Checking stale connections")
         for client_index in range(len(self.clients)):
             client = self.clients[client_index]

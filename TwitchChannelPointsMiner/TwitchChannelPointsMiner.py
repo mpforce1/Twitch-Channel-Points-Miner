@@ -566,11 +566,12 @@ class TwitchChannelPointsMiner:
                     streamer.irc_chat.join()
 
         self.running = self.twitch.running = False
-        if self.ws_pool is not None:
-            self.ws_pool.end()
 
         for task in self.background_tasks:
             task.join()
+
+        if self.ws_pool is not None:
+            self.ws_pool.end()
 
         # Check if all the mutex are unlocked.
         # Prevent breaks of .json file
