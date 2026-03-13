@@ -3,6 +3,7 @@
 import logging
 from colorama import Fore
 from TwitchChannelPointsMiner import TwitchChannelPointsMiner
+from TwitchChannelPointsMiner.classes.Anonymiser import ConsistentAnonymiser
 from TwitchChannelPointsMiner.logger import LoggerSettings, ColorPalette
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence
 from TwitchChannelPointsMiner.classes.Discord import Discord
@@ -93,7 +94,12 @@ twitch_miner = TwitchChannelPointsMiner(
                 events=[Events.BET_GENERAL, Events.BET_LOSE,
                         Events.BET_WIN, Events.BET_REFUND],
             )
-        ]                                                                             # Add any additional log hooks to this list, in this example 2 different discord webhooks get 2 different types of Events
+        ],                                                                            # Add any additional log hooks to this list, in this example 2 different discord webhooks get 2 different types of Events
+        redact_secrets=False,                                                         # Set to True to redact secrets like passwords or authentication tokens
+        anonymiser=ConsistentAnonymiser(                                              # Set this to an Anonymiser to anonymise channel usernames, ids, and points
+            random_points_min=100,                                                    # Optionally set this to set the per channel minimum for the random channel points
+            random_points_max=1_000_000                                               # Optionally set this to se the per channel maximum for the random channel points
+        ),
     ),
     streamer_settings=StreamerSettings(
         make_predictions=True,                  # If you want to Bet / Make prediction

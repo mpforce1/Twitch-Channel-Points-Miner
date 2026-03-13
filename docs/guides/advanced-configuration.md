@@ -27,6 +27,8 @@ expand more on their usage.
 | `logger_settings`               | `LoggerSettings`                                     | (see [here](#logger_settings))                      |
 | `streamer_settings`             | `StreamerSettings`                                   | (see [here](#streamer_settings))                    |
 | `gql`                           | `AttemptStrategy` or `GQLFactory`                    | `GQLFactory`                                        |
+| `redact_secrets`                | `bool`                                               | `False`                                             |
+| `anonymiser`                    | `Anonymiser` or `bool` or `None`                     | `None`                                              |
 
 ### `username`
 
@@ -632,6 +634,72 @@ parsing the json returned from the GQL API into usable types. `post_request` is 
 to the API. We don't expect most users to need to do more than override the `attempt_strategy`, which is why we allow
 passing that directly to the value of `gql`. Advanced users can also override the factory type for even more
 customization, perhaps returning a custom subclass of `GQL` that overrides the original behaviour entirely.
+
+### `redact_secrets`
+
+Set this to `True` to have secrets (passwords and authentication tokens) redacted from the logs. In particular, this
+currently affects PubSub request logging.
+
+### `anonymiser`
+
+> [!WARNING]
+> While this does work for logged information the miner _**itself**_ generates, it cannot work for information
+> _**received**_ from external sources like the Twitch GQL and WebSocket APIs.
+
+Set this to `True` to automatically anonymise, to the extent possible, all identifying information in the logs. This
+works for channel ids, usernames, points, WebSocket topics, and Hermes subscription ids.
+
+By default, this is set to `False`. Setting it to `False` or `None` will cause no information to be anonymised.
+
+#### `ConsistentAnonymiser`
+
+This is the `Anonymiser` used when `anonymiser` is set to `True`, it will generate random values for each type of
+anonymised data and return the same random value each time that same data is requested. For example, say a Streamer with
+username `bingo` gets logged, the anonymiser may anonymise them as `Streamer5`. Each time the username for this streamer
+is logged, it will log `Streamer5`.
+
+In addition, when logging channel points only the initial value is randomised. As that channel gains/loses points the
+amount logged will reflect the change amount. For example, a channel has `500` points which gets randomised to `2000`
+points. The value you'll initially see logged will be `2000`. If they then gain `50` points you'll see `2050` points
+logged.
+
+```python3
+ConsistentAnonymiser(
+    random_points_min=100,
+    random_points_max=1_000_000,
+    random_source=RandomSource(
+        random_int=random.randint,
+        random_uuid=generate_random_uuid,
+    )
+)
+```
+
+`random_points_min` to `random_points_max` defines the range of possible values when generating the initial random
+channel points for a Streamer. In this example, channel points will be in the range `100` to `1_000_000`.
+
+`random_source` mostly exists for testing. It allows you to override the way randomness is generated. By default it uses
+the built-in function `random.randint` and `uuid.v4` to generate channel points and UUIDs.
+
+#### `Deanonymiser`
+
+This is the `Anonymiser` used when `anonymiser` is set to `False`. It does not alter information.
+
+#### `RandomAnonymiser`
+
+This anonymises information in a more random way. Unlike `ConsistentAnonymiser`, each value is randomly generated each
+time it is logged. For example, a Streamer's username might be `Streamer5` the first time it's logged and `Streamer100`
+the next time.
+
+```python3
+RandomAnonymiser(
+    random_source=RandomSource(
+        random_int=random.randint,
+        random_uuid=generate_random_uuid,
+    )
+)
+```
+
+Configuration for the `RandomSource` is the same as `ConsistentAnonymiser`.
 
 ## `TwitchChannelPointsMiner.mine`
 

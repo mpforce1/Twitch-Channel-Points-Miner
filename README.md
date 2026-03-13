@@ -71,6 +71,7 @@ the [CONTRIBUTING.md](docs/CONTRIBUTING.md) file.
     - User mentions in chat
 - Analytics site showing charts with information about the miner's performance
 - Fully configurable and extensible (see the [example](example.py))
+- Optional log anonymiser and secret redactor
 
 ## Limits
 
