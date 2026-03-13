@@ -125,7 +125,7 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
         """
         with self.__lock:
             if self.__subscribed(topic):
-                logger.debug(f"Already subscribed to topic, {topic}")
+                logger.debug(f"Already subscribed to topic, {Settings.logger.anonymiser.topic(topic)}")
             else:
                 self.__next_available_client().subscribe(topic)
 
@@ -156,7 +156,9 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
         time.sleep(30)
         while not internet_connection_available() and not self.force_close:
             random_sleep = random.randint(1, 3)
-            logger.warning(f"{client.describe()} - No internet connection available! Retrying websocket reconnection after {random_sleep}m")
+            logger.warning(
+                f"{client.describe()} - No internet connection available! Retrying websocket reconnection after {random_sleep}m"
+            )
             time.sleep(random_sleep * 60)
         if not self.force_close:
             # Don't bother opening the new client if between creation and now the pool has closed
@@ -211,7 +213,7 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
                     listener.on_message(message)
             else:
                 logger.warning(
-                    f"{client.describe()} - Unable to find topic for subscription {notification.subscription.id}"
+                    f"{client.describe()} - Unable to find topic for subscription {Settings.logger.anonymiser.hermes_subscription_id(notification.subscription.id)}"
                 )
         else:
             logger.warning(f"{client.describe()} - Received unknown notification type {type(notification)}")

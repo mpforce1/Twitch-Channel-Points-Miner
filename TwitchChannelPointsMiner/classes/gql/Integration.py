@@ -8,7 +8,7 @@ import requests
 from requests import Response
 
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
-from TwitchChannelPointsMiner.classes.Settings import FollowersOrder
+from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Settings
 from TwitchChannelPointsMiner.classes.gql.Errors import (
     GQLError,
     RetryError,
@@ -163,6 +163,56 @@ class GQL:
         self.post_request = requests.post if post_request is None else post_request
         """Function for posting GQL requests."""
 
+    @staticmethod
+    def __redact_request_json(json: dict | list[dict]) -> dict | list[dict]:
+        """
+        Creates a copy of the given request JSON with identifying information redacted.
+
+        TODO It would be nice for this to be a function on each operation
+
+        :param json: The JSON to redact.
+        :return: The redacted JSON.
+        """
+
+        def redact_dict(value: dict) -> dict:
+            value = copy.deepcopy(value)
+            operation_name = value["operationName"]
+            variables = value.get("variables", None)
+            if variables is not None:
+                channel = variables.get("channel", None)
+                if channel is not None:
+                    variables["channel"] = Settings.logger.anonymiser.username(channel)
+                login = variables.get("login", None)
+                if login is not None:
+                    variables["login"] = Settings.logger.anonymiser.username(login)
+                channel_login = variables.get("channelLogin", None)
+                if channel_login is not None:
+                    # Annoyingly "channelLogin" is both a username and a channel id in different operations
+                    if operation_name in [
+                        GQLOperations.ChannelPointsContext["operationName"],
+                        GQLOperations.UserPointsContribution["operationName"]
+                    ]:
+                        variables["channelLogin"] = Settings.logger.anonymiser.username(channel_login)
+                    elif operation_name == GQLOperations.DropCampaignDetails["operationName"]:
+                        variables["channelLogin"] = Settings.logger.anonymiser.channel_id(channel_login)
+                channel_id = variables.get("channelID", None)
+                if channel_id is not None:
+                    variables["channelID"] = Settings.logger.anonymiser.channel_id(channel_id)
+                if operation_name == GQLOperations.WithIsStreamLiveQuery["operationName"]:
+                    variables["id"] = Settings.logger.anonymiser.channel_id(variables["id"])
+                target_user_id = variables.get("targetUserID", None)
+                if target_user_id is not None:
+                    variables["targetUserID"] = Settings.logger.anonymiser.channel_id(target_user_id)
+            return value
+
+        if isinstance(json, dict):
+            return redact_dict(json)
+        else:
+            result = []
+            for item in json:
+                result.append(redact_dict(item))
+            return result
+
     def __post_gql_request(self, request_json: dict | list[dict]) -> Any:
         response = self.post_request(
             GQLOperations.url,
@@ -176,8 +226,11 @@ class GQL:
                 "X-Device-Id": self.client_session.device_id,
             },
         )
+
+        redacted_request_json = self.__redact_request_json(request_json)
+
         logger.debug(
-            f"Data: {request_json}, Status code: {response.status_code}, Content: {response.text}"
+            f"Data: {redacted_request_json}, Status code: {response.status_code}, Content: {response.text}"
         )
         response.raise_for_status()
         return response.json()

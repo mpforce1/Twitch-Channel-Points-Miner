@@ -136,11 +136,11 @@ class Streamer(object):
         self.mutex = Lock()
 
     def __repr__(self):
-        return f"Streamer(username={self.username}, channel_id={self.channel_id}, channel_points={millify(self.channel_points)})"
+        return f"Streamer(username={Settings.logger.anonymiser.streamer_username(self)}, channel_id={Settings.logger.anonymiser.streamer_channel_id(self)}, channel_points={millify(Settings.logger.anonymiser.channel_points(self))})"
 
     def __str__(self):
         return (
-            f"{self.username} ({millify(self.channel_points)} points)"
+            f"{Settings.logger.anonymiser.username(self.username)} ({millify(Settings.logger.anonymiser.channel_points(self))} points)"
             if Settings.logger.less
             else self.__repr__()
         )

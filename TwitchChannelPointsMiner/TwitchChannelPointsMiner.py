@@ -350,17 +350,18 @@ class TwitchChannelPointsMiner:
                     }
                     for future in as_completed(futures):
                         index = futures[future]
-                        username = streamers_pre_loaded[index]
+                        username, _ = streamers_pre_loaded[index]
                         try:
                             streamers_loaded[index] = future.result()
                         except StreamerDoesNotExistException:
                             logger.info(
-                                f"Streamer {username} does not exist",
+                                f"Streamer {Settings.logger.anonymiser.username(username)} does not exist",
                                 extra={"emoji": ":cry:"},
                             )
                         except Exception:
                             logger.error(
-                                f"Failed to load streamer {username}", exc_info=True
+                                f"Failed to load streamer {Settings.logger.anonymiser.username(username)}",
+                                exc_info=True
                             )
 
             self.streamers = [
@@ -594,8 +595,9 @@ class TwitchChannelPointsMiner:
             f"Ending session: '{self.session_id}'", extra={"emoji": ":stop_sign:"}
         )
         if self.logs_file is not None:
+            redacted_logs_file = self.logs_file.replace(self.username, Settings.logger.anonymiser.username(self.username))
             logger.info(
-                f"Logs file: {self.logs_file}", extra={"emoji": ":page_facing_up:"}
+                f"Logs file: {redacted_logs_file}", extra={"emoji": ":page_facing_up:"}
             )
         logger.info(
             f"Duration {datetime.now() - self.start_datetime}",

@@ -3,6 +3,7 @@ import re
 import secrets
 import socket
 import time
+import uuid
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from os import path
@@ -342,3 +343,12 @@ def oxford_comma_list(items: Sequence[str]) -> str:
     if len(items) == 2:
         return f"{items[0]} and {items[1]}"
     return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def generate_random_uuid() -> str:
+    """
+    Generates a random UUID as a string.
+
+    :return: The UUID.
+    """
+    return str(uuid.uuid4())

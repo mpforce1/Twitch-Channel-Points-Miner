@@ -72,8 +72,12 @@ class ClientIRC(SingleServerIRCBot):
             nick = event.source.split("!", 1)[0]
             # chan = event.target
 
-            logger.info(f"{nick} at {self.channel} wrote: {msg}", extra={
-                        "emoji": ":speech_balloon:", "event": Events.CHAT_MENTION})
+            logger.info(
+                f"{Settings.logger.anonymiser.username(nick)} at {Settings.logger.anonymiser.username(self.channel)} wrote: {msg}",
+                extra={
+                    "emoji": ":speech_balloon:", "event": Events.CHAT_MENTION
+                }
+            )
     # """
 
 
@@ -93,13 +97,15 @@ class ThreadChat(Thread):
     def run(self):
         self.chat_irc = ClientIRC(self.username, self.token, self.channel)
         logger.info(
-            f"Join IRC Chat: {self.channel}", extra={"emoji": ":speech_balloon:"}
+            f"Join IRC Chat: {Settings.logger.anonymiser.username(self.channel)}",
+            extra={"emoji": ":speech_balloon:"}
         )
         self.chat_irc.start()
 
     def stop(self):
         if self.chat_irc is not None:
             logger.info(
-                f"Leave IRC Chat: {self.channel}", extra={"emoji": ":speech_balloon:"}
+                f"Leave IRC Chat: {Settings.logger.anonymiser.username(self.channel)}",
+                extra={"emoji": ":speech_balloon:"}
             )
             self.chat_irc.die()

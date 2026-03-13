@@ -102,16 +102,20 @@ def filter_datas(start_date, end_date, datas):
     return datas
 
 
-def read_json(streamer, return_response=True):
+def read_json(streamer: str, return_response=True):
     start_date = request.args.get("startDate", type=str)
     end_date = request.args.get("endDate", type=str)
 
     path = Settings.analytics_path
-    streamer = streamer if streamer.endswith(".json") else f"{streamer}.json"
+    if streamer.endswith(".json"):
+        streamer_username = streamer[:-5].strip()
+    else:
+        streamer_username = streamer
+        streamer = f"{streamer}.json"
 
     # Check if the file exists before attempting to read it
     if not os.path.exists(os.path.join(path, streamer)):
-        error_message = f"File '{streamer}' not found."
+        error_message = f"File '{Settings.logger.anonymiser.username(streamer_username)}' not found."
         logger.error(error_message)
         if return_response:
             return Response(json.dumps({"error": error_message}), status=404, mimetype="application/json")
@@ -122,7 +126,7 @@ def read_json(streamer, return_response=True):
         with open(os.path.join(path, streamer), 'r') as file:
             data = json.load(file)
     except json.JSONDecodeError as e:
-        error_message = f"Error decoding JSON in file '{streamer}': {str(e)}"
+        error_message = f"Error decoding JSON in file '{Settings.logger.anonymiser.username(streamer_username)}': {str(e)}"
         logger.error(error_message)
         if return_response:
             return Response(json.dumps({"error": error_message}), status=500, mimetype="application/json")

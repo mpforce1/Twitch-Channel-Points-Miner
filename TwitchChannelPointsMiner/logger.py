@@ -11,6 +11,7 @@ from pathlib import Path
 import emoji
 from colorama import Fore, init
 
+from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser, ConsistentAnonymiser, Deanonymiser
 from TwitchChannelPointsMiner.classes.Discord import Discord
 from TwitchChannelPointsMiner.classes.EventHook import EventHook
 from TwitchChannelPointsMiner.classes.Webhook import Webhook
@@ -85,6 +86,7 @@ class LoggerSettings:
         "hooks",
         "username",
         "redact_secrets",
+        "anonymiser",
     ]
 
     def __init__(
@@ -108,6 +110,7 @@ class LoggerSettings:
         hooks: list[EventHook] | None = None,
         username: str | None = None,
         redact_secrets: bool = False,
+        anonymiser: Anonymiser | bool | None = None
     ):
         self.save = save
         self.less = less
@@ -131,6 +134,12 @@ class LoggerSettings:
         self.hooks.extend(hook for hook in named_hooks if hook is not None)
         self.username = username
         self.redact_secrets = redact_secrets
+        if anonymiser is None or anonymiser is False:
+            self.anonymiser: Anonymiser = Deanonymiser()
+        elif anonymiser is True:
+            self.anonymiser: Anonymiser = ConsistentAnonymiser()
+        else:
+            self.anonymiser: Anonymiser = anonymiser
 
 
 class FileFormatter(logging.Formatter):

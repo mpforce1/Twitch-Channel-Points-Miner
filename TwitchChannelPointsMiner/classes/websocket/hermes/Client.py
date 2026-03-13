@@ -1,4 +1,5 @@
 import abc
+import copy
 import json
 import logging
 import threading
@@ -153,6 +154,22 @@ class HermesClient(WebSocketApp):
         if do_close:
             super().close()
 
+    @staticmethod
+    def redact_request(request: Request) -> Request:
+        """
+        Redacts a Request by removing authentication tokens and anonymising channel ids.
+
+        :param request:
+        :return:
+        """
+        if isinstance(request, AuthenticateRequest):
+            request.authenticate.token = "REDACTED"
+        else:
+            request = copy.deepcopy(request)
+            request.subscribe.pubsub.topic = Settings.logger.anonymiser.topic(request.subscribe.pubsub.topic)
+        return request
+
+
     def __send_request(self, request: Request):
         """
         Sends a request to the remote server.
@@ -161,9 +178,8 @@ class HermesClient(WebSocketApp):
         """
         try:
             data = self.json_encoder.encode(request)
-            logger.debug(
-                f"{self.describe()} - Send: {"AuthenticateRequest(REDACTED)" if isinstance(request, AuthenticateRequest) else data}"
-            )
+            redacted_data = self.json_encoder.encode(self.redact_request(request))
+            logger.debug(f"{self.describe()} - Send: {redacted_data}")
             self.send(data)
             return True
         except WebSocketConnectionClosedException:
@@ -366,7 +382,7 @@ class HermesClient(WebSocketApp):
                 if isinstance(response, NotificationResponse):
                     topic = client.topic(response.notification.subscription.id)
                     logger.error(
-                        f"{client.describe()} - Exception raised for topic: {str(topic)} and message: {message}",
+                        f"{client.describe()} - Exception raised for topic: {Settings.logger.anonymiser.topic(topic)} and message: {message}",
                         exc_info=e
                     )
                 else:

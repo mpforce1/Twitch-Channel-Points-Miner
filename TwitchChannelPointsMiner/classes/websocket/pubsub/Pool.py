@@ -211,9 +211,8 @@ class PubSubWebSocketPool(WebSocketPool):
             # Check if the error message indicates an authentication issue (ERR_BADAUTH)
             if "ERR_BADAUTH" in error_message:
                 # Inform the user about the potential outdated cookie file
-                username = ws.twitch.client_session.twitch_login.username
                 logger.error(
-                    f"Received the ERR_BADAUTH error, most likely you have an outdated cookie file \"cookies\\{username}.pkl\". Delete this file and try again."
+                    f"Received the ERR_BADAUTH error, most likely you have an outdated cookie file \"cookies\\[your username].pkl\". Delete this file and try again."
                 )
                 # Attempt to delete the outdated cookie file
                 # try:

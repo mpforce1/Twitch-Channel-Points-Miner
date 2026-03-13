@@ -52,7 +52,7 @@ class PubSubWebSocket(WebSocketApp):
     @staticmethod
     def _redact_request(request: dict):
         """
-        Redacts the auth token from the given request in place.
+        Redacts the auth token and channel id from the given request in place if they exist.
 
         :param request: The request to redact.
         """
@@ -60,6 +60,8 @@ class PubSubWebSocket(WebSocketApp):
             data = request["data"]
             if "auth_token" in data:
                 data["auth_token"] = "REDACTED"
+            if "topics" in data:
+                data["topics"] = Settings.logger.anonymiser.topic(data["topics"])
 
     @staticmethod
     def _format_request(request: dict):

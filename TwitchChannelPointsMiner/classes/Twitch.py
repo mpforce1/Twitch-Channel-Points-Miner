@@ -203,7 +203,7 @@ class Twitch(object):
                 self.client_session.login.get_user_id(), streamer.channel_id
             )
         except RetryError as e:
-            logger.error(f"Error getting stream info for {streamer.username}: {e}")
+            logger.error(f"Error getting stream info for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}")
             raise e
         if info_response.user.stream is None:
             # There is no stream data, so they're offline
@@ -277,14 +277,15 @@ class Twitch(object):
     def update_raid(self, streamer, raid):
         if streamer.raid != raid:
             streamer.raid = raid
+            target = Settings.logger.anonymiser.username(raid.target_login)
             try:
                 self.gql.join_raid(raid.raid_id)
                 logger.info(
-                    f"Joining raid from {streamer} to {raid.target_login}!",
+                    f"Joining raid from {streamer} to {target}!",
                     extra={"emoji": ":performing_arts:", "event": Events.JOIN_RAID},
                 )
             except RetryError as e:
-                logger.error(f"Error joining raid from {streamer} to {raid}: {e}")
+                logger.error(f"Error joining raid from {streamer} to {target}: {e}")
 
     # === 'GLOBALS' METHODS === #
     # Create chunk of sleep of speed-up the break loop after CTRL+C
@@ -557,13 +558,13 @@ class Twitch(object):
                     except StreamerDoesNotExistException:
                         failed_streamers.add(streamer.username)
                         logger.info(
-                            f"Streamer {streamer.username} does not exist",
+                            f"Streamer {Settings.logger.anonymiser.streamer_username(streamer)} does not exist",
                             extra={"emoji": ":cry:"},
                         )
                     except Exception:
                         failed_streamers.add(streamer.username)
                         logger.error(
-                            f"Failed to initialize streamer {streamer.username}",
+                            f"Failed to initialize streamer {Settings.logger.anonymiser.streamer_username(streamer)}",
                             exc_info=True,
                         )
             except TimeoutError:
@@ -586,7 +587,9 @@ class Twitch(object):
                 try:
                     self.load_channel_points_context(streamer)
                 except StreamerDoesNotExistException:
-                    logger.warning(f"Detected that Streamer '{streamer.username}' no longer exists.")
+                    logger.warning(
+                        f"Detected that Streamer '{Settings.logger.anonymiser.streamer_username(streamer)}' no longer exists."
+                    )
                     pass
 
     def make_predictions(self, event):
@@ -672,7 +675,7 @@ class Twitch(object):
             self.gql.claim_community_points(streamer.channel_id, claim_id)
         except RetryError as e:
             logger.error(
-                f"Error while trying to claim bonus for {streamer.username}: {e}"
+                f"Error while trying to claim bonus for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
             )
 
     # === MOMENTS === #
@@ -687,7 +690,7 @@ class Twitch(object):
             self.gql.claim_moment(moment_id)
         except RetryError as e:
             logger.error(
-                f"Error while trying to claim moment with id {moment_id} for {streamer.username}: {e}",
+                f"Error while trying to claim moment with id {moment_id} for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}",
             )
 
     # === CAMPAIGNS / DROPS / INVENTORY === #
@@ -696,7 +699,7 @@ class Twitch(object):
             return self.gql.get_available_drops(streamer.channel_id).ids
         except RetryError as e:
             logger.error(
-                f"Error while trying to get drops campaign ids for {streamer.username}: {e}"
+                f"Error while trying to get drops campaign ids for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
             )
             return []
 
@@ -878,7 +881,7 @@ class Twitch(object):
                 return
             user_goal_contributions = response.goal_contributions
             logger.debug(
-                f"Found {len(user_goal_contributions)} community goals for {streamer.username}'s current stream"
+                f"Found {len(user_goal_contributions)} community goals for {Settings.logger.anonymiser.streamer_username(streamer)}'s current stream"
             )
             for goal_contribution in user_goal_contributions:
                 goal_id = goal_contribution.id
@@ -886,7 +889,7 @@ class Twitch(object):
                 if goal is None:
                     # TODO should this trigger a new load context request
                     logger.error(
-                        f"Unable to find context data for {streamer.username}'s community goal {goal_id}"
+                        f"Unable to find context data for {Settings.logger.anonymiser.streamer_username(streamer)}'s community goal {goal_id}"
                     )
                 else:
                     user_stream_contribution = (
@@ -919,12 +922,12 @@ class Twitch(object):
             )
         except RetryError as e:
             logger.error(
-                f"Error while contributing to channel {streamer.username}'s community goal '{title}', amount {amount}: {e}",
+                f"Error while contributing to channel {Settings.logger.anonymiser.streamer_username(streamer)}'s community goal '{title}', amount {amount}: {e}",
             )
             return
         if response.error is not None:
             logger.error(
-                f"Unable to contribute channel points to {streamer.username}'s community goal '{title}', reason '{response.error}'"
+                f"Unable to contribute channel points to {Settings.logger.anonymiser.streamer_username(streamer)}'s community goal '{title}', reason '{response.error}'"
             )
         else:
             logger.info(
