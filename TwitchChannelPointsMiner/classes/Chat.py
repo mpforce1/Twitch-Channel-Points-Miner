@@ -72,6 +72,9 @@ class ClientIRC(SingleServerIRCBot):
             nick = event.source.split("!", 1)[0]
             # chan = event.target
 
+            if Settings.logger.anonymiser.strict:
+                msg = "REDACTED"
+
             logger.info(
                 f"{Settings.logger.anonymiser.username(nick)} at {Settings.logger.anonymiser.username(self.channel)} wrote: {msg}",
                 extra={

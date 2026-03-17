@@ -11,6 +11,7 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 
 class MockAnonymiser(Anonymiser):
     def __init__(self):
+        super().__init__(False)
         self.mock_channel_id = MagicMock()
         self.mock_username = MagicMock()
         self.mock_channel_points = MagicMock()
@@ -75,7 +76,7 @@ class TestRandomAnonymiser:
         names = ["Streamer 5", "Streamer 1", "Streamer 35", "Streamer 82", "Streamer 4"]
         random_int = MagicMock()
         random_int.side_effect = [5, 1, 35, 82, 4]
-        anonymiser = RandomAnonymiser(RandomSource(random_int))
+        anonymiser = RandomAnonymiser(False, RandomSource(random_int))
 
         for name in names:
             assert anonymiser.streamer_username(Streamer(name)) == name
@@ -84,7 +85,7 @@ class TestRandomAnonymiser:
         points = [0, 123, 43_809, 233, 999]
         random_int = MagicMock()
         random_int.side_effect = points
-        anonymiser = RandomAnonymiser(RandomSource(random_int))
+        anonymiser = RandomAnonymiser(False, RandomSource(random_int))
 
         for point in points:
             assert anonymiser.channel_points(Streamer("test")) == point

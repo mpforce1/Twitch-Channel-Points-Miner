@@ -353,7 +353,8 @@ class HermesClient(WebSocketApp):
         :param client: The client that received the message.
         :param message: The message that was received.
         """
-        logger.debug(f"{client.describe()} - Received: {message.strip()}")
+        message_loggable = "REDACTED" if Settings.logger.anonymiser.strict else message.strip()
+        logger.debug(f"{client.describe()} - Received: {message_loggable}")
         client.last_message_time = datetime.now()
         try:
             response = client.json_decoder.decode(message)
@@ -377,16 +378,16 @@ class HermesClient(WebSocketApp):
                     for listener in client.listeners:
                         listener.on_reconnect(client, response.reconnect.url)
                 else:
-                    logger.error(f"{client.describe()} - Unknown response: {response}")
+                    logger.error(f"{client.describe()} - Unknown response: {type(response)}")
             except Exception as e:
                 if isinstance(response, NotificationResponse):
                     topic = client.topic(response.notification.subscription.id)
                     logger.error(
-                        f"{client.describe()} - Exception raised for topic: {Settings.logger.anonymiser.topic(topic)} and message: {message}",
+                        f"{client.describe()} - Exception raised for topic: {Settings.logger.anonymiser.topic(topic)} and message: {message_loggable}",
                         exc_info=e
                     )
                 else:
-                    logger.error(f"{client.describe()} - Exception raised for response: {response}", exc_info=e)
+                    logger.error(f"{client.describe()} - Exception raised for response: {type(response)}", exc_info=e)
                 HermesClient.on_error(client, e)
         except (json.JSONDecodeError, ValueError) as e:
             HermesClient.on_error(client, e)

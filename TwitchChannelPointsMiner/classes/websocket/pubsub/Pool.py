@@ -180,7 +180,8 @@ class PubSubWebSocketPool(WebSocketPool):
 
     @staticmethod
     def on_message(ws: PubSubWebSocket, message: str):
-        logger.debug(f"#{ws.index} - Received: {message.strip()}")
+        message_loggable = "REDACTED" if Settings.logger.anonymiser.strict else message.strip()
+        logger.debug(f"#{ws.index} - Received: {message_loggable}")
         response = json.loads(message)
 
         if response["type"] == "MESSAGE":

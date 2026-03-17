@@ -11,6 +11,10 @@ from TwitchChannelPointsMiner.utils.Utils import generate_random_uuid
 class Anonymiser(abc.ABC):
     """ Anonymises various information from the miner. """
 
+    def __init__(self, strict: bool = False):
+        self.strict = strict
+        """If True, the Anonymiser will stop the logging of external data (such as HTTP responses). """
+
     @abc.abstractmethod
     def channel_id(self, channel_id: str) -> str:
         """
@@ -84,6 +88,9 @@ class Anonymiser(abc.ABC):
 class Deanonymiser(Anonymiser):
     """ Anonymiser that doesn't change anything. """
 
+    def __init__(self, strict: bool = False):
+        super().__init__(strict)
+
     def channel_id(self, channel_id: str) -> str:
         return channel_id
 
@@ -117,7 +124,12 @@ class RandomSource:
 class RandomAnonymiser(Anonymiser):
     """ Anonymises various information from the miner in an inconsistent (random) manner. """
 
-    def __init__(self, random_source: RandomSource):
+    def __init__(
+        self,
+        strict: bool = True,
+        random_source: RandomSource = RandomSource()
+    ):
+        super().__init__(strict)
         self.random_source = random_source
 
     def channel_id(self, channel_id: str) -> str:
@@ -189,7 +201,14 @@ class ConsistentAnonymiser(Anonymiser):
             self.fake_points = fake_points
             self.last_real_points = last_real_points
 
-    def __init__(self, random_points_min: int = 100, random_points_max: int = 1_000_000, random_source=RandomSource()):
+    def __init__(
+        self,
+        strict: bool = True,
+        random_points_min: int = 100,
+        random_points_max: int = 1_000_000,
+        random_source: RandomSource = RandomSource()
+    ):
+        super().__init__(strict)
         self._random_points_min = random_points_min
         self._random_points_max = random_points_max
         self._random_source = random_source

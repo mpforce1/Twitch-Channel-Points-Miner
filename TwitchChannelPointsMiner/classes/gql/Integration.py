@@ -229,8 +229,10 @@ class GQL:
 
         redacted_request_json = self.__redact_request_json(request_json)
 
+        response_text = "REDACTED" if Settings.logger.anonymiser.strict else response.text
+
         logger.debug(
-            f"Data: {redacted_request_json}, Status code: {response.status_code}, Content: {response.text}"
+            f"Data: {redacted_request_json}, Status code: {response.status_code}, Content: {response_text}"
         )
         response.raise_for_status()
         return response.json()

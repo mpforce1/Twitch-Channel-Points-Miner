@@ -268,7 +268,8 @@ class PubSubHandler(MessageListener):
                     self.twitch.contribute_to_community_goals(streamer)
 
         except Exception:
+            message_loggable = "REDACTED" if Settings.logger.anonymiser.strict else message
             logger.error(
-                f"Exception raised for topic: {message.topic} and message: {message}",
+                f"Exception raised for topic: {message.topic} and message: {message_loggable}",
                 exc_info=True,
             )

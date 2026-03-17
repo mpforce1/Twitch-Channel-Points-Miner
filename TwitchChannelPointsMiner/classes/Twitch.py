@@ -254,7 +254,7 @@ class Twitch(object):
             else:
                 return response.id
         except RetryError as e:
-            logger.error(f"Error getting channel id for {streamer_username}: {e}")
+            logger.error(f"Error getting channel id for {Settings.logger.anonymiser.username(streamer_username)}: {e}")
             raise StreamerDoesNotExistException
 
     def get_followers(
