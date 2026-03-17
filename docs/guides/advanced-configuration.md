@@ -754,6 +754,12 @@ You can see in this example that the amount of points gained from start to end f
 with the streamer usernames. Even the `Logs file` path is anonymised, keep this in mind since this should actually be
 in a file named with your real username.
 
+All the following anonymisers can optionally specify a boolean for the `strict` parameter. If this is set to `True` then
+all web API responses will be redacted. This is useful because we cannot guarantee that text the miner didn't create
+doesn't contain data that should be anonymised. You can optionally set it to `False` to allow logging these responses.
+This can be useful if it's not possible to debug an issue without checking the response text although it comes with more
+risk of leaking data that you might want anonymised.
+
 #### `ConsistentAnonymiser`
 
 This is the `Anonymiser` used when `anonymiser` is set to `True`, it will generate random values for each type of
@@ -768,14 +774,17 @@ logged.
 
 ```python3
 ConsistentAnonymiser(
+    strict=True,
     random_points_min=100,
     random_points_max=1_000_000,
     random_source=RandomSource(
         random_int=random.randint,
         random_uuid=generate_random_uuid,
-    )
+    ),
 )
 ```
+
+`strict` is `True` by default for this anonymiser. It can be set to `False` if you want API responses to be logged.
 
 `random_points_min` to `random_points_max` defines the range of possible values when generating the initial random
 channel points for a Streamer. In this example, channel points will be in the range `100` to `1_000_000`.
@@ -786,7 +795,14 @@ uses the built-in functions [`random.randint`](https://docs.python.org/3/library
 
 #### `Deanonymiser`
 
-This is the `Anonymiser` used when `anonymiser` is set to `False`. It does not alter information.
+This is the `Anonymiser` used when `anonymiser` is set to `False`. It does not alter information. `strict` is set to
+`False` for this anonymiser, but you can set it to `True` if you want that behaviour.
+
+```python3
+Deanonymiser(
+    strict=False
+)
+```
 
 #### `RandomAnonymiser`
 
@@ -796,12 +812,15 @@ the next time.
 
 ```python3
 RandomAnonymiser(
+    strict=True,
     random_source=RandomSource(
         random_int=random.randint,
         random_uuid=generate_random_uuid,
     )
 )
 ```
+
+`strict` is `True` by default for this anonymiser, but you can set it to `False` if you want that behaviour.
 
 Configuration for the `RandomSource` is the same as `ConsistentAnonymiser`.
 
