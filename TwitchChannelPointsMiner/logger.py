@@ -2,24 +2,24 @@ import logging
 import os
 import platform
 import queue
-import pytz
 import sys
 from datetime import datetime
 from logging.handlers import QueueHandler, QueueListener, TimedRotatingFileHandler
 from pathlib import Path
 
 import emoji
+import pytz
 from colorama import Fore, init
 
 from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser, ConsistentAnonymiser, Deanonymiser
 from TwitchChannelPointsMiner.classes.Discord import Discord
 from TwitchChannelPointsMiner.classes.EventHook import EventHook
-from TwitchChannelPointsMiner.classes.Webhook import Webhook
+from TwitchChannelPointsMiner.classes.Gotify import Gotify
 from TwitchChannelPointsMiner.classes.Matrix import Matrix
+from TwitchChannelPointsMiner.classes.Pushover import Pushover
 from TwitchChannelPointsMiner.classes.Settings import Events
 from TwitchChannelPointsMiner.classes.Telegram import Telegram
-from TwitchChannelPointsMiner.classes.Pushover import Pushover
-from TwitchChannelPointsMiner.classes.Gotify import Gotify
+from TwitchChannelPointsMiner.classes.Webhook import Webhook
 from TwitchChannelPointsMiner.utils import remove_emoji
 
 
@@ -106,7 +106,7 @@ class LoggerSettings:
         webhook: Webhook | None = None,
         matrix: Matrix | None = None,
         pushover: Pushover | None = None,
-        gotify: Gotify |None = None,
+        gotify: Gotify | None = None,
         hooks: list[EventHook] | None = None,
         username: str | None = None,
         redact_secrets: bool = False,
@@ -152,7 +152,8 @@ class FileFormatter(logging.Formatter):
                 logging.info(f"File logger time zone set to: {self.timezone}")
             except pytz.UnknownTimeZoneError:
                 logging.error(
-                    f"File logger: invalid time zone: {settings.time_zone}")
+                    f"File logger: invalid time zone: {settings.time_zone}"
+                )
         logging.Formatter.__init__(self, fmt=fmt, datefmt=datefmt)
 
     def formatTime(self, record, datefmt=None):
@@ -161,6 +162,9 @@ class FileFormatter(logging.Formatter):
         else:
             dt = datetime.fromtimestamp(record.created)
         return dt.strftime(datefmt or self.default_time_format)
+
+    def formatException(self, ei):
+        return self.settings.anonymiser.format_exception(ei)
 
 
 class GlobalFormatter(logging.Formatter):
@@ -171,10 +175,12 @@ class GlobalFormatter(logging.Formatter):
             try:
                 self.timezone = pytz.timezone(settings.time_zone)
                 logging.info(
-                    f"Console logger time zone set to: {self.timezone}")
+                    f"Console logger time zone set to: {self.timezone}"
+                )
             except pytz.UnknownTimeZoneError:
                 logging.error(
-                    f"Console logger: invalid time zone: {settings.time_zone}")
+                    f"Console logger: invalid time zone: {settings.time_zone}"
+                )
         logging.Formatter.__init__(self, fmt=fmt, datefmt=datefmt)
 
     def formatTime(self, record, datefmt=None):
@@ -187,12 +193,13 @@ class GlobalFormatter(logging.Formatter):
     def format(self, record):
         record.emoji_is_present = (
             record.emoji_is_present if hasattr(
-                record, "emoji_is_present") else False
+                record, "emoji_is_present"
+            ) else False
         )
         if (
-            hasattr(record, "emoji")
-            and self.settings.emoji is True
-            and record.emoji_is_present is False
+                hasattr(record, "emoji")
+                and self.settings.emoji is True
+                and record.emoji_is_present is False
         ):
             record.msg = emoji.emojize(
                 f"{record.emoji}  {record.msg.strip()}", language="alias"
@@ -219,6 +226,10 @@ class GlobalFormatter(logging.Formatter):
                 )
 
         return super().format(record)
+
+    def formatException(self, ei):
+        return self.settings.anonymiser.format_exception(ei)
+
 
 def configure_loggers(username, settings):
     if settings.colored is True:

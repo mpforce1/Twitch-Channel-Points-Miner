@@ -1,5 +1,6 @@
 import copy
 import logging
+import sys
 import traceback
 from secrets import token_hex
 from typing import Callable, Any, Protocol
@@ -85,7 +86,7 @@ def error_context(e: Exception) -> str | None:
     :return: The context string, or None if no context is needed.
     """
     if not isinstance(e, GQLError):
-        return traceback.format_exc()
+        return Settings.logger.anonymiser.format_exception((type(e), e, e.__traceback__))
     else:
         return None
 

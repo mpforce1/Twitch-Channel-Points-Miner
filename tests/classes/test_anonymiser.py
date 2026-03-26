@@ -10,8 +10,8 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 
 
 class MockAnonymiser(Anonymiser):
-    def __init__(self):
-        super().__init__(False)
+    def __init__(self, base_path: str | bool = True):
+        super().__init__(channel_ids=True, usernames=True, channel_points=True, strict=True, base_path=base_path)
         self.mock_channel_id = MagicMock()
         self.mock_username = MagicMock()
         self.mock_channel_points = MagicMock()
@@ -43,6 +43,21 @@ class TestAnonymiser:
         anonymiser.topic(topic)
         anonymiser.mock_channel_id.assert_called_once_with(expected_call_id)
 
+    test_redact_path_data = [
+        [True, "/filename.py", "[PATH REDACTED]/filename.py"],
+        [True, "filename.py", "filename.py"],
+        ["/base/path", "/base/path/file.py", "[PATH REDACTED]/file.py"],
+        ["/base/path", "/base/path/sub/path/filename.py", "[PATH REDACTED]/sub/path/filename.py"],
+        ["/base/path", "file.py", "file.py"],
+        ["/base/path", "/different/base/path/file.py", "[PATH REDACTED]/file.py"],
+        ["/base/path", "/different/base/path/sub/path/filename.py", "[PATH REDACTED]/filename.py"],
+    ]
+
+    @pytest.mark.parametrize("base_path,path,expected", test_redact_path_data)
+    def test_filepath(self, base_path: str, path: str, expected: str):
+        anonymiser = MockAnonymiser(base_path=base_path)
+        assert anonymiser.filepath(path) == expected
+
 
 class TestDeanonymiser:
     test_streamer_name_data = [
@@ -70,13 +85,22 @@ class TestDeanonymiser:
         anonymiser = Deanonymiser()
         assert anonymiser.channel_points(Streamer("test", channel_points=points)) == expected_points
 
+    def test_each(self):
+        anonymiser = Deanonymiser()
+        assert anonymiser.channel_id("564681") == "564681"
+        assert anonymiser.username("some_username") == "some_username"
+        assert anonymiser.channel_points(Streamer("test", channel_points=497364)) == 497364
+        assert anonymiser.hermes_subscription_id(
+            "c52180bd-9407-43cf-a180-bd940723cfa1"
+        ) == "c52180bd-9407-43cf-a180-bd940723cfa1"
+
 
 class TestRandomAnonymiser:
     def test_streamer_name(self):
         names = ["Streamer 5", "Streamer 1", "Streamer 35", "Streamer 82", "Streamer 4"]
         random_int = MagicMock()
         random_int.side_effect = [5, 1, 35, 82, 4]
-        anonymiser = RandomAnonymiser(False, RandomSource(random_int))
+        anonymiser = RandomAnonymiser(strict=False, random_source=RandomSource(random_int))
 
         for name in names:
             assert anonymiser.streamer_username(Streamer(name)) == name
@@ -85,10 +109,19 @@ class TestRandomAnonymiser:
         points = [0, 123, 43_809, 233, 999]
         random_int = MagicMock()
         random_int.side_effect = points
-        anonymiser = RandomAnonymiser(False, RandomSource(random_int))
+        anonymiser = RandomAnonymiser(strict=False, random_source=RandomSource(random_int))
 
         for point in points:
             assert anonymiser.channel_points(Streamer("test")) == point
+
+    def test_settings_false(self):
+        anonymiser = RandomAnonymiser(channel_ids=False, usernames=False, channel_points=False, strict=False)
+        assert anonymiser.channel_id("564681") == "564681"
+        assert anonymiser.username("some_username") == "some_username"
+        assert anonymiser.channel_points(Streamer("test", channel_points=497364)) == 497364
+        assert anonymiser.hermes_subscription_id(
+            "c52180bd-9407-43cf-a180-bd940723cfa1"
+        ) == "c52180bd-9407-43cf-a180-bd940723cfa1"
 
 
 class MockIdStore(IdStore[str]):
@@ -181,3 +214,12 @@ class TestConsistentAnonymiser:
             streamer.channel_points += delta
             current_expected_points += delta
             assert anonymiser.channel_points(streamer) == current_expected_points
+
+    def test_settings_false(self):
+        anonymiser = ConsistentAnonymiser(channel_ids=False, usernames=False, channel_points=False, strict=False)
+        assert anonymiser.channel_id("564681") == "564681"
+        assert anonymiser.username("some_username") == "some_username"
+        assert anonymiser.channel_points(Streamer("test", channel_points=497364)) == 497364
+        assert anonymiser.hermes_subscription_id(
+            "c52180bd-9407-43cf-a180-bd940723cfa1"
+        ) == "c52180bd-9407-43cf-a180-bd940723cfa1"

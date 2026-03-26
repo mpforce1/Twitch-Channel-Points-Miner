@@ -1,19 +1,53 @@
 import abc
+import io
+import os
+import pathlib
 import random
+import traceback
 from threading import Lock
-from typing import Callable
+from types import TracebackType
+from typing import Callable, Literal, TypeAlias, Any
 
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.utils.Utils import generate_random_uuid
 
+# To avoid import errors from traceback
+_SysExcInfoType: TypeAlias = tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None]
+
 
 class Anonymiser(abc.ABC):
     """ Anonymises various information from the miner. """
 
-    def __init__(self, strict: bool = False):
+    base_path: str | Literal[False]
+    """The beginning part of a filepath to redact. If False, filepaths will not be anonymised."""
+
+    def __init__(
+        self,
+        channel_ids=True,
+        usernames=True,
+        channel_points=True,
+        strict: bool = False,
+        base_path: str | bool = True
+    ):
+        """
+        If `base_path` is True then the expected base directory of this module (the great-grandparent of this file) will
+         be used.
+        """
+        self.anonymise_channel_ids = channel_ids
+        """If True, channel ids will be anonymised."""
+        self.anonymise_usernames = usernames
+        """If True, usernames will be anonymised."""
+        self.anonymise_channel_points = channel_points
+        """If True, filepaths will be anonymised. This includes filepaths in Exception logs."""
         self.strict = strict
         """If True, the Anonymiser will stop the logging of external data (such as HTTP responses). """
+        if base_path is False:
+            self.base_path = False
+        elif base_path is True:
+            self.base_path = str(pathlib.Path(__file__).parent.parent.parent.resolve())
+        else:
+            self.base_path = base_path
 
     @abc.abstractmethod
     def channel_id(self, channel_id: str) -> str:
@@ -84,12 +118,88 @@ class Anonymiser(abc.ABC):
         topic, _id = topic_str.split(".")
         return f"{topic}.{self.channel_id(_id)}"
 
+    def filepath(self, filepath: str) -> str:
+        """
+        Redacts the path from the given `filepath` leaving just the filename. Removes either the `base_path` or
+        everything before the final separator, if one exists. For example:
+
+        if `self.base_path` = "/home/username/miner"
+
+        and `filename` = "/home/username/miner/module_1/module_2/some_python_file.py"
+
+        then the result path = "[PATH REDACTED]/module_1/module_2/some_python_file.py"
+
+        The main benefit here being that your local username (in this example it's just "username") is redacted.
+
+        However:
+
+        if `filename` = "/home/username/.local/lib/python3.12/site-packages/package/some_python_file.py"
+
+        then the result path = "[PATH REDACTED]/some_python_file.py"
+
+        This is to avoid situations where there might be identifying information in the filepath for a python module
+        that the application is using from elsewhere on your system.
+
+        :param filepath: The filename from which to redact the path.
+        :return: The redacted filename.
+        """
+        if self.base_path is False:
+            return filepath
+        if filepath.startswith(self.base_path):
+            index = filepath.index(self.base_path) + len(self.base_path)
+            return f"[PATH REDACTED]{filepath[index:]}"
+        else:
+            try:
+                return f"[PATH REDACTED]{filepath[filepath.rindex(os.path.sep):]}"
+            except ValueError:
+                return filepath
+
+    def format_exception(self, ei: _SysExcInfoType) -> str:
+        """
+        Formats Exceptions the same as `logging.Formatter` but redacts all filepaths in the exception's stack. This
+        applies not just to the current exception but to all chained exceptions recursively (i.e. the Exceptions'
+        `__cause__` and `__context__`).
+
+        :param ei: The Exception to format.
+        :return: The anonymised exception string.
+        """
+        # TracebackException can and does explicitly handle None here so type as Any to avoid errors
+        exception_type: Any
+        exception: Any
+        exception_type, exception, exception_traceback = ei
+        traceback_exception = traceback.TracebackException(
+            exception_type,
+            exception,
+            exception_traceback,
+            limit=None,
+            compact=True
+        )
+        if self.base_path is not False:
+            # Redact paths from the current exception and the cause/context iteratively
+            current_traceback = traceback_exception
+            while current_traceback is not None:
+                for frame_summary in current_traceback.stack:
+                    frame_summary.filename = self.filepath(frame_summary.filename)
+                if current_traceback.__cause__ is not None:
+                    current_traceback = current_traceback.__cause__
+                elif current_traceback.__context__ is not None:
+                    current_traceback = current_traceback.__context__
+                else:
+                    current_traceback = None
+
+        with io.StringIO() as sio:
+            traceback_exception.print(file=sio)
+            result = sio.getvalue()
+            if result[-1:] == "\n":
+                result = result[:-1]
+            return result
+
 
 class Deanonymiser(Anonymiser):
     """ Anonymiser that doesn't change anything. """
 
     def __init__(self, strict: bool = False):
-        super().__init__(strict)
+        super().__init__(channel_ids=False, usernames=False, channel_points=False, strict=strict, base_path=False)
 
     def channel_id(self, channel_id: str) -> str:
         return channel_id
@@ -105,6 +215,9 @@ class Deanonymiser(Anonymiser):
 
     def hermes_subscription_id(self, _id: str) -> str:
         return _id
+
+    def filepath(self, filepath: str) -> str:
+        return filepath
 
 
 class RandomSource:
@@ -126,23 +239,39 @@ class RandomAnonymiser(Anonymiser):
 
     def __init__(
         self,
+        channel_ids=True,
+        usernames=True,
+        channel_points=True,
         strict: bool = True,
+        base_path: str | bool = True,
         random_source: RandomSource = RandomSource()
     ):
-        super().__init__(strict)
+        super().__init__(channel_ids, usernames, channel_points, strict, base_path)
         self.random_source = random_source
 
     def channel_id(self, channel_id: str) -> str:
-        return str(self.random_source.random_int(1, 100))
+        if self.anonymise_channel_ids:
+            return str(self.random_source.random_int(1, 100))
+        else:
+            return channel_id
 
     def username(self, username: str) -> str:
-        return f"Streamer {self.random_source.random_int(1, 100)}"
+        if self.anonymise_usernames:
+            return f"Streamer {self.random_source.random_int(1, 100)}"
+        else:
+            return username
 
     def channel_points(self, streamer: Streamer) -> int:
-        return self.random_source.random_int(0, 1_000_000)
+        if self.anonymise_channel_points:
+            return self.random_source.random_int(0, 1_000_000)
+        else:
+            return streamer.channel_points
 
     def hermes_subscription_id(self, _id: str) -> str:
-        return f"Hermes Subscription {self.random_source.random_uuid()}"
+        if self.anonymise_channel_ids:
+            return f"Hermes Subscription {self.random_source.random_uuid()}"
+        else:
+            return _id
 
 
 class IdStore[ValueType](abc.ABC):
@@ -203,12 +332,16 @@ class ConsistentAnonymiser(Anonymiser):
 
     def __init__(
         self,
+        channel_ids=True,
+        usernames=True,
+        channel_points=True,
         strict: bool = True,
+        base_path: str | bool = True,
         random_points_min: int = 100,
         random_points_max: int = 1_000_000,
-        random_source: RandomSource = RandomSource()
+        random_source: RandomSource = RandomSource(),
     ):
-        super().__init__(strict)
+        super().__init__(channel_ids, usernames, channel_points, strict, base_path)
         self._random_points_min = random_points_min
         self._random_points_max = random_points_max
         self._random_source = random_source
@@ -221,15 +354,21 @@ class ConsistentAnonymiser(Anonymiser):
         self._channel_points_lock = Lock()
 
     def channel_id(self, channel_id: str) -> str:
+        if not self.anonymise_channel_ids:
+            return channel_id
         # An empty id means the channel id hasn't been initialised so just return it as is
         if channel_id == "":
             return ""
         return str(self._streamer_ids.id(channel_id))
 
     def username(self, username: str) -> str:
+        if not self.anonymise_usernames:
+            return username
         return f"Streamer{self._streamer_names.id(username)}"
 
     def channel_points(self, streamer: Streamer) -> int:
+        if not self.anonymise_channel_points:
+            return streamer.channel_points
         with self._channel_points_lock:
             if streamer.username not in self._streamer_channel_points:
                 state = ConsistentAnonymiser.ChannelPointsState(
@@ -245,4 +384,7 @@ class ConsistentAnonymiser(Anonymiser):
         return state.fake_points
 
     def hermes_subscription_id(self, subscription_id: str) -> str:
-        return f"Hermes Subscription {self._hermes_subscription_ids.id(subscription_id)}"
+        if self.anonymise_channel_ids:
+            return f"Hermes Subscription {self._hermes_subscription_ids.id(subscription_id)}"
+        else:
+            return subscription_id
