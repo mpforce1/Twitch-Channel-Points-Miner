@@ -754,11 +754,51 @@ You can see in this example that the amount of points gained from start to end f
 with the streamer usernames. Even the `Logs file` path is anonymised, keep this in mind since this should actually be
 in a file named with your real username.
 
-All the following anonymisers can optionally specify a boolean for the `strict` parameter. If this is set to `True` then
-all web API responses will be redacted. This is useful because we cannot guarantee that text the miner didn't create
-doesn't contain data that should be anonymised. You can optionally set it to `False` to allow logging these responses.
-This can be useful if it's not possible to debug an issue without checking the response text although it comes with more
-risk of leaking data that you might want anonymised.
+The `ConsistentAnonymiser` and `RandomAnonymiser` can optionally specify some configuration options for each type of
+anonymisation.
+
+**`channel_ids`**
+
+Can be set to `True` to enable anonymising channel ids, this includes your own user id (since users are also channels),
+as well as streamer channel ids. In addition, some Hermes WebSocket API ids include the channel id (Twitch may phase
+this out in future) so these also get anonymised. If `False` then channel ids will not be anonymised. Defaults to
+`True`.
+
+**`usernames`**
+
+Can be set to `True` to enable anonymising streamer usernames, this includes your own username. If `False` then 
+usernames will not be anonymised. Defaults to `True`.
+
+**`channel_points`**
+
+Can be set to `True` to enable anonymising streamer channel points. If `False` then channel points will not be
+anonymised. Defaults to `True`.
+
+**`strict`**
+
+If this is set to `True` then all web API responses will be redacted. This is useful because we cannot guarantee that
+text the miner didn't create doesn't contain data that should be anonymised. You can optionally set it to `False` to
+allow logging these responses. This can be useful if it's not possible to debug an issue without checking the response
+text, although it comes with more risk of leaking data that you might want anonymised.
+
+**`base_path`**
+
+This is the configuration option for filepath anonymisation. This is useful if you want to anonymise your local system
+user's name. You can set this to `True` to enable this feature, this is all you should need to do but advanced users may
+want to specify a `str` that represents the "base path" of files to be redacted. For example:
+
+```text
+If
+    `base_path` = "/home/username/miner"
+Then
+    "/home/username/miner/module_1/module_2/some_python_file.py"
+Becomes
+    "[PATH REDACTED]/module_1/module_2/some_python_file.py"
+```
+
+You can see how the `username` part of the filepath has been removed.
+
+This will apply to all paths logged as part of exception stack traces in `ERROR` logging.
 
 #### `ConsistentAnonymiser`
 
@@ -774,7 +814,11 @@ logged.
 
 ```python3
 ConsistentAnonymiser(
+    channel_ids=True,
+    usernames=True,
+    channel_points=True,
     strict=True,
+    base_path=True,
     random_points_min=100,
     random_points_max=1_000_000,
     random_source=RandomSource(
@@ -783,8 +827,6 @@ ConsistentAnonymiser(
     ),
 )
 ```
-
-`strict` is `True` by default for this anonymiser. It can be set to `False` if you want API responses to be logged.
 
 `random_points_min` to `random_points_max` defines the range of possible values when generating the initial random
 channel points for a Streamer. In this example, channel points will be in the range `100` to `1_000_000`.
@@ -812,7 +854,11 @@ the next time.
 
 ```python3
 RandomAnonymiser(
+    channel_ids=True,
+    usernames=True,
+    channel_points=True,
     strict=True,
+    base_path=True,
     random_source=RandomSource(
         random_int=random.randint,
         random_uuid=generate_random_uuid,
