@@ -547,6 +547,8 @@ class TwitchChannelPointsMiner:
                         f"Background task(s) {list(map(lambda task: task.name, filter(not_is_alive, self.background_tasks)))} have stopped working. Stopping application."
                     )
                     break
+        except Exception as e:
+            logger.exception(f"Error in main miner loop", exc_info=e)
         finally:
             self.end()
 

@@ -142,6 +142,16 @@ class LoggerSettings:
             self.anonymiser: Anonymiser = anonymiser
 
 
+class ExceptionFormatter(logging.Formatter):
+    """Formatter that delegates formatting Exceptions to the Settings' Anonymiser."""
+    def __init__(self, settings: LoggerSettings):
+        self.settings = settings
+        super().__init__()
+
+    def formatException(self, ei):
+        return self.settings.anonymiser.format_exception(ei)
+
+
 class FileFormatter(logging.Formatter):
     def __init__(self, *, fmt, settings: LoggerSettings, datefmt=None):
         self.settings = settings
@@ -162,9 +172,6 @@ class FileFormatter(logging.Formatter):
         else:
             dt = datetime.fromtimestamp(record.created)
         return dt.strftime(datefmt or self.default_time_format)
-
-    def formatException(self, ei):
-        return self.settings.anonymiser.format_exception(ei)
 
 
 class GlobalFormatter(logging.Formatter):
@@ -224,11 +231,7 @@ class GlobalFormatter(logging.Formatter):
                 record.msg = (
                     f"{self.settings.color_palette.get(record.event)}{record.msg}"
                 )
-
         return super().format(record)
-
-    def formatException(self, ei):
-        return self.settings.anonymiser.format_exception(ei)
 
 
 def configure_loggers(username, settings):
@@ -238,6 +241,7 @@ def configure_loggers(username, settings):
     # Queue handler that will handle the logger queue
     logger_queue = queue.Queue(-1)
     queue_handler = QueueHandler(logger_queue)
+    queue_handler.setFormatter(ExceptionFormatter(settings=settings))
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
     # Add the queue handler to the root logger
