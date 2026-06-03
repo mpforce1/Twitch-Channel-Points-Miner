@@ -6,9 +6,9 @@ from datetime import datetime
 from threading import Lock
 
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
+from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings, DelayMode
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
-from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.gql import Properties
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
@@ -27,6 +27,7 @@ class StreamerSettings(object):
         "community_goals",
         "bet",
         "chat",
+        "simulate_hls_playback",
     ]
 
     def __init__(
@@ -39,6 +40,7 @@ class StreamerSettings(object):
         community_goals: bool = None,
         bet: BetSettings = None,
         chat: ChatPresence = None,
+        simulate_hls_playback: bool = None,
     ):
         self.make_predictions = make_predictions
         self.follow_raid = follow_raid
@@ -48,6 +50,8 @@ class StreamerSettings(object):
         self.community_goals = community_goals
         self.bet = bet
         self.chat = chat
+        self.simulate_hls_playback = simulate_hls_playback
+        """If True, simulates playback of the stream via HLS when selected to watch."""
 
     def default(self):
         for name in [
@@ -56,6 +60,7 @@ class StreamerSettings(object):
             "claim_drops",
             "claim_moments",
             "watch_streak",
+            "simulate_hls_playback",
         ]:
             if getattr(self, name) is None:
                 setattr(self, name, True)
@@ -67,7 +72,7 @@ class StreamerSettings(object):
             self.chat = ChatPresence.ONLINE
 
     def __repr__(self):
-        return f"BetSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat})"
+        return f"BetSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat}, simulate_m3u8={self.simulate_m3u8})"
 
 
 class Streamer(object):
