@@ -6,6 +6,9 @@ from datetime import datetime
 
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
+from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
+    PlaybackAccessToken,
+)
 from TwitchChannelPointsMiner.classes.gql import Tag
 from TwitchChannelPointsMiner.classes.gql.data.response.BroadcastSettings import (
     GameBroadcastSettings,
@@ -30,6 +33,8 @@ class Stream(object):
         "viewers_count",
         "spade_url",
         "payload",
+        "playback_access_token",
+        "hls_url",
         "watch_streak_missing",
         "minute_watched",
         "watch_count",
@@ -54,6 +59,10 @@ class Stream(object):
 
         self.spade_url: str | None = None
         self.payload = None
+        self.playback_access_token: PlaybackAccessToken | None = None
+        """A token that allows accessing stream media for this Stream."""
+        self.hls_url: str | None = None
+        """The URL of the HLS stream playlist for this Stream."""
 
         self.created_at: datetime | None = None
 
@@ -74,8 +83,10 @@ class Stream(object):
         watch_streak_milestone: WatchStreakMilestone | None,
     ):
         if self.broadcast_id != broadcast_id:
-            # Different stream, reset watch time
+            # Different stream, reset state
             self.init_watch_streak()
+            self.playback_access_token = None
+            self.hls_url = None
 
         self.broadcast_id = broadcast_id
         self.title = title.strip()

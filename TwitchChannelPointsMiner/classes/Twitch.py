@@ -2,8 +2,7 @@
 # https://www.apollographql.com/docs/
 # https://github.com/mauricew/twitch-graphql-api
 # Full list of available methods: https://azr.ivr.fi/schema/query.doc.html (a bit outdated)
-
-
+import datetime
 import logging
 import os
 import random
@@ -15,8 +14,8 @@ from pathlib import Path
 from secrets import choice, token_hex
 
 import requests
+import validators
 
-from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Exceptions import (
     StreamerDoesNotExistException,
@@ -27,10 +26,14 @@ from TwitchChannelPointsMiner.classes.Settings import (
     FollowersOrder,
     Settings,
 )
+from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
 from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
+from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
+    PlaybackAccessToken,
+)
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
@@ -136,7 +139,7 @@ class Twitch(object):
                         extra={
                             "emoji": ":rocket:",
                             "event": Events.get("WATCH_STREAK_PROGRESS"),
-                        }
+                        },
                     )
 
                 event_properties = {
@@ -149,8 +152,8 @@ class Twitch(object):
                 }
 
                 if (
-                        streamer.stream.game_name() is not None
-                        and streamer.stream.game_id() is not None
+                    streamer.stream.game_name() is not None
+                    and streamer.stream.game_id() is not None
                 ):
                     event_properties["game"] = streamer.stream.game_name()
                     event_properties["game_id"] = streamer.stream.game_id()
@@ -204,7 +207,9 @@ class Twitch(object):
                 self.client_session.login.get_user_id(), streamer.channel_id
             )
         except RetryError as e:
-            logger.error(f"Error getting stream info for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}")
+            logger.error(
+                f"Error getting stream info for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
+            )
             raise e
         if info_response.user.stream is None:
             # There is no stream data, so they're offline
@@ -214,7 +219,7 @@ class Twitch(object):
                 info_response.user,
                 is_live_response.user,
                 reward_list_response.channel.self.watch_streak_milestone,
-                chat_room_ban_status.status
+                chat_room_ban_status.status,
             )
 
     def check_streamer_online(self, streamer):
@@ -255,7 +260,9 @@ class Twitch(object):
             else:
                 return response.id
         except RetryError as e:
-            logger.error(f"Error getting channel id for {Settings.logger.anonymiser.username(streamer_username)}: {e}")
+            logger.error(
+                f"Error getting channel id for {Settings.logger.anonymiser.username(streamer_username)}: {e}"
+            )
             raise StreamerDoesNotExistException
 
     def get_followers(
@@ -381,13 +388,170 @@ class Twitch(object):
             logger.error(f"Error with update_client_version: {e}")
             return self.client_session.version
 
+    def get_or_update_playback_access_token(
+        self, streamer: Streamer
+    ) -> PlaybackAccessToken | None:
+        """
+        Gets a PlaybackAccessToken for the current Stream for the given Streamer. This may involve making a GQL
+        request for a new token if one doesn't exist or the current one has expired.
+
+        :param streamer: The Streamer for which to get the token.
+        :return: The token or None if one could not be obtained.
+        """
+        if (
+            streamer.stream.playback_access_token is None
+            or streamer.stream.playback_access_token.value.expires
+            <= datetime.datetime.now(datetime.UTC)
+        ):
+            try:
+                gql_token = self.gql.get_playback_access_token(streamer.username)
+                token = PlaybackAccessToken.from_gql(gql_token)
+                streamer.stream.playback_access_token = token
+                logger.debug(
+                    f"Obtained PlaybackAccessToken for {streamer.username}, expires {token.value.expires}"
+                )
+            except RetryError as e:
+                logger.error(
+                    f"Unable to get PlaybackAccessToken for {streamer.username}: {e}"
+                )
+                return None
+        return streamer.stream.playback_access_token
+
+    def get_hls_playlist_url(self, streamer: Streamer) -> str | None:
+        """
+        Gets the playlist URL for the current Stream for the given Streamer.
+
+        :param streamer: The Streamer for which to get the URL.
+        :return: The URL or None if one could not be obtained.
+        """
+        if streamer.stream.hls_url is not None:
+            return streamer.stream.hls_url
+
+        token = self.get_or_update_playback_access_token(streamer)
+        if token is None:
+            return None
+
+        # Construct the URL for the broadcast qualities
+        master_playlist_url = f"https://usher.ttvnw.net/api/channel/hls/{streamer.username}.m3u8?sig={token.signature}&token={token.raw_value}"
+
+        # Get list of video qualities from master playlist
+        logger.debug(f"Sending master playlist request for {streamer}")
+        master_playlist_response = requests.get(
+            master_playlist_url,
+            headers={"User-Agent": self.client_session.user_agent},
+            timeout=CLIENT_WATCH_SECONDS,
+        )
+        logger.debug(
+            f"Sent master playlist request for {streamer}, Status: {master_playlist_response.status_code}"
+        )
+
+        if master_playlist_response.status_code != 200:
+            logger.debug(
+                f"Unable to request master playlist for {streamer}, Status: {master_playlist_response.status_code}"
+            )
+            return None
+
+        broadcast_qualities_urls = master_playlist_response.text
+
+        # Just take the last line, which should be the latest URL for the lowest quality
+        lowest_quality_playlist_url = broadcast_qualities_urls.split("\n")[-1]
+        if not validators.url(lowest_quality_playlist_url):
+            logger.debug(
+                f"Unable to parse URL from master playlist response, URL: {lowest_quality_playlist_url}"
+            )
+            return None
+        streamer.stream.hls_url = lowest_quality_playlist_url
+        return lowest_quality_playlist_url
+
+    def simulate_hls_playback(self, streamer: Streamer) -> bool:
+        """
+        Simulates the HLS playback for the current Stream for the given Streamer by making a HEAD request to the latest
+        stream segment.
+
+        :param streamer: The Streamer for which to simulate playback.
+        :return: True if playback succeeded, False otherwise.
+        """
+        # Twitch serves Streams via HLS which is based on M3U8 playlists. To "play back" a part of a stream you can:
+        # 1. Make a request to the "usher" URL which returns the Master Playlist
+        # 2. Take the last URL from the Master Playlist which should be the Lowest Quality Stream Playlist
+        # 3. Make a request to the Lowest Quality Stream Playlist URL which returns the Segment Playlist
+        # 4. Take the last URL from the Segment Playlist which should be the URL of the lastest Stream Segment
+        # 5. Make a HEAD request to the Stream Segment URL
+        # Steps 1 and 2 should only need to be done once per Stream. The rest must be done once per play back attempt
+        # because the contents of the Lowest Quality Stream Playlist changes at least every 2 seconds.
+
+        # Get the segment playlist URL for the lowest quality stream option
+        stream_playlist_url = self.get_hls_playlist_url(streamer)
+        if stream_playlist_url is None:
+            return False
+
+        # Get list of segment URLs
+        logger.debug(f"Sending stream playlist request for {streamer}")
+        stream_playlist_response = requests.get(
+            stream_playlist_url,
+            headers={"User-Agent": self.client_session.user_agent},
+            timeout=CLIENT_WATCH_SECONDS,
+        )
+        logger.debug(
+            f"Sent stream playlist request for {streamer}, Status: {stream_playlist_response.status_code}"
+        )
+
+        if stream_playlist_response.status_code != 200:
+            logger.debug(
+                f"Unable to get stream playlist, Status: {stream_playlist_response.status_code}"
+            )
+            return False
+        stream_playlist_text = stream_playlist_response.text
+
+        # Just take the last line, which should be the URL for the latest segment
+        stream_segment_url = stream_playlist_text.split("\n")[-2]
+        if not validators.url(stream_segment_url):
+            logger.debug(
+                f"Unable to parse latest segment URL from stream playlist, URL: {stream_segment_url}"
+            )
+            return False
+
+        # Perform a HEAD request to simulate watching the stream segment
+        logger.debug(f"Sending stream segment request for {streamer}")
+        stream_segment_response = requests.head(
+            stream_segment_url,
+            headers={"User-Agent": self.client_session.user_agent},
+            timeout=CLIENT_WATCH_SECONDS,
+        )
+        logger.debug(
+            f"Sent stream segment request for {streamer}, Status: {stream_segment_response.status_code}"
+        )
+        return stream_segment_response.status_code == 200
+
+    def send_spade_minute_watched_event(self, streamer: Streamer) -> bool:
+        """
+        Sends a minute watched event to the tracking endpoint for the current Stream for the given Streamer.
+
+        :param streamer: The Streamer for which to send the event.
+        :return: True if the request was successful, False otherwise.
+        """
+        logger.debug(f"Sending spade minute watched request for {streamer}")
+        response = requests.post(
+            streamer.stream.spade_url,  # pyright: ignore [reportArgumentType]
+            data=streamer.stream.encode_payload(),
+            headers={"User-Agent": self.client_session.user_agent},
+            timeout=CLIENT_WATCH_SECONDS,
+        )
+        logger.debug(
+            f"Sent spade minute watched request for {streamer} - Status code: {response.status_code}"
+        )
+
+        if response.status_code != 204:
+            logger.error(f"Unable to send spade minute watched request for {streamer}")
+            return False
+        return True
+
     def send_minute_watched_events(
         self,
         streamers: list[Streamer],
         streamer_selector: StreamerSelector,
         chunk_size=3,
     ):
-
         def find_streamer(channel_id: str) -> Streamer:
             for streamer in streamers:
                 if streamer.channel_id == channel_id:
@@ -417,7 +581,9 @@ class Twitch(object):
                         self.check_streamer_online(streamer)
 
                 selected_streamer_ids = streamer_selector.select(online_streamers, 2)
-                streamers_watching = [find_streamer(streamer_id) for streamer_id in selected_streamer_ids]
+                streamers_watching = [
+                    find_streamer(streamer_id) for streamer_id in selected_streamer_ids
+                ]
 
                 watch_attempts_start_time = time.time()
 
@@ -427,16 +593,13 @@ class Twitch(object):
                     )
 
                     try:
-                        response = requests.post(
-                            streamer.stream.spade_url,  # pyright: ignore [reportArgumentType]
-                            data=streamer.stream.encode_payload(),
-                            headers={"User-Agent": self.client_session.user_agent},
-                            timeout=CLIENT_WATCH_SECONDS,
-                        )
-                        logger.debug(
-                            f"Send minute watched request for {streamer} - Status code: {response.status_code}"
-                        )
-                        if response.status_code == 204:
+                        if (
+                            streamer.settings.simulate_hls_playback
+                            and not self.simulate_hls_playback(streamer)
+                        ):
+                            continue
+
+                        if self.send_spade_minute_watched_event(streamer):
                             streamer.stream.update_minute_watched()
 
                             """
@@ -468,14 +631,16 @@ class Twitch(object):
                                                     "skip_webhook": True,
                                                     "skip_matrix": True,
                                                     "skip_gotify": True,
-                                                    "skip_pushover": True
+                                                    "skip_pushover": True,
                                                 },
                                             )
 
                                         if len(Settings.logger.hooks) > 0:
                                             combined_message = "\n".join(drop_messages)
                                             for hook in Settings.logger.hooks:
-                                                hook.send(combined_message, Events.DROP_STATUS)
+                                                hook.send(
+                                                    combined_message, Events.DROP_STATUS
+                                                )
 
                     except requests.exceptions.ConnectionError as e:
                         logger.error(f"Error while trying to send minute watched: {e}")
@@ -488,12 +653,13 @@ class Twitch(object):
                     )
 
                 # Ensure we sleep at least 20 seconds, even if we `continue` iteration(s)
-                time_remaining = CLIENT_WATCH_SECONDS - (time.time() - watch_attempts_start_time)
+                time_remaining = CLIENT_WATCH_SECONDS - (
+                    time.time() - watch_attempts_start_time
+                )
                 if len(streamers_watching) == 0 or time_remaining > 0.01:
                     self.__chuncked_sleep(time_remaining, chunk_size=chunk_size)
             except Exception:
-                logger.error(
-                    "Exception raised in send minute watched", exc_info=True)
+                logger.error("Exception raised in send minute watched", exc_info=True)
                 # Do a short sleep to avoid error log spam
                 time.sleep(1)
 
@@ -525,7 +691,9 @@ class Twitch(object):
         if streamer.settings.community_goals is True:
             self.contribute_to_community_goals(streamer)
 
-    def initialize_streamers_context(self, streamers: list[Streamer], max_workers=10) -> set[str]:
+    def initialize_streamers_context(
+        self, streamers: list[Streamer], max_workers=10
+    ) -> set[str]:
         """
         Initializes the context for the given Streamers. Loads the channel points context and checks if they're online.
         Parallelizes execution across the given number of worker threads.

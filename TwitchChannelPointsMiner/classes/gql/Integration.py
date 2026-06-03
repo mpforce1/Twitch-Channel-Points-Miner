@@ -1,7 +1,5 @@
 import copy
 import logging
-import sys
-import traceback
 from secrets import token_hex
 from typing import Callable, Any, Protocol
 
@@ -86,7 +84,9 @@ def error_context(e: Exception) -> str | None:
     :return: The context string, or None if no context is needed.
     """
     if not isinstance(e, GQLError):
-        return Settings.logger.anonymiser.format_exception((type(e), e, e.__traceback__))
+        return Settings.logger.anonymiser.format_exception(
+            (type(e), e, e.__traceback__)
+        )
     else:
         return None
 
@@ -191,19 +191,35 @@ class GQL:
                     # Annoyingly "channelLogin" is both a username and a channel id in different operations
                     if operation_name in [
                         GQLOperations.ChannelPointsContext["operationName"],
-                        GQLOperations.UserPointsContribution["operationName"]
+                        GQLOperations.UserPointsContribution["operationName"],
                     ]:
-                        variables["channelLogin"] = Settings.logger.anonymiser.username(channel_login)
-                    elif operation_name == GQLOperations.DropCampaignDetails["operationName"]:
-                        variables["channelLogin"] = Settings.logger.anonymiser.channel_id(channel_login)
+                        variables["channelLogin"] = Settings.logger.anonymiser.username(
+                            channel_login
+                        )
+                    elif (
+                        operation_name
+                        == GQLOperations.DropCampaignDetails["operationName"]
+                    ):
+                        variables["channelLogin"] = (
+                            Settings.logger.anonymiser.channel_id(channel_login)
+                        )
                 channel_id = variables.get("channelID", None)
                 if channel_id is not None:
-                    variables["channelID"] = Settings.logger.anonymiser.channel_id(channel_id)
-                if operation_name == GQLOperations.WithIsStreamLiveQuery["operationName"]:
-                    variables["id"] = Settings.logger.anonymiser.channel_id(variables["id"])
+                    variables["channelID"] = Settings.logger.anonymiser.channel_id(
+                        channel_id
+                    )
+                if (
+                    operation_name
+                    == GQLOperations.WithIsStreamLiveQuery["operationName"]
+                ):
+                    variables["id"] = Settings.logger.anonymiser.channel_id(
+                        variables["id"]
+                    )
                 target_user_id = variables.get("targetUserID", None)
                 if target_user_id is not None:
-                    variables["targetUserID"] = Settings.logger.anonymiser.channel_id(target_user_id)
+                    variables["targetUserID"] = Settings.logger.anonymiser.channel_id(
+                        target_user_id
+                    )
             return value
 
         if isinstance(json, dict):
@@ -230,7 +246,9 @@ class GQL:
 
         redacted_request_json = self.__redact_request_json(request_json)
 
-        response_text = "REDACTED" if Settings.logger.anonymiser.strict else response.text
+        response_text = (
+            "REDACTED" if Settings.logger.anonymiser.strict else response.text
+        )
 
         logger.debug(
             f"Data: {redacted_request_json}, Status code: {response.status_code}, Content: {response_text}"
@@ -440,6 +458,7 @@ class GQL:
             "isVod": False,
             "vodID": "",
             "playerType": "site",
+            "platform": "web",
         }
         return self.post_gql_request_single(
             GQLOperations.PlaybackAccessToken["operationName"],
