@@ -53,6 +53,7 @@ class Events(Enum):
     DROP_CLAIM = auto()
     DROP_STATUS = auto()
     CHAT_MENTION = auto()
+    GIFT_SUB_RECEIVED = auto()
 
     def __str__(self):
         return self.name

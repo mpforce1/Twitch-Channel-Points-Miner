@@ -1,4 +1,5 @@
 import abc
+import json
 import logging
 import time
 from threading import Timer
@@ -41,7 +42,8 @@ class PubSubHandler(MessageListener):
             streamer = next(
                 (streamer for streamer in self.streamers if streamer.channel_id == message.channel_id), None
             )
-            if streamer is None:
+            if streamer is None and message.topic != "onsite-notifications":
+                # onsite-notifications aren't channel specific
                 return
             if message.topic == "community-points-user-v1":
                 if message.type in ["points-earned", "points-spent"]:
@@ -266,6 +268,21 @@ class PubSubHandler(MessageListener):
 
                 if message.type in ["community-goal-updated", "community-goal-created"]:
                     self.twitch.contribute_to_community_goals(streamer)
+            elif message.topic == "onsite-notifications":
+                logger.info(f"Received onsite-notification: {message.type}")
+                if message.type == "create-notification":
+                    notification = message.data["notification"]
+                    notification_type = notification["type"]
+                    if notification_type == "user_drop_reward_reminder_notification":
+                        logger.info(f"Drop claimable")
+                        # TODO claim drop
+                    elif notification_type == "sub_gift_received":
+                        logger.info(json.dumps(message.message), extra={
+                            "emoji": ":wrapped_gift:",
+                            "event": Events.GIFT_SUB_RECEIVED,
+                        })
+                    else:
+                        logger.info(f"Unknown notification type: {notification_type}")
 
         except Exception:
             message_loggable = "REDACTED" if Settings.logger.anonymiser.strict else message

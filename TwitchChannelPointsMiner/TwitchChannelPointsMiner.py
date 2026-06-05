@@ -471,6 +471,14 @@ class TwitchChannelPointsMiner:
                     )
                 )
 
+            # on-site-notifications gives us information about claimable drops and gift subs
+            self.ws_pool.submit(
+                PubsubTopic(
+                    "onsite-notifications",
+                    user_id=user_id
+                )
+            )
+
             for streamer in self.streamers:
                 self.ws_pool.submit(
                     PubsubTopic("video-playback-by-id", streamer=streamer)
