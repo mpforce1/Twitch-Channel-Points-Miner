@@ -14,7 +14,7 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.local/bin/:$PATH"
 
 # Pandas build dependencies
-RUN apt-get install -y --no-install-recommends gcc g++
+RUN apt-get update && apt-get install -y --no-install-recommends gcc g++
 
 # Build stage to run container isolated tests
 FROM base AS tester
