@@ -6,12 +6,12 @@ from typing import Callable, Any, Protocol
 import requests
 from requests import Response
 
+from TwitchChannelPointsMiner.JsonParser import InvalidJsonShapeError, JsonParserError
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Settings
 from TwitchChannelPointsMiner.classes.gql.Errors import (
     GQLError,
     RetryError,
-    InvalidJsonShapeException,
 )
 from TwitchChannelPointsMiner.classes.gql.data.Parser import Parser, JsonParentContext
 from TwitchChannelPointsMiner.classes.gql.data.response.ChannelPointsContext import (
@@ -83,7 +83,7 @@ def error_context(e: Exception) -> str | None:
     :param e: The Exception to check.
     :return: The context string, or None if no context is needed.
     """
-    if not isinstance(e, GQLError):
+    if not isinstance(e, GQLError) and not isinstance(e, JsonParserError):
         return Settings.logger.anonymiser.format_exception(
             (type(e), e, e.__traceback__)
         )
@@ -105,7 +105,7 @@ def parse_list[T](parse: Callable[[Any], T], value: Any) -> list[T]:
             with JsonParentContext(index):
                 result.append(parse(value[index]))
         return result
-    raise InvalidJsonShapeException([], "list expected")
+    raise InvalidJsonShapeError([], "list expected")
 
 
 def parse_list_sub_parsers(parsers: list[Callable[[Any], Any]], value: Any) -> list:
@@ -119,7 +119,7 @@ def parse_list_sub_parsers(parsers: list[Callable[[Any], Any]], value: Any) -> l
     """
     if isinstance(value, list):
         if len(value) != len(parsers):
-            raise InvalidJsonShapeException(
+            raise InvalidJsonShapeError(
                 [],
                 f"List length ({len(value)}) does not match parsers length ({len(parsers)})",
             )
@@ -128,7 +128,7 @@ def parse_list_sub_parsers(parsers: list[Callable[[Any], Any]], value: Any) -> l
             with JsonParentContext(index):
                 result.append(parsers[index](value[index]))
         return result
-    raise InvalidJsonShapeException([], "list expected")
+    raise InvalidJsonShapeError([], "list expected")
 
 
 class PostRequest(Protocol):
@@ -270,7 +270,7 @@ class GQL:
         if isinstance(response_json, list):
             return parse_list(parser, response_json)
         else:
-            raise InvalidJsonShapeException(
+            raise InvalidJsonShapeError(
                 [], f"Expected batched response, got {type(response_json).__name__}"
             )
 
@@ -283,7 +283,7 @@ class GQL:
         if isinstance(response_json, list):
             return parse_list_sub_parsers(parsers, response_json)
         else:
-            raise InvalidJsonShapeException(
+            raise InvalidJsonShapeError(
                 [], f"Expected batched response, got {type(response_json).__name__}"
             )
 
