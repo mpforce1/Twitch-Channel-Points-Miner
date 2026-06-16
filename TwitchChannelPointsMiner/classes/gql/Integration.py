@@ -9,6 +9,7 @@ from requests import Response
 from TwitchChannelPointsMiner.JsonParser import InvalidJsonShapeError, JsonParserError
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Settings
+from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.gql.Errors import (
     GQLError,
     RetryError,
@@ -718,6 +719,40 @@ class GQL:
             json_data,
             self.parser.parse_chat_room_ban_status,
         )
+
+    def gift_subs(self, channel_id: str | None = None) -> list[GiftSub]:
+        """
+        Gets the user's gift subs. If `channel_id` is provided, we will only return the current gift sub for the given
+        channel.
+        :param channel_id: The id of the channel for which to find a gift sub or None if all should be found.
+        :return: The gift sub(s).
+        """
+        json_data = copy.deepcopy(GQLOperations.SubscriptionsManagement_SubscriptionBenefits)
+        has_next = True
+        last_cursor = ""
+        gift_subs: list[GiftSub] = []
+        json_data["variables"]["limit"] = 100 if channel_id is None else 1
+        while has_next:
+            json_data["variables"]["cursor"] = last_cursor
+            parsed_response = self.post_gql_request_single(
+                GQLOperations.SubscriptionsManagement_SubscriptionBenefits["operationName"],
+                json_data,
+                self.parser.parse_subscriptions_management_subscription_benefits,
+            )
+            if parsed_response is not None:
+                for edge in parsed_response.pages.edges:
+                    gift_sub = edge.node
+                    if channel_id is None:
+                        gift_subs.append(gift_sub)
+                    elif channel_id == gift_sub.target.id:
+                        return [gift_sub]
+                    last_cursor = edge.cursor
+                has_next = parsed_response.pages.page_info.has_next_page
+            else:
+                logger.error("Unable to get gift subs, empty response.")
+                return []
+        return gift_subs
+
 
 
 class GQLFactory:

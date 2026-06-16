@@ -250,3 +250,18 @@ class GQLOperations:
             }
         }
     }
+    SubscriptionsManagement_SubscriptionBenefits = {
+        "operationName": "SubscriptionsManagement_SubscriptionBenefits",
+        "variables": {
+            "cursor": "",
+            "filter": "GIFT",
+            "limit": 100,
+            "platform": "WEB"
+        },
+        "extensions": {
+            "persistedQuery": {
+                "sha256Hash": "149b5d57366d01d1ee948852b3d0fa36cf7b907ffba914bdb677627c014f08d6",
+                "version": 1,
+            }
+        },
+    }

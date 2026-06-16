@@ -1,10 +1,9 @@
 import abc
-import json
 import logging
 import time
 from threading import Timer
 
-from dateutil import parser
+from dateutil import parser as dateparser
 
 from TwitchChannelPointsMiner.classes.Settings import Settings, Events
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
@@ -13,6 +12,8 @@ from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPredi
 from TwitchChannelPointsMiner.classes.entities.Message import Message
 from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.websocket.data import OnsiteNotification
+from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,14 @@ class PubSubHandler(MessageListener):
     both the legacy PubSub and Hermes WebSocket APIs.
     """
 
-    def __init__(self, twitch: Twitch, streamers: list[Streamer], events_predictions: dict):
+    def __init__(
+        self,
+        parser: Parser,
+        twitch: Twitch,
+        streamers: list[Streamer],
+        events_predictions: dict,
+    ):
+        self.parser = parser
         self.twitch = twitch
         self.streamers = streamers
         self.events_predictions = events_predictions
@@ -40,7 +48,12 @@ class PubSubHandler(MessageListener):
     def on_message(self, message: Message):
         try:
             streamer = next(
-                (streamer for streamer in self.streamers if streamer.channel_id == message.channel_id), None
+                (
+                    streamer
+                    for streamer in self.streamers
+                    if streamer.channel_id == message.channel_id
+                ),
+                None,
             )
             if streamer is None and message.topic != "onsite-notifications":
                 # onsite-notifications aren't channel specific
@@ -52,9 +65,11 @@ class PubSubHandler(MessageListener):
                     # Analytics switch
                     if Settings.enable_analytics is True:
                         streamer.persistent_series(
-                            event_type=message.data["point_gain"]["reason_code"]
-                            if message.type == "points-earned"
-                            else "Spent"
+                            event_type=(
+                                message.data["point_gain"]["reason_code"]
+                                if message.type == "points-earned"
+                                else "Spent"
+                            )
                         )
 
                 if message.type == "points-earned":
@@ -68,9 +83,7 @@ class PubSubHandler(MessageListener):
                             "event": Events.get(f"GAIN_FOR_{reason_code}"),
                         },
                     )
-                    streamer.update_history(
-                        reason_code, earned
-                    )
+                    streamer.update_history(reason_code, earned)
                     # Analytics switch
                     if Settings.enable_analytics is True:
                         streamer.persistent_annotations(
@@ -91,9 +104,7 @@ class PubSubHandler(MessageListener):
                         streamer.set_offline()
                 elif message.type == "viewcount":
                     if streamer.stream_up_elapsed():
-                        self.twitch.check_streamer_online(
-                            streamer
-                        )
+                        self.twitch.check_streamer_online(streamer)
 
             elif message.topic == "raid":
                 if message.type == "raid_update_v2":
@@ -105,9 +116,7 @@ class PubSubHandler(MessageListener):
 
             elif message.topic == "community-moments-channel-v1":
                 if message.type == "active":
-                    self.twitch.claim_moment(
-                        streamer, message.data["moment_id"]
-                    )
+                    self.twitch.claim_moment(streamer, message.data["moment_id"])
 
             elif message.topic == "predictions-channel-v1":
 
@@ -115,41 +124,40 @@ class PubSubHandler(MessageListener):
                 event_id = event_dict["id"]
                 event_status = event_dict["status"]
 
-                current_tmsp = parser.parse(message.timestamp)
+                current_tmsp = dateparser.parse(message.timestamp)
 
                 if (
-                        message.type == "event-created"
-                        and event_id not in self.events_predictions
+                    message.type == "event-created"
+                    and event_id not in self.events_predictions
                 ):
                     if event_status == "ACTIVE":
                         prediction_window_seconds = float(
                             event_dict["prediction_window_seconds"]
                         )
                         # Reduce prediction window by 3/6s - Collect more accurate data for decision
-                        prediction_window_seconds = streamer.get_prediction_window(prediction_window_seconds)
+                        prediction_window_seconds = streamer.get_prediction_window(
+                            prediction_window_seconds
+                        )
                         event = EventPrediction(
                             streamer,
                             event_id,
                             event_dict["title"],
-                            parser.parse(event_dict["created_at"]),
+                            dateparser.parse(event_dict["created_at"]),
                             prediction_window_seconds,
                             event_status,
                             event_dict["outcomes"],
                         )
                         if (
-                                streamer.is_online
-                                and event.closing_bet_after(current_tmsp) > 0
+                            streamer.is_online
+                            and event.closing_bet_after(current_tmsp) > 0
                         ):
                             bet_settings = streamer.settings.bet
                             if (
-                                    bet_settings.minimum_points is None
-                                    or streamer.channel_points
-                                    > bet_settings.minimum_points
+                                bet_settings.minimum_points is None
+                                or streamer.channel_points > bet_settings.minimum_points
                             ):
                                 self.events_predictions[event_id] = event
-                                start_after = event.closing_bet_after(
-                                    current_tmsp
-                                )
+                                start_after = event.closing_bet_after(current_tmsp)
 
                                 place_bet_thread = Timer(
                                     start_after,
@@ -176,14 +184,14 @@ class PubSubHandler(MessageListener):
                                 )
 
                 elif (
-                        message.type == "event-updated"
-                        and event_id in self.events_predictions
+                    message.type == "event-updated"
+                    and event_id in self.events_predictions
                 ):
                     self.events_predictions[event_id].status = event_status
                     # Game over we can't update anymore the values... The bet was placed!
                     if (
-                            self.events_predictions[event_id].bet_placed is False
-                            and self.events_predictions[event_id].bet.decision == {}
+                        self.events_predictions[event_id].bet_placed is False
+                        and self.events_predictions[event_id].bet.decision == {}
                     ):
                         self.events_predictions[event_id].bet.update_outcomes(
                             event_dict["outcomes"]
@@ -194,8 +202,8 @@ class PubSubHandler(MessageListener):
                 if event_id in self.events_predictions:
                     event_prediction = self.events_predictions[event_id]
                     if (
-                            message.type == "prediction-result"
-                            and event_prediction.bet_confirmed
+                        message.type == "prediction-result"
+                        and event_prediction.bet_confirmed
                     ):
                         points = event_prediction.parse_result(
                             message.data["prediction"]["result"]
@@ -217,9 +225,7 @@ class PubSubHandler(MessageListener):
                             },
                         )
 
-                        streamer.update_history(
-                            "PREDICTION", points["gained"]
-                        )
+                        streamer.update_history("PREDICTION", points["gained"])
 
                         # Remove duplicate history records from previous message sent in community-points-user-v1
                         if event_prediction.result["type"] == "REFUND":
@@ -268,24 +274,46 @@ class PubSubHandler(MessageListener):
 
                 if message.type in ["community-goal-updated", "community-goal-created"]:
                     self.twitch.contribute_to_community_goals(streamer)
+
             elif message.topic == "onsite-notifications":
-                logger.info(f"Received onsite-notification: {message.type}")
-                if message.type == "create-notification":
-                    notification = message.data["notification"]
-                    notification_type = notification["type"]
-                    if notification_type == "user_drop_reward_reminder_notification":
-                        logger.info(f"Drop claimable")
-                        # TODO claim drop
-                    elif notification_type == "sub_gift_received":
-                        logger.info(json.dumps(message.message), extra={
-                            "emoji": ":wrapped_gift:",
-                            "event": Events.GIFT_SUB_RECEIVED,
-                        })
+                logger.debug(f"Received onsite-notification: {message.type}")
+                notification = self.parser.parse_onsite_notification(message.message)
+                if notification is not None:
+                    if isinstance(notification, OnsiteNotification.CreateNotification):
+                        if isinstance(
+                            notification,
+                            OnsiteNotification.UserDropRewardReminderNotification,
+                        ):
+                            logger.info(f"Drop claimable: {notification.drop_name}")
+                            # TODO claim drop
+                        else:
+                            logger.error(
+                                f"Unhandled CreateNotification subtype: {type(notification).__name__}"
+                            )
                     else:
-                        logger.info(f"Unknown notification type: {notification_type}")
+                        logger.error(
+                            f"Unhandled OnsiteNotification subtype: {type(notification).__name__}"
+                        )
+
+                else:
+                    logger.info(f"Unknown onsite-notification type: {message.type}")
+            elif message.topic == "user-subscribe-events-v1":
+                logger.debug(f"Received user-subscribe-events-v1: {message.type}")
+                notification = self.parser.parse_user_subscribe_events(message.message)
+                streamer = next(
+                    streamer
+                    for streamer in self.streamers
+                    if streamer.channel_id == notification.channel_id
+                )
+                if streamer is not None:
+                    self.twitch.check_gift_sub(streamer)
+                else:
+                    logger.debug(f"Received subscription notification for non-miner channel: {notification.channel_id}")
 
         except Exception:
-            message_loggable = "REDACTED" if Settings.logger.anonymiser.strict else message
+            message_loggable = (
+                "REDACTED" if Settings.logger.anonymiser.strict else message
+            )
             logger.error(
                 f"Exception raised for topic: {message.topic} and message: {message_loggable}",
                 exc_info=True,

@@ -43,6 +43,7 @@ from TwitchChannelPointsMiner.utils import (
     interruptible_sleep,
 )
 from TwitchChannelPointsMiner.utils.Utils import interruptible_repeating_task
+from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 
 # Suppress:
 #   - chardet.charsetprober - [feed]
@@ -432,7 +433,29 @@ class TwitchChannelPointsMiner:
             update_client_version_thread.start()
             self.background_tasks.append(update_client_version_thread)
 
-            pubsub_handlers = [PubSubHandler(self.twitch, self.streamers, self.events_predictions)]
+            # Periodic task to sync gift subs
+            sync_gift_subs_period = timedelta(minutes=30).total_seconds()
+            sync_gift_subs_step = 1.0
+            sync_gift_subs_thread = threading.Thread(
+                target=self.twitch.sync_gift_subs,
+                args=(
+                    self.streamers,
+                    sync_gift_subs_period,
+                    sync_gift_subs_step,
+                ),
+            )
+            sync_gift_subs_thread.name = "Sync gift subs"
+            sync_gift_subs_thread.start()
+            self.background_tasks.append(sync_gift_subs_thread)
+
+            pubsub_handlers = [
+                PubSubHandler(
+                    WebSocketJsonParser(),
+                    self.twitch,
+                    self.streamers,
+                    self.events_predictions,
+                )
+            ]
             if Settings.use_hermes:
                 self.ws_pool = HermesWebSocketPool(
                     url=f"{HERMES_WEBSOCKET}?clientId={CLIENT_ID_WEB}",
@@ -472,11 +495,11 @@ class TwitchChannelPointsMiner:
                 )
 
             # on-site-notifications gives us information about claimable drops and gift subs
+            self.ws_pool.submit(PubsubTopic("onsite-notifications", user_id=user_id))
+
+            # user-subscribe-events-v1 gives us subscription related events (e.g. new gift subs)
             self.ws_pool.submit(
-                PubsubTopic(
-                    "onsite-notifications",
-                    user_id=user_id
-                )
+                PubsubTopic("user-subscribe-events-v1", user_id=user_id)
             )
 
             for streamer in self.streamers:
