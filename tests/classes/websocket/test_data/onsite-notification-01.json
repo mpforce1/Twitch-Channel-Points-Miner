@@ -1,0 +1,54 @@
+{
+  "type": "create-notification",
+  "data": {
+    "notification": {
+      "user_id": "1234567891",
+      "id": "019ec678-0e0d-73b3-88ab-26552d17a002",
+      "body": "You are now eligible to get **Example Drop Reward** for Example Game. To get your loot, claim your Drop by August 14, 2025 4:26:00 pm UTC on the Inventory page!",
+      "body_md": "You are now eligible to get **Example Drop Reward** for Example Game. To get your loot, claim your Drop by August 14, 2025 4:26:00 pm UTC on the Inventory page!",
+      "type": "user_drop_reward_reminder_notification",
+      "render_style": "DEFAULT",
+      "thumbnail_url": "https://example.com/path1/path2/019ec67b-10fa-723a-a4a6-832caa7e6e39.png",
+      "actions": [
+        {
+          "id": "CTA",
+          "type": "click",
+          "url": "https://www.twitch.tv/inventory",
+          "modal_id": "",
+          "body": "",
+          "label": "CTA"
+        }
+      ],
+      "created_at": "2025-10-04T02:34:54.99548356Z",
+      "updated_at": "2025-10-04T02:34:54.99548356Z",
+      "read": false,
+      "display_type": "VIEWER",
+      "category": "transactional",
+      "data_blocks": [
+        {
+          "id": "DEFAULT_BODY_TEXT",
+          "type": "DATA_BLOCK_TYPE_TEXT",
+          "content": {
+            "text_block": {
+              "body": "You are now eligible to get **Example Drop Reward** for Example Game. To get your loot, claim your Drop by August 14, 2025 4:26:00 pm UTC on the Inventory page!"
+            }
+          }
+        },
+        {
+          "id": "DEFAULT_THUMBNAIL_URL",
+          "type": "DATA_BLOCK_TYPE_IMAGE",
+          "content": {
+            "image_block": {
+              "url": "https://example.com/path1/path2/019ec67b-10fa-723a-a4a6-832caa7e6e39.png"
+            }
+          }
+        }
+      ],
+      "is_mobile_only": false,
+      "mobile_destination_type": "DropsInventory"
+    },
+    "persistent": true,
+    "toast": false,
+    "display_type": "VIEWER"
+  }
+}

@@ -6,7 +6,9 @@ import pytest
 
 from TwitchChannelPointsMiner.utils.Utils import (
     interruptible_repeating_task,
-    interruptible_sleep, oxford_comma_list,
+    interruptible_sleep,
+    ordinal,
+    oxford_comma_list,
 )
 
 test_interruptible_sleep_uninterrupted_data = [
@@ -234,3 +236,45 @@ test_oxford_comma_list_data = [
 @pytest.mark.parametrize("items,expected", test_oxford_comma_list_data)
 def test_oxford_comma_list(items: list[str], expected: str) -> None:
     assert oxford_comma_list(items) == expected
+
+
+test_ordinal_data = [
+    (1, "1st"),
+    (2, "2nd"),
+    (3, "3rd"),
+    (4, "4th"),
+    (5, "5th"),
+    (6, "6th"),
+    (7, "7th"),
+    (8, "8th"),
+    (9, "9th"),
+    (10, "10th"),
+    (11, "11th"),
+    (12, "12th"),
+    (20, "20th"),
+    (21, "21st"),
+    (22, "22nd"),
+    (23, "23rd"),
+    (24, "24th"),
+    (25, "25th"),
+    (30, "30th"),
+    (31, "31st"),
+    (99, "99th"),
+    (100, "100th"),
+    (101, "101st"),
+    (109, "109th"),
+    (110, "110th"),
+    (111, "111th"),
+    (112, "112th"),
+    (121, "121st"),
+    (155, "155th"),
+    (1234, "1234th"),
+    (4321, "4321st"),
+    (11111, "11111th"),
+    (123456789, "123456789th"),
+]
+
+
+@pytest.mark.parametrize("value,expected", test_ordinal_data)
+def test_ordinal(value, expected):
+    assert ordinal(value) == expected

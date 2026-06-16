@@ -8,6 +8,7 @@ from threading import Lock
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings, DelayMode
+from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.gql import Properties
 from TwitchChannelPointsMiner.constants import URL
@@ -97,6 +98,7 @@ class Streamer(object):
         "raid",
         "history",
         "streamer_url",
+        "gift_sub",
         "mutex",
     ]
 
@@ -113,6 +115,7 @@ class Streamer(object):
         active_multipliers: list[Properties.Multiplier] | None = None,
         settings: StreamerSettings | None = None,
         source: StreamerSource = StreamerSource.Streamers,
+        gift_sub: GiftSub | None = None,
     ):
         self.username: str = username.lower().strip()
         self.channel_id: str = channel_id if channel_id is not None else ""
@@ -130,6 +133,7 @@ class Streamer(object):
         self.viewer_is_mod = False
         self.active_multipliers = active_multipliers
         self.irc_chat = None
+        self.gift_sub = gift_sub
 
         self.stream = stream if stream is not None else Stream()
 

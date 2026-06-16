@@ -31,6 +31,7 @@ from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
+from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
     PlaybackAccessToken,
 )
@@ -1103,3 +1104,81 @@ class Twitch(object):
                 f"Contributed {amount} channel points to community goal '{title}'"
             )
             streamer.channel_points -= amount
+
+    @staticmethod
+    def update_gift_sub(
+        streamer: Streamer, gift_sub: GiftSub | None, send_event: bool = True
+    ):
+        """
+        Updates the given Streamer with the given gift-sub, logs an Event if it has changed and `send_event` is True.
+        :param streamer: The Streamer to update.
+        :param gift_sub: The gift sub.
+        :param send_event: If True an Event will be logged.
+        """
+        old_gift_sub = streamer.gift_sub
+        if old_gift_sub == gift_sub:
+            logger.debug(f"{streamer} gift sub unchanged: {gift_sub}")
+        else:
+            streamer.gift_sub = gift_sub
+            if send_event:
+                if gift_sub is None:
+                    logger.info(f"Gift Sub to {streamer} has expired")
+                else:
+                    logger.info(
+                        gift_sub.describe(),
+                        extra={
+                            "emoji": ":wrapped_gift:",
+                            "event": Events.GIFT_SUB_RECEIVED,
+                        },
+                    )
+
+    def check_gift_sub(self, streamer: Streamer, send_event: bool = True):
+        """
+        Checks the gift-sub state for the given Streamer.
+        :param streamer: The Streamer to update.
+        :param send_event: If True an Event will be logged.
+        """
+        gift_subs = self.gql.gift_subs(streamer.channel_id)
+        self.update_gift_sub(
+            streamer, None if len(gift_subs) == 0 else gift_subs[0], send_event
+        )
+
+    def check_gift_subs(self, streamers: list[Streamer], send_event: bool = True):
+        """
+        Checks the gift-sub state for all Streamers.
+        :param streamers: The Streamers to update.
+        :param send_event: If True an Event will be logged.
+        """
+        try:
+            gift_subs = self.gql.gift_subs()
+        except RetryError as e:
+            logger.error(f"Error while syncing gift subs: {e}")
+            return
+
+        for gift_sub in gift_subs:
+            streamer = next(
+                (
+                    streamer
+                    for streamer in streamers
+                    if streamer.channel_id == gift_sub.target.id
+                ),
+                None,
+            )
+            if streamer is not None:
+                self.update_gift_sub(streamer, gift_sub, send_event)
+            else:
+                logger.debug(f"No Streamer found for Gift Sub {gift_sub.target}")
+
+    def sync_gift_subs(self, streamers: list[Streamer], period_seconds: int, step: float = 1.0):
+        """
+        Repeating task that synchronises gift subs. Stops once `self.running` is False.
+        :param streamers: The Streamers to synd.
+        :param period_seconds: The amount of time, in seconds, between syncs.
+        :param step: The interval between checking if the task should run.
+        """
+        first_run = False
+        while self.running:
+            self.check_gift_subs(streamers, not first_run)
+            if first_run:
+                first_run = False
+            interruptible_sleep(lambda: self.running, period_seconds, step)

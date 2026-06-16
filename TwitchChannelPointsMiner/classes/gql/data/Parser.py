@@ -26,6 +26,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response import (
     Predictions,
     Drops,
     PlaybackAccessToken,
+    SubscriptionManagement,
     WithIsStreamLiveQuery,
     RewardList,
 )
@@ -519,6 +520,47 @@ def reward_list_channel_parser(value: Any) -> RewardList.Channel:
     )
 
 
+def subscription_benefit_parser(value) -> GiftSub:
+    value = expect_dict(value)
+    gift = parse_expected_value(value, "gift", expect_dict)
+    with JsonParentContext("gift"):
+        gifter_dict = parse_expected_value(gift, "gifter", optional_parser(expect_dict))
+        if gifter_dict is None:
+            gifter = None
+        else:
+            with JsonParentContext("gifter"):
+                gifter = Gifter(
+                    _id=parse_expected_value(gifter_dict, "id", expect_str),
+                    username=parse_expected_value(gifter_dict, "login", expect_str),
+                    display_name=parse_expected_value(
+                        gifter_dict, "displayName", expect_str
+                    ),
+                )
+
+    user = parse_expected_value(value, "user", expect_dict)
+    with JsonParentContext("user"):
+        target = Target(
+            _id=parse_expected_value(user, "id", expect_str),
+            username=parse_expected_value(user, "login", expect_str),
+            display_name=parse_expected_value(user, "displayName", expect_str),
+        )
+
+    # Tier = "1000"/"2000"/"3000"
+    tier = parse_expected_value(value, "tier", expect_str)
+    tier = int(tier[0])
+
+    # TODO I don't have an example of a multi-month gift sub
+    months = 1
+
+    return GiftSub(
+        _id=parse_expected_value(value, "id", expect_str),
+        target=target,
+        gifter=gifter,
+        tier=tier,
+        months=months,
+    )
+
+
 class Parser:
     """Class that can parse responses from the Twitch GQL API."""
 
@@ -874,3 +916,24 @@ class Parser:
                     data, "chatRoomBanStatus", optional_parser(expect_any)
                 )
             )
+
+    def parse_subscriptions_management_subscription_benefits(
+        self, response
+    ) -> SubscriptionManagement.SubscriptionBenefitResponse:
+        """
+        Parses responses to SubscriptionsManagement_SubscriptionBenefits requests.
+        :param response: The response to parse.
+        :return: The parsed response.
+        :raises GQLError: If the response contains errors or there is an issue parsing the response.
+        """
+        _, _, data = self.parse_base_response(response, True)
+        with JsonParentContext("data"):
+            user = parse_expected_value(data, "currentUser", expect_dict)
+            with JsonParentContext("currentUser"):
+                return SubscriptionManagement.SubscriptionBenefitResponse(
+                    pages=parse_expected_value(
+                        user,
+                        "subscriptionBenefits",
+                        paginated_parser(subscription_benefit_parser),
+                    ),
+                )

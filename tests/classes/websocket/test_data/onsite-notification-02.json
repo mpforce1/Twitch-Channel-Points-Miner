@@ -1,0 +1,55 @@
+{
+  "type": "create-notification",
+  "data": {
+    "notification": {
+      "user_id": "7894561231",
+      "id": "019ec6c5-b9e2-75d7-b4a8-15839d865ea3",
+      "body": "You’ve earned the \"Example Badge Name\" badge! Chat on your favorite channel to show it off!",
+      "body_md": "You’ve earned the \"Example Badge Name\" badge! Chat on your favorite channel to show it off!",
+      "type": "quests_viewer_reward_campaign_earned_badge",
+      "render_style": "DEFAULT",
+      "thumbnail_url": "https://example.com/path1/path2/019ec6c6-7089-70fe-9f61-a6dc4068d977.png",
+      "actions": [
+        {
+          "id": "primary-button-cta",
+          "type": "click",
+          "url": "https://help.twitch.tv/s/article/how-to-use-badges#use",
+          "modal_id": "",
+          "body": "Learn more",
+          "label": "primary-button-cta"
+        }
+      ],
+      "created_at": "2022-09-23T09:41:14.451234578Z",
+      "updated_at": "2022-09-23T09:41:14.451234578Z",
+      "read": false,
+      "display_type": "VIEWER",
+      "category": "transactional",
+      "data_blocks": [
+        {
+          "id": "DEFAULT_THUMBNAIL_URL",
+          "type": "DATA_BLOCK_TYPE_IMAGE",
+          "content": {
+            "image_block": {
+              "url": "https://example.com/path1/path2/019ec6c6-7089-70fe-9f61-a6dc4068d977.png"
+            }
+          }
+        },
+        {
+          "id": "DEFAULT_BODY_TEXT",
+          "type": "DATA_BLOCK_TYPE_TEXT",
+          "content": {
+            "text_block": {
+              "body": "You’ve earned the \"Example Badge Name\" badge! Chat on your favorite channel to show it off!"
+            }
+          }
+        }
+      ],
+      "is_mobile_only": false,
+      "mobile_destination_type": "ExternalLink",
+      "mobile_destination_key": "https://help.twitch.tv/s/article/how-to-use-badges#use"
+    },
+    "persistent": true,
+    "toast": true,
+    "display_type": "VIEWER"
+  }
+}

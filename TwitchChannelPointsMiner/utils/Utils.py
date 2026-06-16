@@ -296,6 +296,7 @@ def interruptible_repeating_task(
     run_early_flag: Callable[[], bool],
     period_seconds: float,
     step: float = 1.0,
+    run_now: bool = False,
 ):
     """
     Repeatably calls the given task every `period_seconds` seconds. Halts once the `running_flag` returns False. Checks
@@ -306,9 +307,12 @@ def interruptible_repeating_task(
     :param run_early_flag: A function that returns True if we should skip sleeping and run the task early.
     :param period_seconds: The number of seconds to wait between repeating tasks.
     :param step: The number of seconds in between checks while sleeping to see if we should stop sleeping early.
+    :param run_now: If True the task will run now, if False we will first wait `period_seconds`.
     """
     next_sleep_duration = period_seconds
     last_run_flag = True
+    if run_now:
+        task()
     while last_run_flag:
         interruptible_sleep(
             lambda: running_flag() and not run_early_flag(), next_sleep_duration, step
@@ -352,3 +356,30 @@ def generate_random_uuid() -> str:
     :return: The UUID.
     """
     return str(uuid.uuid4())
+
+
+def ordinal(value: int):
+    """
+    Converts a number into its ordinal representation. For example:
+
+    1 -> 1st
+
+    2 -> 2nd
+
+    3 -> 3rd
+
+    11 -> 11th
+
+    21 -> 21st
+
+    113 -> 113th
+
+    Credit: https://stackoverflow.com/a/20007730
+    :param value: The 1-indexed for which to find the ordinal representation
+    :return: The ordinal representation
+    """
+    if 11 <= (value % 100) <= 13:
+        suffix = "th"
+    else:
+        suffix = ["th", "st", "nd", "rd", "th"][min(value % 10, 4)]
+    return f"{value}{suffix}"
