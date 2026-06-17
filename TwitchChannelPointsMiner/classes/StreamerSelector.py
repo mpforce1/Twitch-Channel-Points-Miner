@@ -26,8 +26,24 @@ class StreamerSelector(abc.ABC):
         pass
 
 
+def under_points_limit(streamer: Streamer):
+    """
+    Returns whether the Streamer has fewer channel points than its points limit. Returns `True` if there is no limit.
+
+    :param streamer: The Streamer to check.
+    :return: `True` if there is no points limit or the Streamer has fewer points than it, `False` otherwise.
+    """
+    return (
+        streamer.settings.points_limit is False
+        or streamer.channel_points <= streamer.settings.points_limit
+    )
+
+
 def priority_order(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
-    return [streamer.channel_id for streamer in streamers[:max_amount]]
+    return [
+        streamer.channel_id
+        for streamer in islice(filter(under_points_limit, streamers), max_amount)
+    ]
 
 
 def priority_points(
@@ -36,6 +52,7 @@ def priority_points(
     items = [
         {"points": streamer.channel_points, "id": streamer.channel_id}
         for streamer in streamers
+        if under_points_limit(streamer)
     ]
     items = sorted(
         items,
@@ -45,11 +62,15 @@ def priority_points(
     return [item["id"] for item in items][:max_amount]
 
 
-def priority_points_ascending(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_points_ascending(
+    streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     return priority_points(streamers, max_amount, False)
 
 
-def priority_points_descending(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_points_descending(
+    streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     return priority_points(streamers, max_amount, True)
 
 
@@ -59,12 +80,12 @@ def priority_streak(streamers: Sequence[Streamer], max_amount: int) -> list[str]
         if len(result) >= max_amount:
             break
         if (
-                streamer.settings.watch_streak is True
-                and streamer.stream.watch_streak_missing is True
-                and (
+            streamer.settings.watch_streak is True
+            and streamer.stream.watch_streak_missing is True
+            and (
                 streamer.offline_at == 0
                 or ((time.time() - streamer.offline_at) // 60) > 30
-        )
+            )
         ):
             result.append(streamer.channel_id)
     return result
@@ -80,7 +101,9 @@ def priority_drops(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
 
 def priority_subscribed(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
     streamers_with_multiplier = [
-        streamer for streamer in streamers if streamer.viewer_has_points_multiplier()
+        streamer
+        for streamer in streamers
+        if under_points_limit(streamer) and streamer.viewer_has_points_multiplier()
     ]
     streamers_with_multiplier = sorted(
         streamers_with_multiplier,
@@ -105,7 +128,7 @@ def priority_watch(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
                 streamer.channel_id
                 for streamer in streamers
                 if streamer.stream.watch_session_state is not None
-                   and (
+                and (
                     (
                         datetime.datetime.now(datetime.timezone.utc)
                         - streamer.stream.watch_session_state
@@ -159,7 +182,11 @@ class PrioritySelector(StreamerSelector):
         priorities: list[Priority] | None = None,
         priority_function_overrides: dict[Priority, PriorityFunction] | None = None,
     ):
-        self.priorities = priorities if priorities is not None else [Priority.STREAK, Priority.DROPS, Priority.ORDER]
+        self.priorities = (
+            priorities
+            if priorities is not None
+            else [Priority.STREAK, Priority.DROPS, Priority.ORDER]
+        )
         if priority_function_overrides is not None:
             self.priority_functions = {
                 priority: priority_function_overrides.get(
@@ -203,7 +230,9 @@ def all_filter(streamers: Sequence[Streamer]) -> Sequence[Streamer]:
     return streamers
 
 
-def in_list_filter(filter_streamers: list[str]) -> Callable[[Sequence[Streamer]], Sequence[Streamer]]:
+def in_list_filter(
+    filter_streamers: list[str],
+) -> Callable[[Sequence[Streamer]], Sequence[Streamer]]:
     """
     Returns a filter function that filters out any streamers that aren't in the given list (based on usernames).
 
@@ -222,7 +251,9 @@ def in_list_filter(filter_streamers: list[str]) -> Callable[[Sequence[Streamer]]
     return sub_filter
 
 
-def from_source_filter(filter_source: StreamerSource) -> Callable[[Sequence[Streamer]], Sequence[Streamer]]:
+def from_source_filter(
+    filter_source: StreamerSource,
+) -> Callable[[Sequence[Streamer]], Sequence[Streamer]]:
     """
     Returns a filter function that filters out any streamers that aren't sourced in the given way.
 
@@ -230,13 +261,13 @@ def from_source_filter(filter_source: StreamerSource) -> Callable[[Sequence[Stre
     :return: The filter function.
     """
     return lambda streamers: [
-        streamer
-        for streamer in streamers
-        if streamer.source == filter_source
+        streamer for streamer in streamers if streamer.source == filter_source
     ]
 
 
-def arbitrary_filter(filter_function: Callable[[Streamer], bool]) -> Callable[[Sequence[Streamer]], Sequence[Streamer]]:
+def arbitrary_filter(
+    filter_function: Callable[[Streamer], bool],
+) -> Callable[[Sequence[Streamer]], Sequence[Streamer]]:
     """
     Filters out any streamers that don't return `True` for the given function.
 
@@ -244,9 +275,7 @@ def arbitrary_filter(filter_function: Callable[[Streamer], bool]) -> Callable[[S
     :return: The filter function.
     """
     return lambda streamers: [
-        streamer
-        for streamer in streamers
-        if filter_function(streamer)
+        streamer for streamer in streamers if filter_function(streamer)
     ]
 
 
@@ -254,7 +283,9 @@ class PriorityGroupSelector(StreamerSelector):
     """Selects streamers based on the given streamers filter."""
 
     def __init__(
-        self, streamers: list[str] | StreamerSource | Callable[[Streamer], bool] | None, selector: PrioritySelector
+        self,
+        streamers: list[str] | StreamerSource | Callable[[Streamer], bool] | None,
+        selector: PrioritySelector,
     ) -> None:
         self.streamers = streamers
         """
@@ -288,7 +319,9 @@ class PriorityGroupSelector(StreamerSelector):
                 # Use all streamers if list is empty
                 self._filter = all_filter
         else:
-            raise TypeError("Streamers must be one of list[str], StreamerSource, Callable, or None")
+            raise TypeError(
+                "Streamers must be one of list[str], StreamerSource, Callable, or None"
+            )
 
     def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
         sub_streamers = self._filter(streamers)
