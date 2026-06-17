@@ -43,6 +43,7 @@ class StreamerSettings(object):
         "chat",
         "simulate_hls_playback",
         "weekly_rewards",
+        "points_limit",
     ]
 
     def __init__(
@@ -57,6 +58,7 @@ class StreamerSettings(object):
         chat: ChatPresence = None,
         simulate_hls_playback: Literal[False] | HLSSettings | None = None,
         weekly_rewards: bool | None = None,
+        points_limit: int | Literal[False] | None = None,
     ):
         self.make_predictions = make_predictions
         self.follow_raid = follow_raid
@@ -72,6 +74,7 @@ class StreamerSettings(object):
         If False, the miner won't perform HLS simulation.
         """
         self.weekly_rewards = weekly_rewards
+        self.points_limit = points_limit
 
     def default(self):
         for name in [
@@ -92,6 +95,8 @@ class StreamerSettings(object):
             self.chat = ChatPresence.ONLINE
         if self.simulate_hls_playback is None:
             self.simulate_hls_playback = HLSSettings(refresh_before=2 * 60)
+        if self.points_limit is None:
+            self.points_limit = False
 
     def __repr__(self):
         return f"StreamerSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat}, simulate_hls_playback={self.simulate_hls_playback}, weekly_rewards={self.weekly_rewards})"

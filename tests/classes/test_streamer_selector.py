@@ -1,7 +1,7 @@
 import datetime
 import time
-from typing import Sequence, Callable
-from unittest.mock import MagicMock
+from typing import Iterable, Sequence, Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,6 +18,7 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     NestedSelector,
     StreamerSelector,
     priority_streak_by_earliest_stream_created_at,
+    under_points_limit,
 )
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
@@ -25,6 +26,114 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.gql import Properties
+
+
+def init_settings(streamers: Iterable[Streamer]):
+    # Initialise settings points_limit where it hasn't been set
+    for streamer in streamers:
+        if streamer.settings is None:
+            streamer.settings = StreamerSettings(points_limit=False)
+
+
+test_under_points_limit_data = [
+    (
+        Streamer(
+            "1", "a", channel_points=0, settings=StreamerSettings(points_limit=False)
+        ),
+        True,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=1_000_000,
+            settings=StreamerSettings(points_limit=False),
+        ),
+        True,
+    ),
+    (
+        Streamer("1", "a", channel_points=0, settings=StreamerSettings(points_limit=0)),
+        True,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=1,
+            settings=StreamerSettings(points_limit=0),
+        ),
+        False,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=100,
+            settings=StreamerSettings(points_limit=0),
+        ),
+        False,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=1000,
+            settings=StreamerSettings(points_limit=500),
+        ),
+        False,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=100,
+            settings=StreamerSettings(points_limit=1000),
+        ),
+        True,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=999,
+            settings=StreamerSettings(points_limit=1000),
+        ),
+        True,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=1000,
+            settings=StreamerSettings(points_limit=1000),
+        ),
+        True,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=1001,
+            settings=StreamerSettings(points_limit=1000),
+        ),
+        False,
+    ),
+    (
+        Streamer(
+            "1",
+            "a",
+            channel_points=10000,
+            settings=StreamerSettings(points_limit=1000),
+        ),
+        False,
+    ),
+]
+
+
+@pytest.mark.parametrize("streamer,expected", test_under_points_limit_data)
+def test_under_points_limit(streamer: Streamer, expected: bool):
+    assert under_points_limit(streamer) == expected
+
 
 priority_order_data = [
     [[], 0, []],
@@ -44,8 +153,16 @@ priority_order_data = [
 def test_priority_order(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
-    streamer_ids = priority_order(streamers, max_amount)
-    assert streamer_ids == expected_ids
+    init_settings(streamers)
+    expected_calls = min(max_amount, len(streamers))
+    with patch(
+        "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
+    ) as under_points_limit_mock:
+        streamer_ids = priority_order(streamers, max_amount)
+        assert (
+            under_points_limit_mock.call_count == expected_calls
+        ), f"under_points_limit should be called {expected_calls} time(s) (min({max_amount}, {len(streamers)}))"
+        assert streamer_ids == expected_ids
 
 
 priority_points_ascending_data = [
@@ -102,8 +219,16 @@ priority_points_ascending_data = [
 def test_priority_points_ascending(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
-    streamer_ids = priority_points_ascending(streamers, max_amount)
-    assert streamer_ids == expected_ids
+    init_settings(streamers)
+    expected_calls = len(streamers)
+    with patch(
+        "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
+    ) as under_points_limit_mock:
+        streamer_ids = priority_points_ascending(streamers, max_amount)
+        assert (
+            under_points_limit_mock.call_count == expected_calls
+        ), f"under_points_limit should be called {expected_calls} time(s)"
+        assert streamer_ids == expected_ids
 
 
 priority_points_descending_data = [
@@ -160,8 +285,16 @@ priority_points_descending_data = [
 def test_priority_points_descending(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
-    streamer_ids = priority_points_descending(streamers, max_amount)
-    assert streamer_ids == expected_ids
+    init_settings(streamers)
+    expected_calls = len(streamers)
+    with patch(
+        "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
+    ) as under_points_limit_mock:
+        streamer_ids = priority_points_descending(streamers, max_amount)
+        assert (
+            under_points_limit_mock.call_count == expected_calls
+        ), f"under_points_limit should be called {expected_calls} time(s)"
+        assert streamer_ids == expected_ids
 
 
 settings_watch_streak_true = StreamerSettings(watch_streak=True)
@@ -600,8 +733,16 @@ priority_subscribed_data = [
 def test_priority_subscribed(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
-    streamer_ids = priority_subscribed(streamers, max_amount)
-    assert streamer_ids == expected_ids
+    init_settings(streamers)
+    expected_calls = len(streamers)
+    with patch(
+        "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
+    ) as under_points_limit_mock:
+        streamer_ids = priority_subscribed(streamers, max_amount)
+        assert (
+            under_points_limit_mock.call_count == expected_calls
+        ), f"under_points_limit should be called {expected_calls} time(s)"
+        assert streamer_ids == expected_ids
 
 
 def priority_selects_none(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
@@ -691,8 +832,10 @@ class TestPrioritySelector:
         assert set(streamer_ids) == set(expected_ids)
 
     def test_priority_selector_order_unchanged(self):
-        streamers = [Streamer("2", "b", settings=settings_watch_streak_true),
-                     Streamer("1", "a", settings=settings_watch_streak_true)]
+        streamers = [
+            Streamer("2", "b", settings=settings_watch_streak_true),
+            Streamer("1", "a", settings=settings_watch_streak_true),
+        ]
         selector = PrioritySelector(
             [Priority.STREAK, Priority.DROPS, Priority.SUBSCRIBED, Priority.ORDER],
         )
@@ -772,28 +915,28 @@ class TestPriorityGroupSelector:
             0,
             StreamerSource.Streamers,
             [streamer_a, streamer_c],
-            []
+            [],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             1,
             StreamerSource.Streamers,
             [streamer_a, streamer_c],
-            ["a"]
+            ["a"],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             2,
             StreamerSource.Streamers,
             [streamer_a, streamer_c],
-            ["a", "c"]
+            ["a", "c"],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             3,
             StreamerSource.Streamers,
             [streamer_a, streamer_c],
-            ["a", "c"]
+            ["a", "c"],
         ],
         # StreamerSource.Followers
         [
@@ -801,50 +944,38 @@ class TestPriorityGroupSelector:
             0,
             StreamerSource.Followers,
             [streamer_b],
-            []
+            [],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             1,
             StreamerSource.Followers,
             [streamer_b],
-            ["b"]
+            ["b"],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             2,
             StreamerSource.Followers,
             [streamer_b],
-            ["b"]
+            ["b"],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
             3,
             StreamerSource.Followers,
             [streamer_b],
-            ["b"]
+            ["b"],
         ],
         # Arbitrary Callable Filter
-        [
-            [streamer_a, streamer_b, streamer_c],
-            0,
-            lambda s: s.channel_id in [],
-            [],
-            []
-        ],
-        [
-            [streamer_a, streamer_b, streamer_c],
-            1,
-            lambda s: s.channel_id in [],
-            [],
-            []
-        ],
+        [[streamer_a, streamer_b, streamer_c], 0, lambda s: s.channel_id in [], [], []],
+        [[streamer_a, streamer_b, streamer_c], 1, lambda s: s.channel_id in [], [], []],
         [
             [streamer_a, streamer_b, streamer_c],
             1,
             lambda s: s.channel_id in ["d"],
             [],
-            []
+            [],
         ],
         [
             [streamer_a, streamer_b, streamer_c],
@@ -852,7 +983,8 @@ class TestPriorityGroupSelector:
             lambda s: s.channel_id in ["a", "b", "c"],
             [streamer_a, streamer_b, streamer_c],
             ["a", "b"],
-        ],        [
+        ],
+        [
             [streamer_a, streamer_b, streamer_c],
             2,
             lambda s: s.channel_id in ["b", "c"],
@@ -1089,7 +1221,8 @@ priority_streak_by_earliest_stream_created_at_data = [
 
 
 @pytest.mark.parametrize(
-    "streamers,max_amount,expected_ids", priority_streak_by_earliest_stream_created_at_data
+    "streamers,max_amount,expected_ids",
+    priority_streak_by_earliest_stream_created_at_data,
 )
 def test_priority_streak_by_earliest_stream_created_at(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
