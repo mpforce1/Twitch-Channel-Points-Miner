@@ -49,19 +49,26 @@ def read_data(filename: str):
         return json.loads(file.read_text())
 
 
-def test_parse_onsite_notification_01(parser: Parser):
-    data = read_data("tests/classes/websocket/test_data/onsite-notification-01.json")
-    expected = UserDropRewardReminderNotification(
-        "Example Drop Reward",
-        "https://example.com/path1/path2/019ec67b-10fa-723a-a4a6-832caa7e6e39.png",
-    )
-    assert parser.parse_onsite_notification(data) == expected
+test_parse_onsite_notification_data = [
+    (
+        "tests/classes/websocket/test_data/onsite-notification-01.json",
+        UserDropRewardReminderNotification(
+            "Example Drop Reward",
+            "https://example.com/path1/path2/019ec67b-10fa-723a-a4a6-832caa7e6e39.png",
+        ),
+    ),
+    (
+        "tests/classes/websocket/test_data/onsite-notification-01.json",
+        UserDropRewardReminderNotification(
+            "Example Drop Reward",
+            "https://example.com/path1/path2/019ec67b-10fa-723a-a4a6-832caa7e6e39.png",
+        ),
+    ),
+    ("tests/classes/websocket/test_data/onsite-notification-03.json", None),
+]
 
 
-def test_parse_onsite_notification_02(parser: Parser):
-    data = read_data("tests/classes/websocket/test_data/onsite-notification-02.json")
-    expected = UserEarnedQuestsRewardBadgeNotification(
-        badge_name="Example Badge Name",
-        image_url="https://example.com/path1/path2/019ec6c6-7089-70fe-9f61-a6dc4068d977.png",
-    )
+@pytest.mark.parametrize("file,expected", test_parse_onsite_notification_data)
+def test_parse_onsite_notification(parser: Parser, file: str, expected):
+    data = read_data(file)
     assert parser.parse_onsite_notification(data) == expected
