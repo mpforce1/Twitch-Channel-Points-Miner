@@ -295,8 +295,6 @@ class PubSubHandler(MessageListener):
                             f"Unhandled OnsiteNotification subtype: {type(notification).__name__}"
                         )
 
-                else:
-                    logger.info(f"Unknown onsite-notification type: {message.type}")
             elif message.topic == "user-subscribe-events-v1":
                 logger.debug(f"Received user-subscribe-events-v1: {message.type}")
                 notification = self.parser.parse_user_subscribe_events(message.message)
@@ -308,7 +306,9 @@ class PubSubHandler(MessageListener):
                 if streamer is not None:
                     self.twitch.check_gift_sub(streamer)
                 else:
-                    logger.debug(f"Received subscription notification for non-miner channel: {notification.channel_id}")
+                    logger.debug(
+                        f"Received subscription notification for non-miner channel: {notification.channel_id}"
+                    )
 
         except Exception:
             message_loggable = (

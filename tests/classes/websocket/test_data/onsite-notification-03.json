@@ -1,0 +1,54 @@
+{
+  "type": "create-notification",
+  "data": {
+    "notification": {
+      "user_id": "456789123",
+      "id": "019eda70-ea9c-71ba-abe7-31229e688bf9",
+      "body": "You are now eligible to get rewards for Game Name. To get your loot, claim your Drop by August 1, 2026 18:59:00 am UTC on the Inventory page!",
+      "body_md": "You are now eligible to get rewards for Game Name. To get your loot, claim your Drop by August 1, 2026 18:59:00 am UTC on the Inventory page!",
+      "type": "user_drop_reward_reminder_notification",
+      "render_style": "DEFAULT",
+      "thumbnail_url": "https://example.com/path-1/path2/019eda71-b8d9-766e-875f-ad9a00c1522d.png",
+      "actions": [
+        {
+          "id": "CTA",
+          "type": "click",
+          "url": "https://www.twitch.tv/inventory",
+          "modal_id": "",
+          "body": "",
+          "label": "CTA"
+        }
+      ],
+      "created_at": "2026-08-20T14:01:01.412365423Z",
+      "updated_at": "2026-08-20T14:01:01.412365423Z",
+      "read": false,
+      "display_type": "VIEWER",
+      "category": "transactional",
+      "data_blocks": [
+        {
+          "id": "DEFAULT_BODY_TEXT",
+          "type": "DATA_BLOCK_TYPE_TEXT",
+          "content": {
+            "text_block": {
+              "body": "You are now eligible to get rewards for Game Name. To get your loot, claim your Drop by August 1, 2026 18:59:00 am UTC on the Inventory page!"
+            }
+          }
+        },
+        {
+          "id": "DEFAULT_THUMBNAIL_URL",
+          "type": "DATA_BLOCK_TYPE_IMAGE",
+          "content": {
+            "image_block": {
+              "url": "https://example.com/path-1/path2/019eda71-b8d9-766e-875f-ad9a00c1522d.png"
+            }
+          }
+        }
+      ],
+      "is_mobile_only": false,
+      "mobile_destination_type": "DropsInventory"
+    },
+    "persistent": true,
+    "toast": false,
+    "display_type": "VIEWER"
+  }
+}

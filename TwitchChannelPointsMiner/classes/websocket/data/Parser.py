@@ -44,7 +44,7 @@ def parse_wrapped_markdown_segment(source: str, wrapper: str, index: int = 0) ->
         if first_wrapper_index == -1 or second_wrapper_index == -1:
             raise InvalidJsonShapeError(
                 [],
-                f"Unable to find {ordinal(count)} wrapper markers ({wrapper}) in source: '{source}'",
+                f"Unable to find {ordinal(count + 1)} wrapper markers ({wrapper}) in source: '{source}'",
             )
         if count == index:
             return source[first_wrapper_index + wrapper_len : second_wrapper_index]
@@ -67,12 +67,19 @@ class Parser:
 
     # onsite-notifications
 
-    def user_drop_reward_reminder_notification_parser(self, notification):
+    def user_drop_reward_reminder_notification_parser(
+        self, notification
+    ) -> UserDropRewardReminderNotification | None:
         notification = expect_dict(notification)
         body = parse_expected_value(notification, "body_md", expect_str)
         with JsonParentContext("body_md"):
             # The drop name is in the first set of bold markdown tags
-            drop_name = parse_wrapped_markdown_segment(body, "**")
+            try:
+                drop_name = parse_wrapped_markdown_segment(body, "**")
+            except InvalidJsonShapeError:
+                # If the drop name can't be found then the notification can be ignored
+                return None
+
         image_url = dig(
             notification,
             ["data_blocks", 1, "content", "image_block", "url"],
