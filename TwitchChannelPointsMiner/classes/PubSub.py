@@ -286,6 +286,11 @@ class PubSubHandler(MessageListener):
                         ):
                             logger.info(f"Drop claimable: {notification.drop_name}")
                             # TODO claim drop
+                        elif isinstance(
+                            notification,
+                            OnsiteNotification.UserEarnedQuestsRewardBadgeNotification,
+                        ):
+                            logger.debug(f"Badge Earned: {notification.badge_name}")
                         else:
                             logger.error(
                                 f"Unhandled CreateNotification subtype: {type(notification).__name__}"
