@@ -720,39 +720,33 @@ class GQL:
             self.parser.parse_chat_room_ban_status,
         )
 
-    def gift_subs(self, channel_id: str | None = None) -> list[GiftSub]:
+    def gift_subs(self, limit: int = 100) -> list[GiftSub]:
         """
-        Gets the user's gift subs. If `channel_id` is provided, we will only return the current gift sub for the given
-        channel.
-        :param channel_id: The id of the channel for which to find a gift sub or None if all should be found.
+        Gets the user's gift subs.
+        :param limit: The maximum number of subs to acquire per request.
         :return: The gift sub(s).
         """
-        json_data = copy.deepcopy(GQLOperations.SubscriptionsManagement_SubscriptionBenefits)
+        json_data = copy.deepcopy(
+            GQLOperations.SubscriptionsManagement_SubscriptionBenefits
+        )
         has_next = True
         last_cursor = ""
         gift_subs: list[GiftSub] = []
-        json_data["variables"]["limit"] = 100 if channel_id is None else 1
+        json_data["variables"]["limit"] = limit
         while has_next:
             json_data["variables"]["cursor"] = last_cursor
             parsed_response = self.post_gql_request_single(
-                GQLOperations.SubscriptionsManagement_SubscriptionBenefits["operationName"],
+                GQLOperations.SubscriptionsManagement_SubscriptionBenefits[
+                    "operationName"
+                ],
                 json_data,
                 self.parser.parse_subscriptions_management_subscription_benefits,
             )
-            if parsed_response is not None:
-                for edge in parsed_response.pages.edges:
-                    gift_sub = edge.node
-                    if channel_id is None:
-                        gift_subs.append(gift_sub)
-                    elif channel_id == gift_sub.target.id:
-                        return [gift_sub]
-                    last_cursor = edge.cursor
-                has_next = parsed_response.pages.page_info.has_next_page
-            else:
-                logger.error("Unable to get gift subs, empty response.")
-                return []
+            for edge in parsed_response.pages.edges:
+                gift_subs.append(edge.node)
+                last_cursor = edge.cursor
+            has_next = parsed_response.pages.page_info.has_next_page
         return gift_subs
-
 
 
 class GQLFactory:

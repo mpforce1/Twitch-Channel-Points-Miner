@@ -550,14 +550,14 @@ def subscription_benefit_parser(value) -> GiftSub:
     tier = int(tier[0])
 
     # TODO I don't have an example of a multi-month gift sub
-    months = 1
+    ends_at = parse_expected_value(value, "endsAt", expect_iso_8601)
 
     return GiftSub(
         _id=parse_expected_value(value, "id", expect_str),
         target=target,
         gifter=gifter,
         tier=tier,
-        months=months,
+        ends_at=ends_at,
     )
 
 

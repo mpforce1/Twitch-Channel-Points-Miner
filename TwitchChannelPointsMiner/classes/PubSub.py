@@ -301,7 +301,7 @@ class PubSubHandler(MessageListener):
                         )
 
             elif message.topic == "user-subscribe-events-v1":
-                logger.debug(f"Received user-subscribe-events-v1: {message.type}")
+                logger.debug(f"Received user-subscribe-events-v1")
                 notification = self.parser.parse_user_subscribe_events(message.message)
                 streamer = next(
                     streamer
@@ -312,7 +312,7 @@ class PubSubHandler(MessageListener):
                     self.twitch.check_gift_sub(streamer)
                 else:
                     logger.debug(
-                        f"Received subscription notification for non-miner channel: {notification.channel_id}"
+                        f"Received subscription notification for non-miner channel: {Settings.logger.anonymiser.channel_id(notification.channel_id)}"
                     )
 
         except Exception:

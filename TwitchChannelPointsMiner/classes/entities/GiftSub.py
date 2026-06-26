@@ -1,3 +1,5 @@
+import datetime
+from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
 
@@ -23,21 +25,33 @@ class Target:
 
 class GiftSub:
     def __init__(
-        self, _id: str, target: Target, gifter: Gifter | None, tier: int, months: int
+        self,
+        _id: str,
+        target: Target,
+        gifter: Gifter | None,
+        tier: int,
+        ends_at: datetime.datetime,
     ):
         self.id = _id
         self.target = target
         self.gifter = gifter
         self.tier = tier
-        self.months = months
+        self.ends_at = ends_at
 
     def __repr__(self):
         return simple_repr(self)
 
     def describe(self) -> str:
-        month_plural = "Months" if self.months > 1 else "Month"
-        gifter = self.gifter.display_name if self.gifter is not None else "Anonymous"
-        return f"{self.months} {month_plural} Tier-{self.tier} Gift Sub from {gifter} for {self.target.display_name}"
+        ends_at = self.ends_at.astimezone(datetime.datetime.now().tzinfo)
+        days = (self.ends_at - datetime.datetime.now(tz=datetime.timezone.utc)).days
+        days_plural = "day" if days == 1 else "days"
+        gifter = (
+            Settings.logger.anonymiser.username(self.gifter.display_name)
+            if self.gifter is not None
+            else "Anonymous"
+        )
+        target = Settings.logger.anonymiser.username(self.target.display_name)
+        return f"Tier-{self.tier} Gift Sub from {gifter} for {target}, ends at {ends_at} (in {days} {days_plural})"
 
     def __eq__(self, other):
         if not isinstance(other, GiftSub):

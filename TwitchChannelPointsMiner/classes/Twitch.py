@@ -1120,17 +1120,15 @@ class Twitch(object):
             logger.debug(f"{streamer} gift sub unchanged: {gift_sub}")
         else:
             streamer.gift_sub = gift_sub
-            if send_event:
-                if gift_sub is None:
-                    logger.info(f"Gift Sub to {streamer} has expired")
-                else:
-                    logger.info(
-                        gift_sub.describe(),
-                        extra={
-                            "emoji": ":wrapped_gift:",
-                            "event": Events.GIFT_SUB_RECEIVED,
-                        },
-                    )
+            extra: dict = {
+                "emoji": ":wrapped_gift:",
+            }
+            if gift_sub is None:
+                logger.info(f"Gift Sub to {streamer} has expired", extra=extra)
+            else:
+                if send_event:
+                    extra["event"] = Events.GIFT_SUB_RECEIVED
+                logger.info(gift_sub.describe(), extra=extra)
 
     def check_gift_sub(self, streamer: Streamer, send_event: bool = True):
         """
@@ -1138,10 +1136,18 @@ class Twitch(object):
         :param streamer: The Streamer to update.
         :param send_event: If True an Event will be logged.
         """
-        gift_subs = self.gql.gift_subs(streamer.channel_id)
-        self.update_gift_sub(
-            streamer, None if len(gift_subs) == 0 else gift_subs[0], send_event
-        )
+        found_gift_sub = None
+        try:
+            gift_subs = self.gql.gift_subs()
+        except RetryError as e:
+            logger.error(f"Error while syncing gift subs: {e}")
+            return
+
+        for gift_sub in gift_subs:
+            if gift_sub.target.id == streamer.channel_id:
+                found_gift_sub = gift_sub
+                break
+        self.update_gift_sub(streamer, found_gift_sub, send_event)
 
     def check_gift_subs(self, streamers: list[Streamer], send_event: bool = True):
         """
@@ -1169,14 +1175,16 @@ class Twitch(object):
             else:
                 logger.debug(f"No Streamer found for Gift Sub {gift_sub.target}")
 
-    def sync_gift_subs(self, streamers: list[Streamer], period_seconds: int, step: float = 1.0):
+    def sync_gift_subs(
+        self, streamers: list[Streamer], period_seconds: int, step: float = 1.0
+    ):
         """
         Repeating task that synchronises gift subs. Stops once `self.running` is False.
         :param streamers: The Streamers to synd.
         :param period_seconds: The amount of time, in seconds, between syncs.
         :param step: The interval between checking if the task should run.
         """
-        first_run = False
+        first_run = True
         while self.running:
             self.check_gift_subs(streamers, not first_run)
             if first_run:

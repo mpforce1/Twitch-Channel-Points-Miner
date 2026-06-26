@@ -20,7 +20,7 @@ class Message(object):
         self.topic, self.topic_user = data["topic"].split(".")
 
         self.message = json.loads(data["message"])
-        self.type = self.message["type"]
+        self.type = self.message["type"] if "type" in self.message else ""
 
         self.data = self.message["data"] if "data" in self.message else None
 
