@@ -399,15 +399,19 @@ class Twitch(object):
         :param streamer: The Streamer for which to get the token.
         :return: The token or None if one could not be obtained.
         """
-        if (
+        if streamer.settings.simulate_hls_playback is not False and (
             streamer.stream.playback_access_token is None
-            or streamer.stream.playback_access_token.value.expires
-            <= datetime.datetime.now(datetime.UTC)
+            or (
+                streamer.stream.playback_access_token.value.expires
+                - datetime.datetime.now(datetime.UTC)
+            ).total_seconds()
+            <= streamer.settings.simulate_hls_playback.refresh_before
         ):
             try:
                 gql_token = self.gql.get_playback_access_token(streamer.username)
                 token = PlaybackAccessToken.from_gql(gql_token)
                 streamer.stream.playback_access_token = token
+                streamer.stream.hls_url = None
                 logger.debug(
                     f"Obtained PlaybackAccessToken for {streamer.username}, expires {token.value.expires}"
                 )
@@ -425,12 +429,13 @@ class Twitch(object):
         :param streamer: The Streamer for which to get the URL.
         :return: The URL or None if one could not be obtained.
         """
-        if streamer.stream.hls_url is not None:
-            return streamer.stream.hls_url
 
         token = self.get_or_update_playback_access_token(streamer)
         if token is None:
             return None
+
+        if streamer.stream.hls_url is not None:
+            return streamer.stream.hls_url
 
         # Construct the URL for the broadcast qualities
         master_playlist_url = f"https://usher.ttvnw.net/api/channel/hls/{streamer.username}.m3u8?sig={token.signature}&token={token.raw_value}"

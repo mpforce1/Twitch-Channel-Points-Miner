@@ -4,6 +4,7 @@ import os
 import time
 from datetime import datetime
 from threading import Lock
+from typing import Literal
 
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
@@ -13,9 +14,18 @@ from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.gql import Properties
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
-from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list
+from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list, simple_repr
 
 logger = logging.getLogger(__name__)
+
+
+class HLSSettings:
+    def __init__(self, refresh_before: int):
+        self.refresh_before = refresh_before
+        """ The number of seconds, before a token expires, to refresh it. """
+
+    def __repr__(self):
+        return simple_repr(self)
 
 
 class StreamerSettings(object):
@@ -41,7 +51,7 @@ class StreamerSettings(object):
         community_goals: bool = None,
         bet: BetSettings = None,
         chat: ChatPresence = None,
-        simulate_hls_playback: bool = None,
+        simulate_hls_playback: Literal[False] | HLSSettings | None = None,
     ):
         self.make_predictions = make_predictions
         self.follow_raid = follow_raid
@@ -52,7 +62,10 @@ class StreamerSettings(object):
         self.bet = bet
         self.chat = chat
         self.simulate_hls_playback = simulate_hls_playback
-        """If True, simulates playback of the stream via HLS when selected to watch."""
+        """
+        Simulates playback of the stream via HLS when selected to watch.
+        If False, the miner won't perform HLS simulation.
+        """
 
     def default(self):
         for name in [
@@ -61,7 +74,6 @@ class StreamerSettings(object):
             "claim_drops",
             "claim_moments",
             "watch_streak",
-            "simulate_hls_playback",
         ]:
             if getattr(self, name) is None:
                 setattr(self, name, True)
@@ -71,9 +83,11 @@ class StreamerSettings(object):
             self.bet = BetSettings()
         if self.chat is None:
             self.chat = ChatPresence.ONLINE
+        if self.simulate_hls_playback is None:
+            self.simulate_hls_playback = HLSSettings(refresh_before=2 * 60)
 
     def __repr__(self):
-        return f"StreamerSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat}, simulate_m3u8={self.simulate_m3u8})"
+        return f"StreamerSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat}, simulate_hls_playback={self.simulate_hls_playback})"
 
 
 class Streamer(object):
