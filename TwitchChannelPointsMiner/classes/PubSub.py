@@ -55,8 +55,11 @@ class PubSubHandler(MessageListener):
                 ),
                 None,
             )
-            if streamer is None and message.topic != "onsite-notifications":
-                # onsite-notifications aren't channel specific
+            if streamer is None and not message.topic in {
+                "onsite-notifications",
+                "user-subscribe-events-v1",
+            }:
+                # these topics aren't channel specific
                 return
             if message.topic == "community-points-user-v1":
                 if message.type in ["points-earned", "points-spent"]:
@@ -304,9 +307,12 @@ class PubSubHandler(MessageListener):
                 logger.debug(f"Received user-subscribe-events-v1")
                 notification = self.parser.parse_user_subscribe_events(message.message)
                 streamer = next(
-                    streamer
-                    for streamer in self.streamers
-                    if streamer.channel_id == notification.channel_id
+                    (
+                        streamer
+                        for streamer in self.streamers
+                        if streamer.channel_id == notification.channel_id
+                    ),
+                    None,
                 )
                 if streamer is not None:
                     self.twitch.check_gift_sub(streamer)
