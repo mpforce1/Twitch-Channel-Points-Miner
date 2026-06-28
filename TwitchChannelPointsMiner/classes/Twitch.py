@@ -390,22 +390,26 @@ class Twitch(object):
             return self.client_session.version
 
     def get_or_update_playback_access_token(
-        self, streamer: Streamer
+        self, streamer: Streamer, force_refresh_token: bool
     ) -> PlaybackAccessToken | None:
         """
         Gets a PlaybackAccessToken for the current Stream for the given Streamer. This may involve making a GQL
         request for a new token if one doesn't exist or the current one has expired.
 
         :param streamer: The Streamer for which to get the token.
+        :param force_refresh_token: If True, the playback token will be refreshed.
         :return: The token or None if one could not be obtained.
         """
-        if streamer.settings.simulate_hls_playback is not False and (
-            streamer.stream.playback_access_token is None
-            or (
-                streamer.stream.playback_access_token.value.expires
-                - datetime.datetime.now(datetime.UTC)
-            ).total_seconds()
-            <= streamer.settings.simulate_hls_playback.refresh_before
+        if force_refresh_token or (
+            streamer.settings.simulate_hls_playback is not False
+            and (
+                streamer.stream.playback_access_token is None
+                or (
+                    streamer.stream.playback_access_token.value.expires
+                    - datetime.datetime.now(datetime.UTC)
+                ).total_seconds()
+                <= streamer.settings.simulate_hls_playback.refresh_before
+            )
         ):
             try:
                 gql_token = self.gql.get_playback_access_token(streamer.username)
@@ -422,15 +426,18 @@ class Twitch(object):
                 return None
         return streamer.stream.playback_access_token
 
-    def get_hls_playlist_url(self, streamer: Streamer) -> str | None:
+    def get_hls_playlist_url(
+        self, streamer: Streamer, force_refresh_token: bool
+    ) -> str | None:
         """
         Gets the playlist URL for the current Stream for the given Streamer.
 
         :param streamer: The Streamer for which to get the URL.
+        :param force_refresh_token: If True, the playback token will be refreshed.
         :return: The URL or None if one could not be obtained.
         """
 
-        token = self.get_or_update_playback_access_token(streamer)
+        token = self.get_or_update_playback_access_token(streamer, force_refresh_token)
         if token is None:
             return None
 
@@ -469,12 +476,15 @@ class Twitch(object):
         streamer.stream.hls_url = lowest_quality_playlist_url
         return lowest_quality_playlist_url
 
-    def simulate_hls_playback(self, streamer: Streamer) -> bool:
+    def simulate_hls_playback(
+        self, streamer: Streamer, force_refresh_token: bool
+    ) -> bool:
         """
         Simulates the HLS playback for the current Stream for the given Streamer by making a HEAD request to the latest
         stream segment.
 
         :param streamer: The Streamer for which to simulate playback.
+        :param force_refresh_token: If True, the playback token will be refreshed.
         :return: True if playback succeeded, False otherwise.
         """
         # Twitch serves Streams via HLS which is based on M3U8 playlists. To "play back" a part of a stream you can:
@@ -487,7 +497,7 @@ class Twitch(object):
         # because the contents of the Lowest Quality Stream Playlist changes at least every 2 seconds.
 
         # Get the segment playlist URL for the lowest quality stream option
-        stream_playlist_url = self.get_hls_playlist_url(streamer)
+        stream_playlist_url = self.get_hls_playlist_url(streamer, force_refresh_token)
         if stream_playlist_url is None:
             return False
 
@@ -566,6 +576,9 @@ class Twitch(object):
                 f"Streamer with channel_id ({channel_id}) not found in streamer list."
             )
 
+        watched_previous_iteration = set()
+        watched_this_iteration = set()
+
         while self.running:
             try:
                 online_streamers = [
@@ -601,11 +614,15 @@ class Twitch(object):
                     try:
                         if (
                             streamer.settings.simulate_hls_playback
-                            and not self.simulate_hls_playback(streamer)
+                            and not self.simulate_hls_playback(
+                                streamer,
+                                streamer.channel_id not in watched_previous_iteration,
+                            )
                         ):
                             continue
 
                         if self.send_spade_minute_watched_event(streamer):
+                            watched_this_iteration.add(streamer.channel_id)
                             streamer.stream.update_minute_watched()
 
                             """
@@ -668,6 +685,8 @@ class Twitch(object):
                 logger.error("Exception raised in send minute watched", exc_info=True)
                 # Do a short sleep to avoid error log spam
                 time.sleep(1)
+            watched_previous_iteration = watched_this_iteration
+            watched_this_iteration = set()
 
     # === CHANNEL POINTS / PREDICTION === #
     # Load the amount of current points for a channel, check if a bonus is available
