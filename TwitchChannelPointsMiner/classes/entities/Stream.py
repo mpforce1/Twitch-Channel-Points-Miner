@@ -41,6 +41,7 @@ class Stream(object):
         "__last_update",
         "__minute_watched_timestamp",
         "created_at",
+        "watch_session_state",
     ]
 
     def __init__(self):
@@ -65,6 +66,10 @@ class Stream(object):
         """The URL of the HLS stream playlist for this Stream."""
 
         self.created_at: datetime | None = None
+
+        # Start as None as we've yet to begin a watch session
+        self.watch_session_state: datetime | None = None
+        """The start time of the current watch session or None if we haven't started a session since the last WATCH."""
 
         self.init_watch_streak()
 
