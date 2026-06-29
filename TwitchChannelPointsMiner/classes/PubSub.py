@@ -79,6 +79,9 @@ class PubSubHandler(MessageListener):
                     earned = message.data["point_gain"]["total_points"]
                     reason_code = message.data["point_gain"]["reason_code"]
 
+                    if reason_code == "WATCH":
+                        streamer.stream.watch_session_state = None
+
                     logger.info(
                         f"+{earned} → {streamer} - Reason: {reason_code}.",
                         extra={

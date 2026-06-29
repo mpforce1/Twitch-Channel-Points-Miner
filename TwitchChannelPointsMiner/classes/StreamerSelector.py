@@ -1,6 +1,8 @@
 import abc
+import datetime
 import logging
 import time
+from itertools import islice
 from typing import Protocol, Sequence, Callable
 
 from TwitchChannelPointsMiner.classes.Settings import Priority, StreamerSource
@@ -88,6 +90,34 @@ def priority_subscribed(streamers: Sequence[Streamer], max_amount: int) -> list[
     return [streamer.channel_id for streamer in streamers_with_multiplier[:max_amount]]
 
 
+def priority_watch(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+    """
+    Returns streamer ids that have yet to receive a WATCH for a watch attempt session, where the session has been less than
+    7 minutes.
+    :param streamers: The Streamers from which to select.
+    :param max_amount: The maximum amount of streamer ids to select.
+    :return: The selected streamer ids.
+    """
+
+    return list(
+        islice(
+            (
+                streamer.channel_id
+                for streamer in streamers
+                if streamer.stream.watch_session_state is not None
+                   and (
+                    (
+                        datetime.datetime.now(datetime.timezone.utc)
+                        - streamer.stream.watch_session_state
+                    ).total_seconds()
+                    <= 60 * 7
+                )
+            ),
+            max_amount,
+        )
+    )
+
+
 class PriorityFunction(Protocol):
     def __call__(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]: ...
 
@@ -99,6 +129,7 @@ priority_functions: dict[Priority, PriorityFunction] = {
     Priority.STREAK: priority_streak,
     Priority.DROPS: priority_drops,
     Priority.SUBSCRIBED: priority_subscribed,
+    Priority.WATCH_SESSION: priority_watch,
 }
 
 
@@ -132,6 +163,7 @@ class PrioritySelector(StreamerSelector):
                 to_add = self.priority_functions[priority](
                     list(unselected.values()), selected.remaining()
                 )
+                logger.debug(f"Selecting {to_add} for {priority}")
                 if not selected.add(*to_add):
                     break
                 else:

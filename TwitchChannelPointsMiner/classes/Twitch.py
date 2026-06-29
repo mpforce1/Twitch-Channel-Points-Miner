@@ -604,6 +604,29 @@ class Twitch(object):
                     find_streamer(streamer_id) for streamer_id in selected_streamer_ids
                 ]
 
+                # Log the difference, if any
+                selected_set = set(selected_streamer_ids)
+                if watched_previous_iteration != selected_set:
+                    dropping = list(
+                        str(find_streamer(channel_id))
+                        for channel_id in watched_previous_iteration - selected_set
+                    )
+                    adding = list(
+                        str(find_streamer(channel_id))
+                        for channel_id in selected_set - watched_previous_iteration
+                    )
+                    logger.debug(
+                        f"Changing watch slots: Adding {adding}, Dropping {dropping}"
+                    )
+
+                # Update the watch session state before starting the watch loop
+                for streamer in streamers_watching:
+                    if streamer.stream.watch_session_state is None:
+                        # We've started a new session
+                        streamer.stream.watch_session_state = datetime.datetime.now(
+                            datetime.timezone.utc
+                        )
+
                 watch_attempts_start_time = time.time()
 
                 for streamer in streamers_watching:
