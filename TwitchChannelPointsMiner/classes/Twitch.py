@@ -585,10 +585,6 @@ class Twitch(object):
                     streamer
                     for streamer in streamers
                     if streamer.is_online is True
-                    and (
-                        streamer.online_at == 0
-                        or (time.time() - streamer.online_at) > 30
-                    )
                     and streamer.channel_points_enabled
                     and not streamer.chat_banned
                 ]
