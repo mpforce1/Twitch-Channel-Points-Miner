@@ -3,6 +3,7 @@ description: |
   Reusable action that can build and publish Docker images,
   update the Docker Hub description,
   and tag the Git repository with the version number.
+  NOTE `contents` and `package` write permissions are required for this action.
 
 inputs:
   docker_hub_username:

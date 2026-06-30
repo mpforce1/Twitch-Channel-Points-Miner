@@ -15,6 +15,7 @@ jobs:
     # Packages write permission to allow publishing GitHub package
     permissions:
       packages: write
+      contents: write
 
     steps:
       - name: Checkout source

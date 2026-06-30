@@ -20,25 +20,22 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4.0.0
 
-      - name: Pull GHCR Images
-        # Pulls images for each platform for the tag version
-        run: |
-          docker pull --platform=linux/amd64 ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }}
-          docker pull --platform=linux/arm64 ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }}
-          docker pull --platform=linux/arm/v7 ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }}
-
-      - name: Create Tarballs
-        # Saves the images to separate gzipped tarballs
+      # GitHub Workflow Docker doesn't use containerd backend so do each sequentially
+      - name: Pull GHCR Images and Create Tarballs
+        # Pulls images for each platform for the tag version and saves the images to separate gzipped tarballs
         run: |
           mkdir output
+          docker pull --platform=linux/amd64 ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }}
           docker image save \
           --platform=linux/amd64 \
           ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }} | \
           gzip > ./output/twitch-channel-points-miner-linux-amd64.tar.gz
+          docker pull --platform=linux/arm64 ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }}
           docker image save \
           --platform=linux/arm64 \
           ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }} | \
           gzip > ./output/twitch-channel-points-miner-linux-arm64.tar.gz
+          docker pull --platform=linux/arm/v7 ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }}
           docker image save \
           --platform=linux/arm/v7 \
           ghcr.io/mpforce1/twitch-channel-points-miner:${{ github.ref_name }} | \
