@@ -9,6 +9,7 @@ class Priority(Enum):
     POINTS_ASCENDING = auto()
     POINTS_DESCENDING = auto()
     WATCH_SESSION = auto()
+    WEEKLY_REWARDS = auto()#
 
 
 class StreamerSource(StrEnum):

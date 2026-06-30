@@ -7,8 +7,13 @@ from TwitchChannelPointsMiner.JsonParser import (
     expect_str,
     parse_expected_value,
     dig,
+    expect_int,
+    parse_value,
 )
-from TwitchChannelPointsMiner.classes.websocket.data import UserSubscribeEvents
+from TwitchChannelPointsMiner.classes.websocket.data import (
+    UserSubscribeEvents,
+    WeeklyRewards,
+)
 from TwitchChannelPointsMiner.classes.websocket.data.OnsiteNotification import (
     CreateNotification,
     OnsiteNotification,
@@ -135,4 +140,46 @@ class Parser:
         value = expect_dict(value)
         return UserSubscribeEvents.UserSubscribed(
             channel_id=parse_expected_value(value, "channel_id", expect_str)
+        )
+
+    # weekly-rewards
+
+    def parse_weekly_rewards_reward(self, value) -> WeeklyRewards.Reward:
+        value = expect_dict(value)
+        return WeeklyRewards.Reward(
+            tier=parse_expected_value(value, "tier", expect_int),
+            channel_points=parse_expected_value(value, "channelPoints", expect_int),
+            badge_set_id=parse_expected_value(value, "badgeSetId", expect_str),
+            badge_version=parse_expected_value(value, "badgeVersion", expect_str),
+        )
+
+    def parse_weekly_rewards_config(self, value) -> WeeklyRewards.Config:
+        value = expect_dict(value)
+        return WeeklyRewards.Config(
+            days_required_per_week=parse_expected_value(
+                value, "daysRequiredPerWeek", expect_int
+            )
+        )
+
+    def parse_weekly_rewards(self, value) -> WeeklyRewards.Notification:
+        value = expect_dict(value)
+        return WeeklyRewards.Notification(
+            viewer_id=parse_expected_value(value, "viewerId", expect_str),
+            channel_id=parse_expected_value(value, "channelId", expect_str),
+            event_id=parse_expected_value(value, "eventId", expect_str),
+            days_visited_this_week=parse_expected_value(
+                value, "daysVisitedThisWeek", expect_int
+            ),
+            accumulated_weeks=parse_value(
+                value, "accumulatedWeeks", expect_int
+            ),
+            notification_type=parse_expected_value(
+                value, "notificationType", expect_str
+            ),
+            current_reward=parse_expected_value(
+                value, "currentReward", self.parse_weekly_rewards_reward
+            ),
+            event_config=parse_expected_value(
+                value, "eventConfig", self.parse_weekly_rewards_config
+            ),
         )

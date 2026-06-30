@@ -21,7 +21,7 @@ class PageInfo:
 class Edge[T]:
     """Representation of a Pagination Edge."""
 
-    def __init__(self, cursor: str, node: T):
+    def __init__(self, cursor: str | None, node: T):
         self.cursor = cursor
         """The cursor of this Edge. Can be used to resume Paginated requests from this point."""
         self.node = node

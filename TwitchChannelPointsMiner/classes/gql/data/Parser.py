@@ -27,8 +27,11 @@ from TwitchChannelPointsMiner.classes.gql.data.response import (
     Drops,
     PlaybackAccessToken,
     SubscriptionManagement,
+    WeeklyRewards,
     WithIsStreamLiveQuery,
     RewardList,
+    FilterableVideoTower,
+    ClipsCardsUser,
 )
 from TwitchChannelPointsMiner.classes.gql.data.response.BroadcastSettings import (
     BroadcastSettings,
@@ -72,7 +75,6 @@ from TwitchChannelPointsMiner.classes.gql.data.response.VideoPlayerStreamInfoOve
 from TwitchChannelPointsMiner.classes.gql.data.response.WithIsStreamLiveQuery import (
     WithIsStreamLiveQueryResponse,
 )
-
 
 # Parsers for GQL response types
 
@@ -123,7 +125,7 @@ def paginated_parser[T](
     """
 
     def edge_parser(edge: Any) -> Edge[T]:
-        cursor = parse_expected_value(edge, "cursor", expect_str)
+        cursor = parse_expected_value(edge, "cursor", optional_parser(expect_str))
         node = parse_expected_value(edge, "node", value_parser)
         return Edge(cursor, node)
 
@@ -561,6 +563,94 @@ def subscription_benefit_parser(value) -> GiftSub:
     )
 
 
+# Weekly Rewards
+def weekly_rewards_badge_parser(value) -> WeeklyRewards.Badge:
+    value = expect_dict(value)
+    return WeeklyRewards.Badge(
+        _id=parse_expected_value(value, "id", expect_str),
+        set_id=parse_expected_value(value, "setID", expect_str),
+        version=parse_expected_value(value, "version", expect_str),
+        title=parse_expected_value(value, "title", expect_str),
+        image_1x=parse_expected_value(value, "image1x", expect_str),
+        image_2x=parse_expected_value(value, "image2x", expect_str),
+        image_4x=parse_expected_value(value, "image4x", expect_str),
+        click_action=parse_expected_value(value, "clickAction", expect_str),
+        click_url=parse_expected_value(value, "clickURL", expect_str),
+    )
+
+
+def weekly_rewards_tier_parser(value) -> WeeklyRewards.RewardTier:
+    value = expect_dict(value)
+    return WeeklyRewards.RewardTier(
+        tier=parse_expected_value(value, "tier", expect_int),
+        channel_points=parse_expected_value(value, "channelPoints", expect_int),
+        badge=parse_expected_value(value, "badge", weekly_rewards_badge_parser),
+    )
+
+
+def weekly_rewards_event_config_parser(value) -> WeeklyRewards.EventConfig:
+    value = expect_dict(value)
+    return WeeklyRewards.EventConfig(
+        _id=parse_expected_value(value, "id", expect_str),
+        days_required_per_week=parse_expected_value(
+            value, "daysRequiredPerWeek", expect_int
+        ),
+        end_date=parse_expected_value(value, "endDate", expect_iso_8601),
+        week_reset_dates=parse_expected_value(
+            value, "weekResetDates", list_parser(expect_iso_8601)
+        ),
+        reward_tiers=parse_expected_value(
+            value, "rewardTiers", list_parser(weekly_rewards_tier_parser)
+        ),
+    )
+
+
+def weekly_visit_rewards_parser(value) -> WeeklyRewards.WeeklyRewards:
+    value = expect_dict(value)
+    return WeeklyRewards.WeeklyRewards(
+        days_visited_this_week=parse_expected_value(
+            value, "daysVisitedThisWeek", expect_int
+        ),
+        accumulated_weeks=parse_expected_value(value, "accumulatedWeeks", expect_int),
+        has_earned_weekly_reward_this_week=parse_expected_value(
+            value, "hasEarnedWeeklyRewardThisWeek", expect_bool
+        ),
+        has_visited_today=parse_expected_value(value, "hasVisitedToday", expect_bool),
+        current_reward=parse_expected_value(
+            value, "currentReward", weekly_rewards_tier_parser
+        ),
+        event_config=parse_expected_value(
+            value, "eventConfig", weekly_rewards_event_config_parser
+        ),
+    )
+
+
+# VODs
+
+
+def filterable_video_tower_video_edge_parser(value) -> FilterableVideoTower.VideoEdge:
+    value = expect_dict(value)
+    return FilterableVideoTower.VideoEdge(
+        _id=parse_expected_value(value, "id", expect_str),
+        broadcast_id=dig(value, ["broadcastIdentifier", "id"], expect_str),
+        length_seconds=parse_expected_value(value, "lengthSeconds", expect_int),
+    )
+
+
+# Clips
+
+
+def clips_cards_user_clip_edge_parser(value) -> ClipsCardsUser.Clip:
+    value = expect_dict(value)
+    return ClipsCardsUser.Clip(
+        _id=parse_expected_value(value, "id", expect_str),
+        slug=parse_expected_value(value, "slug", expect_str),
+        url=parse_expected_value(value, "url", expect_str),
+        title=parse_expected_value(value, "title", expect_str),
+        duration_seconds=parse_expected_value(value, "durationSeconds", expect_int),
+    )
+
+
 class Parser:
     """Class that can parse responses from the Twitch GQL API."""
 
@@ -937,3 +1027,42 @@ class Parser:
                         paginated_parser(subscription_benefit_parser),
                     ),
                 )
+
+    def parse_weekly_rewards(self, response) -> WeeklyRewards.WeeklyRewards | None:
+        """
+        Parses responses to WeeklyVisitRewardsQuery requests.
+        :param response: The response to parse.
+        :return: The parsed response.
+        :raises GQLResponseErrors: If the response contains errors or there is an issue parsing the response.
+        """
+        _, _, data = self.parse_base_response(response, True)
+        with JsonParentContext("data"):
+            return dig(
+                data,
+                ["channel", "self", "weeklyVisitRewards"],
+                optional_parser(weekly_visit_rewards_parser),
+            )
+
+    def parse_filterable_video_tower_videos(
+        self, response
+    ) -> FilterableVideoTower.Videos:
+        _, _, data = self.parse_base_response(response, True)
+        with JsonParentContext("data"):
+            return FilterableVideoTower.Videos(
+                videos=dig(
+                    data,
+                    ["user", "videos"],
+                    paginated_parser(filterable_video_tower_video_edge_parser),
+                )
+            )
+
+    def parse_clips_cards_user(self, response) -> ClipsCardsUser.Response:
+        _, _, data = self.parse_base_response(response, True)
+        with JsonParentContext("data"):
+            return ClipsCardsUser.Response(
+                clips=dig(
+                    data,
+                    ["user", "clips"],
+                    paginated_parser(clips_cards_user_clip_edge_parser),
+                )
+            )

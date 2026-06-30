@@ -1,9 +1,13 @@
 import abc
+import json
+import random
 import re
 import secrets
 import socket
+import string
 import time
 import uuid
+from base64 import b64encode
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from os import path
@@ -383,3 +387,18 @@ def ordinal(value: int):
     else:
         suffix = ["th", "st", "nd", "rd", "th"][min(value % 10, 4)]
     return f"{value}{suffix}"
+
+def encode_payload(payload: list) -> dict:
+    """
+    Encodes a Twitch spade events payload.
+    :param payload: The payload to encode.
+    :return: The encoded payload.
+    """
+    json_event = json.dumps(payload, separators=(",", ":"))
+    return {"data": (b64encode(json_event.encode("utf-8"))).decode("utf-8")}
+
+def create_random_alphanumeric_id(length: int) -> str:
+    return "".join(
+        random.choice(string.ascii_lowercase + string.digits)
+        for _ in range(length)
+    )

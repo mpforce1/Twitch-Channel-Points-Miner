@@ -12,6 +12,7 @@ from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings, DelayMode
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.gql import Properties
+from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import WeeklyRewards
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
 from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list, simple_repr
@@ -39,6 +40,7 @@ class StreamerSettings(object):
         "bet",
         "chat",
         "simulate_hls_playback",
+        "weekly_rewards",
     ]
 
     def __init__(
@@ -52,6 +54,7 @@ class StreamerSettings(object):
         bet: BetSettings = None,
         chat: ChatPresence = None,
         simulate_hls_playback: Literal[False] | HLSSettings | None = None,
+        weekly_rewards: bool | None = None,
     ):
         self.make_predictions = make_predictions
         self.follow_raid = follow_raid
@@ -66,6 +69,7 @@ class StreamerSettings(object):
         Simulates playback of the stream via HLS when selected to watch.
         If False, the miner won't perform HLS simulation.
         """
+        self.weekly_rewards = weekly_rewards
 
     def default(self):
         for name in [
@@ -74,6 +78,7 @@ class StreamerSettings(object):
             "claim_drops",
             "claim_moments",
             "watch_streak",
+            "weekly_rewards",
         ]:
             if getattr(self, name) is None:
                 setattr(self, name, True)
@@ -87,7 +92,7 @@ class StreamerSettings(object):
             self.simulate_hls_playback = HLSSettings(refresh_before=2 * 60)
 
     def __repr__(self):
-        return f"StreamerSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat}, simulate_hls_playback={self.simulate_hls_playback})"
+        return f"StreamerSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat}, simulate_hls_playback={self.simulate_hls_playback}, weekly_rewards={self.weekly_rewards})"
 
 
 class Streamer(object):
@@ -113,6 +118,7 @@ class Streamer(object):
         "history",
         "streamer_url",
         "gift_sub",
+        "weekly_rewards",
         "mutex",
     ]
 
@@ -130,6 +136,7 @@ class Streamer(object):
         settings: StreamerSettings | None = None,
         source: StreamerSource = StreamerSource.Streamers,
         gift_sub: GiftSub | None = None,
+        weekly_rewards: WeeklyRewards | None = None,
     ):
         self.username: str = username.lower().strip()
         self.channel_id: str = channel_id if channel_id is not None else ""
@@ -148,6 +155,7 @@ class Streamer(object):
         self.active_multipliers = active_multipliers
         self.irc_chat = None
         self.gift_sub = gift_sub
+        self.weekly_rewards = weekly_rewards
 
         self.stream = stream if stream is not None else Stream()
 
@@ -364,3 +372,13 @@ class Streamer(object):
 
     def delete_community_goal(self, goal_id):
         self.community_goals.pop(goal_id)
+
+    def missing_weekly_reward(self):
+        return (
+            self.settings.weekly_rewards is True
+            and self.weekly_rewards is not None
+            # We aren't missing a week if there are no more rewards to obtain
+            and self.weekly_rewards.accumulated_weeks < len(self.weekly_rewards.event_config.reward_tiers)
+            and not self.weekly_rewards.has_earned_weekly_reward_this_week
+            and not self.weekly_rewards.has_visited_today
+        )

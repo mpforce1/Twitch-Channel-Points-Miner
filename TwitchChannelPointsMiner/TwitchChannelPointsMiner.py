@@ -502,6 +502,8 @@ class TwitchChannelPointsMiner:
                 PubsubTopic("user-subscribe-events-v1", user_id=user_id)
             )
 
+            sync_weekly_rewards = False
+
             for streamer in self.streamers:
                 self.ws_pool.submit(
                     PubsubTopic("video-playback-by-id", streamer=streamer)
@@ -523,6 +525,14 @@ class TwitchChannelPointsMiner:
                 if streamer.settings.community_goals is True:
                     self.ws_pool.submit(
                         PubsubTopic("community-points-channel-v1", streamer=streamer)
+                    )
+
+                if streamer.settings.weekly_rewards is True:
+                    sync_weekly_rewards = True
+                    self.ws_pool.submit(
+                        PubsubTopic(
+                            "weekly-rewards", user_id=user_id, streamer=streamer
+                        )
                     )
 
             # Periodic task to check the websockets for stale connections
@@ -564,6 +574,32 @@ class TwitchChannelPointsMiner:
             context_refresh_thread.name = "Refresh channel points contexts"
             context_refresh_thread.start()
             self.background_tasks.append(context_refresh_thread)
+
+            # Periodic task to refresh Weekly Rewards
+            if sync_weekly_rewards:
+                sync_weekly_rewards_period = timedelta(hours=1).total_seconds()
+                sync_weekly_rewards_thread = threading.Thread(
+                    target=lambda: interruptible_repeating_task(
+                        task=lambda: self.twitch.sync_weekly_rewards(self.streamers),
+                        running_flag=lambda: self.running,
+                        run_early_flag=lambda: False,
+                        period_seconds=sync_weekly_rewards_period,
+                        step=background_task_sleep_step,
+                        run_now=True
+                    )
+                )
+                sync_weekly_rewards_thread.name = "Sync weekly rewards"
+                sync_weekly_rewards_thread.start()
+                self.background_tasks.append(sync_weekly_rewards_thread)
+
+                vod_watcher_max_concurrent = 2
+                vod_watcher_thread = threading.Thread(
+                    target=self.twitch.weekly_rewards_watcher,
+                    args=(self.streamers, vod_watcher_max_concurrent)
+                )
+                vod_watcher_thread.name = "Weekly Rewards VOD Watcher"
+                vod_watcher_thread.start()
+                self.background_tasks.append(vod_watcher_thread)
 
             # Main loop, sleeps and checks on background tasks/running state
             main_loop_period = timedelta(seconds=30).total_seconds()

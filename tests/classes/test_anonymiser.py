@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock
+from ast import arg
+from unittest.mock import MagicMock, call
 import pytest
 
 from TwitchChannelPointsMiner.classes.Anonymiser import (
@@ -34,14 +35,19 @@ class TestAnonymiser:
     test_topic_data = [
         ["123.456", "456"],
         [PubsubTopic("example-topic-v1", "01234"), "01234"],
-        [PubsubTopic("example-topic-v1", "01234", Streamer("StreamerUsername", channel_id="56789")), "56789"],
+        [PubsubTopic("example-topic-v1", "01234", Streamer("StreamerUsername", channel_id="56789")), ["01234", "56789"]],
     ]
 
-    @pytest.mark.parametrize("topic,expected_call_id", test_topic_data)
-    def test_topic(self, topic: str | PubsubTopic, expected_call_id: str):
+    @pytest.mark.parametrize("topic,expected_calls", test_topic_data)
+    def test_topic(self, topic: str | PubsubTopic, expected_calls: str | list[str]):
         anonymiser = MockAnonymiser()
         anonymiser.topic(topic)
-        anonymiser.mock_channel_id.assert_called_once_with(expected_call_id)
+        if isinstance(expected_calls, list):
+            for argument in expected_calls:
+                assert call(argument) in anonymiser.mock_channel_id.call_args_list, f"Anonymiser.channel_id not called with {argument}"
+            assert anonymiser.mock_channel_id.call_count == 2
+        else:
+            anonymiser.mock_channel_id.assert_called_once_with(expected_calls)
 
     test_redact_path_data = [
         [True, "/filename.py", "[PATH REDACTED]/filename.py"],

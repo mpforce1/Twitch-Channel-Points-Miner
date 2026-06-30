@@ -10,6 +10,7 @@ import re
 import string
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed, Future
+from itertools import islice
 from pathlib import Path
 from secrets import choice, token_hex
 
@@ -38,11 +39,13 @@ from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
+from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropCampaignInProgress,
     DropCampaignDetails,
     DropCampaignDashboard,
 )
+from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.constants import (
     CLIENT_ID,
     CLIENT_VERSION,
@@ -53,6 +56,7 @@ from TwitchChannelPointsMiner.utils import (
     internet_connection_available,
     interruptible_sleep,
 )
+from TwitchChannelPointsMiner.utils.Utils import create_random_alphanumeric_id, encode_payload
 
 logger = logging.getLogger(__name__)
 
@@ -539,6 +543,31 @@ class Twitch(object):
         )
         return stream_segment_response.status_code == 200
 
+    def send_spade_payload(self, streamer: Streamer, payload: list, name: str):
+        """
+        Sends an arbitrary spade payload to the tracking endpoint for the current Stream for the given Streamer.
+
+        :param streamer: The Streamer for which to send the event.
+        :param payload: The payload to send.
+        :param name: The name of this payload, for debugging purposes.
+        :return: True if the request was successful, False otherwise.
+        """
+        try:
+            logger.debug(f"Sending spade {name} payload for {streamer}")
+            response = requests.post(
+                streamer.stream.spade_url,
+                data=encode_payload(payload),
+                headers={"User-Agent": self.client_session.user_agent},
+                timeout=CLIENT_WATCH_SECONDS,
+            )
+            logger.debug(
+                f"Sent spade {name} payload for {streamer} - {response.status_code}"
+            )
+            return response.status_code == 204
+        except requests.exceptions.RequestException as e:
+            logger.debug(f"Unable to send spade {name} for {streamer}: {e}")
+            return False
+
     def send_spade_minute_watched_event(self, streamer: Streamer) -> bool:
         """
         Sends a minute watched event to the tracking endpoint for the current Stream for the given Streamer.
@@ -546,21 +575,9 @@ class Twitch(object):
         :param streamer: The Streamer for which to send the event.
         :return: True if the request was successful, False otherwise.
         """
-        logger.debug(f"Sending spade minute watched request for {streamer}")
-        response = requests.post(
-            streamer.stream.spade_url,  # pyright: ignore [reportArgumentType]
-            data=streamer.stream.encode_payload(),
-            headers={"User-Agent": self.client_session.user_agent},
-            timeout=CLIENT_WATCH_SECONDS,
+        return self.send_spade_payload(
+            streamer, streamer.stream.payload, "minute watched"
         )
-        logger.debug(
-            f"Sent spade minute watched request for {streamer} - Status code: {response.status_code}"
-        )
-
-        if response.status_code != 204:
-            logger.error(f"Unable to send spade minute watched request for {streamer}")
-            return False
-        return True
 
     def send_minute_watched_events(
         self,
@@ -706,6 +723,347 @@ class Twitch(object):
                 time.sleep(1)
             watched_previous_iteration = watched_this_iteration
             watched_this_iteration = set()
+
+    def send_clip_video_play(
+        self, streamer: Streamer, clip: Clip, play_session_id: str
+    ):
+        """
+        Sends a spade `video-play` event to the given Streamer's spade URL for the given clip.
+        These events signify that the user has started playing a clip.
+        :param streamer: The Streamer for the clip.
+        :param clip: The clip for the event.
+        :param play_session_id: The session id of the simulated player session.
+        :return: True if the request was successful, False otherwise.
+        """
+        return self.send_spade_payload(
+            streamer,
+            payload=[
+                {
+                    "event": "video-play",
+                    "properties": {
+                        "location": "vod",
+                        "url": clip.url,
+                        "channel_id": streamer.channel_id,
+                        "vod_type": "clip",
+                        "vod_id": clip.id,
+                        "content_mode": "clip",
+                        "live": False,
+                        "minutes_logged": 0,
+                        "play_session_id": play_session_id,
+                        "player": "site",
+                        "user_id": self.client_session.login.get_user_id(),
+                        "vod_timestamp": 0,
+                        "clip_slug": clip.slug,
+                    },
+                }
+            ],
+            name="video play",
+        )
+
+    def send_clip_second_watched(
+        self, streamer: Streamer, clip: Clip, play_session_id: str, seconds_watched: int
+    ):
+        """
+        Sends a spade `n_second_play` event to the given Streamer's spade URL for the given clip.
+        These events signify that the user has played a given number of seconds of a clip.
+        :param streamer: The Streamer for the clip.
+        :param clip: The clip for the event.
+        :param play_session_id: The session id of the simulated player session.
+        :param seconds_watched: The number of seconds the user has watched in this session.
+        :return: True if the request was successful, False otherwise.
+        """
+        return self.send_spade_payload(
+            streamer,
+            payload=[
+                {
+                    "event": "n_second_play",
+                    "properties": {
+                        "location": "vod",
+                        "platform": "web",
+                        "url": clip.url,
+                        "channel_id": streamer.channel_id,
+                        "vod_type": "clip",
+                        "vod_id": clip.id,
+                        "live": False,
+                        "minutes_logged": 0,
+                        "play_session_id": play_session_id,
+                        "player": "site",
+                        "seconds_after_play": seconds_watched,
+                        "vod_timestamp": seconds_watched - 0.1,
+                        "clip_slug": clip.slug,
+                        "user_id": self.client_session.login.get_user_id(),
+                    },
+                }
+            ],
+            name="second watched",
+        )
+
+    def simulate_clip_playback(self, streamer: Streamer, max_wait_seconds: int = 20):
+        """
+        Simulates the user watching a clip.
+        :param streamer: The Streamer for whom to watch a clip.
+        :param max_wait_seconds: The maximum number of seconds to wait for the clip to be processed as watched.
+        :return: True if playback was successful, False otherwise.
+        """
+        logger.info(
+            f"Simulating Clip playback for {streamer} for up to {max_wait_seconds} seconds",
+            extra={"emoji": ":paperclip:"},
+        )
+        recent_clips = None
+        try:
+            recent_clips = self.gql.clips(streamer.username)
+        except RetryError as e:
+            logger.error(
+                f"Error while trying to get a recent clip id for {streamer}: {e}"
+            )
+        if recent_clips is None or len(recent_clips.clips.edges) == 0:
+            logger.debug(f"No Clip available for {streamer}")
+            return False
+        clip = None
+        for edge in recent_clips.clips.edges:
+            if edge.node.duration_seconds > 5:
+                clip = edge.node
+                break
+            else:
+                logger.debug(
+                    f"Rejecting Clip {edge.node.title}, it's shorter than 5 seconds ({edge.node.duration_seconds}s)"
+                )
+        if clip is None:
+            logger.debug(f"All {len(recent_clips.clips.edges)} Clips too short")
+            return False
+        logger.debug(f"Found Clip {clip.title} to watch")
+
+        # Ensure we have the spade url
+        if streamer.stream.spade_url is None:
+            self.get_spade_url(streamer)
+        if streamer.stream.spade_url is None:
+            logger.debug(f"Unable to get Spade URL for {streamer}")
+            return False
+
+        # Watch the clip
+        play_session_id = create_random_alphanumeric_id(32)
+        self.send_clip_video_play(streamer, clip, play_session_id)
+        interruptible_sleep(
+            lambda: self.running and streamer.missing_weekly_reward(),
+            duration=5,
+        )
+        self.send_clip_second_watched(
+            streamer, clip, play_session_id, seconds_watched=5
+        )
+
+        # It can take 15s or so to get the reward
+        interruptible_sleep(
+            lambda: self.running and streamer.missing_weekly_reward(),
+            duration=max_wait_seconds,
+        )
+
+        if not streamer.missing_weekly_reward():
+            logger.info(f"Weekly Reward obtained for {streamer} via Clip")
+            return True
+        return False
+
+    def send_vod_minutes_watched(self, streamer: Streamer, vod_id: str):
+        return self.send_spade_payload(
+            streamer,
+            payload=[
+                {
+                    "event": "minute-watched",
+                    "properties": {
+                        "channel_id": streamer.channel_id,
+                        "broadcast_id": None,
+                        "player": "site",
+                        "user_id": self.client_session.login.get_user_id(),
+                        "live": False,
+                        "channel": streamer.username,
+                        "vod_id": vod_id,
+                        "content_mode": "vod",
+                    },
+                }
+            ],
+            name="VOD minute watched",
+        )
+
+    def simulate_vod_playback(self, streamer: Streamer, max_minutes: int = 8):
+        """
+        Simulates the user watching a VOD.
+        :param streamer: The Streamer for whom to watch a VOD.
+        :param max_minutes: The maximum number of minutes to simulate watching.
+        :return: True if the playback was successful, False otherwise.
+        """
+        logger.info(
+            f"Simulating VOD playback for {streamer} for up to {max_minutes} minutes",
+            extra={"emoji": ":clapper_board:"},
+        )
+        recent_broadcasts = None
+        try:
+            recent_broadcasts = self.gql.recent_broadcasts(streamer.username, limit=30)
+        except RetryError as e:
+            logger.error(
+                f"Error while trying to get a recent vod id for {streamer}: {e}"
+            )
+        if recent_broadcasts is None or len(recent_broadcasts.videos.edges) == 0:
+            logger.debug(f"No VOD available for {streamer}")
+            return False
+        vod_id = None
+        for edge in recent_broadcasts.videos.edges:
+            if edge.node.length_seconds > 6 * 60:
+                vod_id = edge.node.id
+                break
+            else:
+                logger.debug(
+                    f"Rejecting VOD {edge.node.id}, it's shorter than 6 minutes ({edge.node.length_seconds}s)"
+                )
+        if vod_id is None:
+            logger.debug(
+                f"All {len(recent_broadcasts.videos.edges)} recent VODs too short"
+            )
+            return False
+        logger.debug(f"Found VOD {vod_id} to watch")
+
+        # Ensure we have the spade url
+        if streamer.stream.spade_url is None:
+            self.get_spade_url(streamer)
+        if streamer.stream.spade_url is None:
+            logger.debug(f"Unable to get Spade URL for {streamer}")
+            return False
+
+        # Watch the VOD
+        accepted = 0
+        overall_start_time = time.monotonic()
+        max_seconds = max_minutes * 60
+        watch_interval = 60
+        while self.running and time.monotonic() - overall_start_time <= max_seconds:
+            # TODO make condition a Callable arg to make it more generically usable
+            if not streamer.missing_weekly_reward():
+                logger.info(f"Weekly Reward obtained for {streamer} via VOD")
+                return True
+            start_time = time.monotonic()
+            if self.send_vod_minutes_watched(streamer, vod_id):
+                accepted += 1
+                request_duration = time.monotonic() - start_time
+                interruptible_sleep(
+                    lambda: self.running and streamer.missing_weekly_reward(),
+                    duration=max(1, watch_interval - request_duration),
+                )
+            else:
+                request_duration = time.monotonic() - start_time
+                # Shorter sleep to try and pick it back up sooner
+                interruptible_sleep(
+                    lambda: self.running, duration=max(1, 5 - request_duration)
+                )
+
+        logger.debug(
+            f"Sent {accepted} VOD watch requests for {streamer} over {max_minutes} minutes"
+        )
+        return False
+
+    def update_weekly_reward(
+        self, streamer: Streamer, notification: WeeklyRewards.Notification
+    ):
+        if streamer.weekly_rewards is None:
+            logger.error(
+                f"Unable to update weekly reward for {streamer}, no existing reward found"
+            )
+            return
+        # TODO new Events type for this?
+        current_tier = (
+            notification.accumulated_weeks
+            if notification.accumulated_weeks is not None
+            else 0
+        )
+        emojis = [
+            ":seedling:",
+            ":potted_plant:",
+            ":wilted_flower:",
+            ":rose:",
+            ":bouquet:",
+        ]
+        # Default emoji for if they start doing longer events
+        emoji = emojis[current_tier] if current_tier < len(emojis) else ":calendar:"
+        logger.info(
+            f"Weekly Reward update for {streamer}: {notification.notification_type}. "
+            + f"{notification.days_visited_this_week}/{notification.event_config.days_required_per_week} days visited this week.",
+            extra={"emoji": emoji},
+        )
+        streamer.weekly_rewards.days_visited_this_week = (
+            notification.days_visited_this_week
+        )
+        streamer.weekly_rewards.has_visited_today = True
+        if not streamer.weekly_rewards.has_earned_weekly_reward_this_week:
+            streamer.weekly_rewards.has_earned_weekly_reward_this_week = (
+                notification.notification_type == "WEEK_COMPLETED"
+            )
+        streamer.weekly_rewards.accumulated_weeks = (
+            notification.accumulated_weeks
+            if notification.accumulated_weeks is not None
+            else 0
+        )
+        streamer.weekly_rewards.current_reward.tier = notification.current_reward.tier
+        streamer.weekly_rewards.current_reward.channel_points = (
+            notification.current_reward.channel_points
+        )
+        streamer.weekly_rewards.current_reward.badge.set_id = (
+            notification.current_reward.badge_set_id
+        )
+        streamer.weekly_rewards.current_reward.badge.version = (
+            notification.current_reward.badge_version
+        )
+        streamer.weekly_rewards.event_config.days_required_per_week = (
+            notification.event_config.days_required_per_week
+        )
+
+    def sync_weekly_rewards(self, streamers: list[Streamer]):
+        """
+        Syncs the current Weekly Rewards state for the given streamers.
+        :param streamers: The Streamers to sync.
+        """
+        for streamer in streamers:
+            if not streamer.settings.weekly_rewards:
+                continue
+            try:
+                streamer.weekly_rewards = self.gql.weekly_rewards(streamer.channel_id)
+            except RetryError as e:
+                logger.error(
+                    f"Error while trying to sync weekly rewards for {streamer}: {e}"
+                )
+
+    def weekly_rewards_watcher(
+        self, streamers: list[Streamer], max_concurrent_watch: int = 2
+    ):
+        """
+        Periodically checks all Streamers weekly reward status and attempts to watch VDOs for those that haven't yet
+        advanced theirs this week.
+        :param streamers: The Streamers to monitor.
+        :param max_concurrent_watch: The maximum amount to watch concurrently.
+        :return:
+        """
+        while self.running:
+            target_streamers = list(
+                streamer
+                for streamer in streamers
+                # Don't watch VODs for streamers that are online, we may be able to advance via watching live
+                if streamer.is_online is False
+                # Only watch VODs for streamers that are missing the reward
+                and streamer.missing_weekly_reward()
+            )
+            random.shuffle(target_streamers)
+            # TODO watch concurrently with periodic short circuit
+            for streamer in islice(target_streamers, max_concurrent_watch):
+                # Short circuit to avoid playing back many vods before exiting
+                if self.running:
+                    # TODO provide a reason we didn't make progress
+                    if (
+                        not self.simulate_clip_playback(streamer)
+                        and self.running
+                        and streamer.missing_weekly_reward()
+                    ):
+                        if not self.simulate_vod_playback(streamer):
+                            logger.info(
+                                f"Unable to progress weekly reward with either Clips or VODs for {streamer}",
+                                extra={"emoji": ":crying_face:"},
+                            )
+                time.sleep(1)
+            interruptible_sleep(running_flag=lambda: self.running, duration=20)
 
     # === CHANNEL POINTS / PREDICTION === #
     # Load the amount of current points for a channel, check if a bonus is available
