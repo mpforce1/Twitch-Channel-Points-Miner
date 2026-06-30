@@ -36,6 +36,7 @@ This is an example of the full miner logs, with the `less` option omitted or set
 %d/%m/%y %H:%M:%S - INFO - [on_message]: 🚀  +12 → Streamer(username=streamer-username, channel_id=0000000, channel_points=64398) - Reason: WATCH.
 %d/%m/%y %H:%M:%S - INFO - [update_raid]: 🎭  Joining raid from Streamer(username=streamer-username, channel_id=0000000, channel_points=64398) to another-username!
 %d/%m/%y %H:%M:%S - INFO - [on_message]: 🚀  +250 → Streamer(username=streamer-username, channel_id=0000000, channel_points=6845) - Reason: RAID.
+%d/%m/%y %H:%M:%S - INFO - TwitchChannelPointsMiner.classes.Twitch - [update_gift_sub]: Tier-1 Gift Sub from [gifter] for [streamer], ends at [date time] (in [X] days)
 ```
 
 ## Less logs

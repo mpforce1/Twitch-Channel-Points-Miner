@@ -14,7 +14,7 @@ from TwitchChannelPointsMiner.classes.Pushover import Pushover
 from TwitchChannelPointsMiner.classes.Gotify import Gotify
 from TwitchChannelPointsMiner.classes.Settings import Priority, Events, FollowersOrder
 from TwitchChannelPointsMiner.classes.entities.Bet import Strategy, BetSettings, Condition, OutcomeKeys, FilterCondition, DelayMode
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, StreamerSettings
+from TwitchChannelPointsMiner.classes.entities.Streamer import HLSSettings, Streamer, StreamerSettings
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
 twitch_miner = TwitchChannelPointsMiner(
@@ -109,6 +109,9 @@ twitch_miner = TwitchChannelPointsMiner(
         watch_streak=True,                      # If a streamer go online change the priority of streamers array and catch the watch screak. Issue #11
         community_goals=False,                  # If True, contributes the max channel points per stream to the streamers' community challenge goals
         chat=ChatPresence.ONLINE,               # Join irc chat to increase watch-time [ALWAYS, NEVER, ONLINE, OFFLINE]
+        simulate_hls_playback=HLSSettings(      # Set to False to disable HLS playback.
+            refresh_before=120,                 # Set to the number of seconds before expiry to refresh the PlaybackAccessToken.
+        ),
         bet=BetSettings(
             strategy=Strategy.SMART,            # Choose you strategy!
             percentage=5,                       # Place the x% of your channel points

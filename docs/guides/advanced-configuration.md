@@ -68,6 +68,9 @@ will prioritise watching streams according to each priority from left to right i
   This is due to a limitation of the Twitch API.
 - `DROPS`: This prioritises streams with an active drops campaign with unclaimed drops. Ignores drops that require subs.
 - `SUBSCRIBED`: This prioritises streamers for which you have an active subscription.
+- `WATCH_SESSION`: This prioritises streams that were previously being watched but haven't yet received a `WATCH`
+  message. This is useful to avoid wasting minutes of watch time for a current stream when a new stream comes online, as
+  Twitch may drop those minutes if you swap to another stream.
   
 #### `StreamerSelector`
 
@@ -490,6 +493,27 @@ Join the streamer's IRC chat, can be set to one of these `ChatPresence`:
 | `NEVER`   | Never attempt to join this streamer's chat.                    |
 | `ONLINE`  | Only attempt to join this streamer's chat when they're online. |
 | `OFFLINE` | Only attempt to join this streamer's chat when thy're offline. |
+
+#### `simulate_hls_playback`
+
+This enables what was previously called M3U8 playback, essentially we simulate "watching" by making a HEAD request to 
+the latest stream segment. This does not result in the miner downloading **any** stream video. In the process, we also
+get a `PlaybackAccessToken` from Twitch. This may result in better watch simulation, users have reported getting more
+gift subs with this enabled.
+
+This can be set to either `False`, in which case HLS playback is disabled, or an `HLSSettings` object which allows you
+to set the number of seconds before expiry to refresh the `PlaybackAccessToken`:
+
+```python
+HLSSettings(
+    refresh_before=5 * 60
+)
+```
+
+In this example, I've set the number of seconds to `5 * 60` or 5 minutes. This will cause the token to get refreshed
+once we get to 5 minutes before the token expires. Tokens typically last for 20 minutes. The default is 120 seconds (2
+minutes).
+
 
 #### `bet`
 
