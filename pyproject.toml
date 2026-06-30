@@ -1,6 +1,6 @@
 [project]
 name = "twitch-channel-points-miner"
-version = "1.2.0"
+version = "1.3.0"
 description = "Automatically collects Twitch channel points"
 readme = "README.md"
 requires-python = ">=3.12"
