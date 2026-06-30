@@ -115,8 +115,13 @@ class Anonymiser(abc.ABC):
         :return: The redacted topic string.
         """
         topic_str = str(topic)
-        topic, _id = topic_str.split(".")
-        return f"{topic}.{self.channel_id(_id)}"
+        topic_split = topic_str.split(".")
+        if len(topic_split) == 3:
+            return f"{topic_split[0]}.{self.channel_id(topic_split[1])}.{self.channel_id(topic_split[2])}"
+        elif len(topic_split) == 2:
+            return f"{topic_split[0]}.{self.channel_id(topic_split[1])}"
+        else:
+            return topic_str
 
     def filepath(self, filepath: str) -> str:
         """

@@ -17,6 +17,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.RewardList import (
     WatchStreakMilestone,
 )
 from TwitchChannelPointsMiner.constants import DROP_ID
+from TwitchChannelPointsMiner.utils.Utils import encode_payload
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +75,7 @@ class Stream(object):
         self.init_watch_streak()
 
     def encode_payload(self) -> dict:
-        json_event = json.dumps(self.payload, separators=(",", ":"))
-        return {"data": (b64encode(json_event.encode("utf-8"))).decode("utf-8")}
+        return encode_payload(self.payload)
 
     def update(
         self,

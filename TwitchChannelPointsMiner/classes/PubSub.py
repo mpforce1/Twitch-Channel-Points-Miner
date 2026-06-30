@@ -5,6 +5,7 @@ from threading import Timer
 
 from dateutil import parser as dateparser
 
+from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings, Events
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
@@ -58,6 +59,7 @@ class PubSubHandler(MessageListener):
             if streamer is None and not message.topic in {
                 "onsite-notifications",
                 "user-subscribe-events-v1",
+                "weekly-rewards",
             }:
                 # these topics aren't channel specific
                 return
@@ -322,6 +324,24 @@ class PubSubHandler(MessageListener):
                 else:
                     logger.debug(
                         f"Received subscription notification for non-miner channel: {Settings.logger.anonymiser.channel_id(notification.channel_id)}"
+                    )
+
+            elif message.topic == "weekly-rewards":
+                logger.debug(f"Received weekly-rewards")
+                notification = self.parser.parse_weekly_rewards(message.message)
+                streamer = next(
+                    (
+                        streamer
+                        for streamer in self.streamers
+                        if streamer.channel_id == notification.channel_id
+                    ),
+                    None,
+                )
+                if streamer is not None:
+                    self.twitch.update_weekly_reward(streamer, notification)
+                else:
+                    logger.debug(
+                        f"Received weekly rewards notification for non-miner channel: {Settings.logger.anonymiser.channel_id(notification.channel_id)}"
                     )
 
         except Exception:

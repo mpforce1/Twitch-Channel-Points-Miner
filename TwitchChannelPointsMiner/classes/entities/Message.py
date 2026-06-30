@@ -17,7 +17,11 @@ class Message(object):
     ]
 
     def __init__(self, data):
-        self.topic, self.topic_user = data["topic"].split(".")
+        topic_split = data["topic"].split(".")
+        if len(topic_split) == 3:
+            self.topic, self.topic_user, _ = topic_split
+        else:
+            self.topic, self.topic_user = topic_split
 
         self.message = json.loads(data["message"])
         self.type = self.message["type"] if "type" in self.message else ""

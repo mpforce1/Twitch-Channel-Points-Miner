@@ -118,6 +118,23 @@ def priority_watch(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
     )
 
 
+def priority_weekly_rewards(
+    streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
+    return list(
+        islice(
+            (
+                streamer.channel_id
+                for streamer in streamers
+                # We should have obtained the reward if we've already got the streak
+                if streamer.stream.watch_streak_missing is True
+                and streamer.missing_weekly_reward()
+            ),
+            max_amount,
+        )
+    )
+
+
 class PriorityFunction(Protocol):
     def __call__(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]: ...
 
@@ -130,6 +147,7 @@ priority_functions: dict[Priority, PriorityFunction] = {
     Priority.DROPS: priority_drops,
     Priority.SUBSCRIBED: priority_subscribed,
     Priority.WATCH_SESSION: priority_watch,
+    Priority.WEEKLY_REWARDS: priority_weekly_rewards,
 }
 
 

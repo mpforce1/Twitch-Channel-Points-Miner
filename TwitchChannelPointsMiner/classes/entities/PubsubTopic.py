@@ -12,5 +12,9 @@ class PubsubTopic(object):
     def __str__(self):
         if self.is_user_topic():
             return f"{self.topic}.{self.user_id}"
-        else:
+        elif self.user_id is None:
             return f"{self.topic}.{self.streamer.channel_id}"
+        elif self.streamer is None:
+            return f"{self.topic}.{self.user_id}"
+        else:
+            return f"{self.topic}.{self.user_id}.{self.streamer.channel_id}"

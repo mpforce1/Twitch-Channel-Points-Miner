@@ -252,15 +252,48 @@ class GQLOperations:
     }
     SubscriptionsManagement_SubscriptionBenefits = {
         "operationName": "SubscriptionsManagement_SubscriptionBenefits",
-        "variables": {
-            "cursor": "",
-            "filter": "GIFT",
-            "limit": 100,
-            "platform": "WEB"
-        },
+        "variables": {"cursor": "", "filter": "GIFT", "limit": 100, "platform": "WEB"},
         "extensions": {
             "persistedQuery": {
                 "sha256Hash": "149b5d57366d01d1ee948852b3d0fa36cf7b907ffba914bdb677627c014f08d6",
+                "version": 1,
+            }
+        },
+    }
+    WeeklyVisitRewardsQuery = {
+        "operationName": "WeeklyVisitRewardsQuery",
+        "extensions": {
+            "persistedQuery": {
+                "sha256Hash": "ce98e9db55db7e4abcc1f5ac65c933b73c58fa9c4c8afe3c5098a8ed79737a3c",
+                "version": 1,
+            }
+        },
+    }
+    FilterableVideoTower_Videos = {
+        "operationName": "FilterableVideoTower_Videos",
+        "variables": {
+            "broadcastType": "ARCHIVE",
+            "includePreviewBlur": False,
+            "limit": 7,
+            "videoSort": "TIME",
+        },
+        "extensions": {
+            "persistedQuery": {
+                "sha256Hash": "67004f7881e65c297936f32c75246470629557a393788fb5a69d6d9a25a8fd5f",
+                "version": 1,
+            }
+        },
+    }
+    ClipsCards__User = {
+        "operationName": "ClipsCards__User",
+        "variables": {
+            "criteria": {"filter": "ALL_TIME"},
+            "limit": 20,
+            # "login": "[username]",
+        },
+        "extensions": {
+            "persistedQuery": {
+                "sha256Hash": "1cd671bfa12cec480499c087319f26d21925e9695d1f80225aae6a4354f23088",
                 "version": 1,
             }
         },

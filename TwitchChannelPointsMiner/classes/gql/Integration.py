@@ -748,6 +748,35 @@ class GQL:
             has_next = parsed_response.pages.page_info.has_next_page
         return gift_subs
 
+    def weekly_rewards(self, channel_id: str):
+        json_data = copy.deepcopy(GQLOperations.WeeklyVisitRewardsQuery)
+        json_data["variables"] = {"channelID": channel_id}
+
+        return self.post_gql_request_single(
+            GQLOperations.WeeklyVisitRewardsQuery["operationName"],
+            json_data,
+            self.parser.parse_weekly_rewards,
+        )
+
+    def recent_broadcasts(self, channel_login: str, limit: int):
+        json_data = copy.deepcopy(GQLOperations.FilterableVideoTower_Videos)
+        json_data["variables"]["channelOwnerLogin"] = channel_login
+        json_data["variables"]["limit"] = limit
+        return self.post_gql_request_single(
+            GQLOperations.FilterableVideoTower_Videos["operationName"],
+            json_data,
+            self.parser.parse_filterable_video_tower_videos
+        )
+
+    def clips(self, channel_login: str, limit: int = 20):
+        json_data = copy.deepcopy(GQLOperations.ClipsCards__User)
+        json_data["variables"]["login"] = channel_login
+        json_data["variables"]["limit"] = limit
+        return self.post_gql_request_single(
+            GQLOperations.ClipsCards__User["operationName"],
+            json_data,
+            self.parser.parse_clips_cards_user,
+        )
 
 class GQLFactory:
     """Factory class for creating GQL objects."""
