@@ -61,8 +61,48 @@ class WeeklyRewardsProgressor(Thread):
             if streamer.is_online is False
             # Only watch VODs for streamers that are missing the reward
             and streamer.missing_weekly_reward()
+            # Only try and watch streamers that have a Clip or VOD available
+            and (
+                self.get_clip(streamer) is not None
+                or self.get_vod(streamer) is not None
+            )
         )
         return list(islice(target_streamers, self.max_concurrent_watch))
+
+    def get_clip(self, streamer: Streamer):
+        top_clips = streamer.clips
+        if len(top_clips) == 0:
+            logger.debug(f"No Clip available for {streamer}")
+            return None
+        for clip in top_clips:
+            if clip.duration_seconds > 5:
+                return clip
+            else:
+                logger.debug(
+                    f"Rejecting Clip {clip.title}, it's shorter than 5 seconds ({clip.duration_seconds}s)"
+                )
+        logger.debug(f"All {len(top_clips)} Clips are too short")
+        return None
+
+    def get_vod(self, streamer: Streamer):
+        recent_broadcasts = streamer.vods
+        if recent_broadcasts is None or len(recent_broadcasts) == 0:
+            logger.debug(f"No VOD available for {streamer}")
+            return None
+        for video in recent_broadcasts:
+            if not video.viewable:
+                logger.debug(f"rejecting VOD {video.edge.id}, it's not viewable (probably subscriber-only)")
+                continue
+
+            vod = video.edge
+            if vod.length_seconds > 6 * 60:
+                return vod
+            else:
+                logger.debug(
+                    f"Rejecting VOD {vod.id}, it's shorter than 6 minutes ({vod.length_seconds}s)"
+                )
+        logger.debug(f"All {len(recent_broadcasts)} recent VODs too short")
+        return None
 
     def do_watch(self, streamer: Streamer) -> Result:
         """
@@ -70,20 +110,30 @@ class WeeklyRewardsProgressor(Thread):
         :param streamer: The Streamer to watch.
         :return: A result.
         """
-        if self.twitch.simulate_clip_playback(
-            streamer, max_wait_seconds=self.max_seconds_clips
+        clip = self.get_clip(streamer)
+        if clip is not None and self.twitch.simulate_clip_playback(
+            streamer, clip, max_wait_seconds=self.max_seconds_clips
         ):
             return Result(success=True, reason="clip")
-        elif not self.twitch.running:
+        if not self.twitch.running:
             return Result(success=False, reason="miner not running")
-        elif self.twitch.simulate_vod_playback(
-            streamer, max_minutes=self.max_minutes_vod
+        vod = self.get_vod(streamer)
+        if vod is not None and self.twitch.simulate_vod_playback(
+            streamer, vod, max_minutes=self.max_minutes_vod
         ):
             return Result(success=True, reason="vod")
-        elif not self.twitch.running:
+        if not self.twitch.running:
             return Result(success=False, reason="miner not running")
-        else:
-            return Result(success=False, reason="both failed")
+        if clip is None:
+            if vod is None:
+                return Result(success=False, reason="streamer has no clips or vods")
+            else:
+                return Result(success=False, reason="vod timed out")
+        if vod is None:
+            return Result(
+                success=False, reason="clip timed out and streamer has no vods"
+            )
+        return Result(success=False, reason="clip and vod both timed out")
 
     def process_result(self, streamer: Streamer, result: Result):
         """

@@ -63,6 +63,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.Pagination import (
 )
 from TwitchChannelPointsMiner.classes.gql.data.response.PlaybackAccessToken import (
     PlaybackAccessTokenResponse,
+    VideoPlaybackAccessToken,
 )
 from TwitchChannelPointsMiner.classes.gql.data.response.RewardList import (
     RewardListResponse,
@@ -758,6 +759,23 @@ class Parser:
                         stream_playback_access_token,
                         "authorization",
                         authorization_parser,
+                    ),
+                )
+
+    def parse_vod_playback_access_token_response(self, response):
+        _, _, data = self.parse_base_response(response, True)
+        with JsonParentContext("data"):
+            # Ignore streamPlaybackAccessToken, it's the only value in data
+            stream_playback_access_token = parse_expected_value(
+                data, "videoPlaybackAccessToken", expect_dict
+            )
+            with JsonParentContext("streamPlaybackAccessToken"):
+                return VideoPlaybackAccessToken(
+                    value=parse_expected_value(
+                        stream_playback_access_token, "value", expect_str
+                    ),
+                    signature=parse_expected_value(
+                        stream_playback_access_token, "signature", expect_str
                     ),
                 )
 

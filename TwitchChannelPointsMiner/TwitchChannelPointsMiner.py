@@ -578,6 +578,7 @@ class TwitchChannelPointsMiner:
 
             # Periodic task to refresh Weekly Rewards
             if sync_weekly_rewards:
+                # Syncer
                 sync_weekly_rewards_period = timedelta(hours=1).total_seconds()
                 sync_weekly_rewards_thread = threading.Thread(
                     target=lambda: interruptible_repeating_task(
@@ -593,6 +594,23 @@ class TwitchChannelPointsMiner:
                 sync_weekly_rewards_thread.start()
                 self.background_tasks.append(sync_weekly_rewards_thread)
 
+                # Clips/VODs syncer
+                sync_clips_and_vods_period = timedelta(hours=1).total_seconds()
+                sync_clips_and_vods_thread = threading.Thread(
+                    target=lambda: interruptible_repeating_task(
+                        task=lambda: self.twitch.sync_clips_and_vods(self.streamers),
+                        running_flag=lambda: self.running,
+                        run_early_flag=lambda: False,
+                        period_seconds=sync_clips_and_vods_period,
+                        step=background_task_sleep_step,
+                        run_now=True
+                    )
+                )
+                sync_clips_and_vods_thread.name = "Sync Clips and VODs"
+                sync_clips_and_vods_thread.start()
+                self.background_tasks.append(sync_clips_and_vods_thread)
+
+                # Progressor
                 weekly_rewards_progressor_max_concurrent = 2
                 weekly_rewards_max_seconds_clips = 30
                 weekly_rewards_max_minutes_vod = 8

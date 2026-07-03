@@ -3,19 +3,24 @@
 # https://github.com/mauricew/twitch-graphql-api
 # Full list of available methods: https://azr.ivr.fi/schema/query.doc.html (a bit outdated)
 import datetime
+import json
 import logging
 import os
 import random
 import re
 import string
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed, Future
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
 from secrets import choice, token_hex
 
 import requests
 import validators
 
+from TwitchChannelPointsMiner.JsonParser import (
+    JsonParentContext, expect_dict, expect_str, parse_expected_value,
+    expect_list
+)
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Exceptions import (
     StreamerDoesNotExistException,
@@ -36,6 +41,7 @@ from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
     PlaybackAccessToken,
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
@@ -44,6 +50,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropCampaignDetails,
     DropCampaignDashboard,
 )
+from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import VideoEdge
 from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.constants import (
     CLIENT_ID,
@@ -117,9 +124,12 @@ class Twitch(object):
     # === STREAMER / STREAM / INFO === #
     def update_stream(self, streamer: Streamer):
         if streamer.stream.update_required() is True:
-            stream_info, is_live_info, watch_streak_milestone, ban_status = (
-                self.get_stream_info(streamer)
-            )
+            (
+                stream_info,
+                is_live_info,
+                watch_streak_milestone,
+                ban_status,
+            ) = self.get_stream_info(streamer)
             if (
                 stream_info is not None
                 and stream_info.stream is not None
@@ -192,6 +202,68 @@ class Twitch(object):
             streamer.stream.spade_url = re.search(regex_spade, response).group(1)
         except requests.exceptions.RequestException as e:
             logger.error(f"Something went wrong during extraction of 'spade_url': {e}")
+
+    def get_vod_playback_access_token(self, streamer: Streamer, vod_id: str):
+        try:
+            token = self.gql.get_video_playback_access_token(
+                streamer.username, vod_id=vod_id
+            )
+            logger.debug(f"Obtained VOD PlaybackAccessToken for {streamer.username}")
+            return token
+        except RetryError as e:
+            logger.error(
+                f"Unable to get VOD PlaybackAccessToken for {streamer.username}: {e}"
+            )
+            return None
+
+    def vod_viewable(self, streamer: Streamer, video: Video):
+        """
+        Returns whether a VOD is viewable, vods are not viewable if a playlist request returns HTTP statuses other than
+        200.
+        :param streamer: The Streamer for the VOD.
+        :param video: The VOD to check.
+        :return: True if the VOD is viewable, False otherwise.
+        """
+        if video.viewable:
+            # We already know it's viewable
+            return True
+        if video.token is not None:
+            # We've got a token and it's not viewable
+            return False
+        vod_id = video.edge.id
+        token = self.get_vod_playback_access_token(streamer, vod_id)
+        if token is None:
+            return False
+        video.token = token
+
+        playlist_url = f"https://usher.ttvnw.net/vod/v2/{vod_id}.m3u8?sig={token.signature}&token={token.value}"
+        logger.debug(f"Sending VOD playlist request for {vod_id} for {streamer}")
+        playlist_response = requests.get(
+            playlist_url,
+            headers={"User-Agent": self.client_session.user_agent},
+            timeout=CLIENT_WATCH_SECONDS,
+        )
+        logger.debug(
+            f"Sent VOD playlist request for {vod_id} for {streamer}, Status: {playlist_response.status_code}"
+        )
+        if playlist_response.status_code == 200:
+            return True
+        error = None
+        try:
+            response_text = playlist_response.text
+            response_json = expect_list(json.loads(response_text))
+            if len(response_json) > 0:
+                response_object = expect_dict(response_json[0])
+                with JsonParentContext(0):
+                    _type = parse_expected_value(response_object, "type", expect_str)
+                    if _type == "error":
+                        error = parse_expected_value(response_object, "error", expect_str)
+        except json.JSONDecodeError:
+            pass
+        logger.debug(
+            f"Unable to get playlist for VOD {vod_id}: status={playlist_response.status_code}{(f', error=\"{error}\"' if error is not None else '')}"
+        )
+        return False
 
     def get_stream_info(self, streamer: Streamer):
         """
@@ -797,10 +869,11 @@ class Twitch(object):
             name="second watched",
         )
 
-    def simulate_clip_playback(self, streamer: Streamer, max_wait_seconds: int = 20):
+    def simulate_clip_playback(self, streamer: Streamer, clip: Clip, max_wait_seconds: int = 20):
         """
         Simulates the user watching a clip.
         :param streamer: The Streamer for whom to watch a clip.
+        :param clip: The Clip to watch.
         :param max_wait_seconds: The maximum number of seconds to wait for the clip to be processed as watched.
         :return: True if playback was successful, False otherwise.
         """
@@ -808,26 +881,6 @@ class Twitch(object):
             f"Simulating Clip playback for {streamer} for up to {max_wait_seconds} seconds",
             extra={"emoji": ":paperclip:"},
         )
-        top_clips = None
-        try:
-            top_clips = self.gql.clips(streamer.username)
-        except RetryError as e:
-            logger.error(f"Error while trying to get a Clip for {streamer}: {e}")
-        if top_clips is None or len(top_clips.clips.edges) == 0:
-            logger.debug(f"No Clip available for {streamer}")
-            return False
-        clip = None
-        for edge in top_clips.clips.edges:
-            if edge.node.duration_seconds > 5:
-                clip = edge.node
-                break
-            else:
-                logger.debug(
-                    f"Rejecting Clip {edge.node.title}, it's shorter than 5 seconds ({edge.node.duration_seconds}s)"
-                )
-        if clip is None:
-            logger.debug(f"All {len(top_clips.clips.edges)} Clips are too short")
-            return False
         logger.debug(f"Attempting to watch Clip '{clip.title}'")
 
         # Ensure we have the spade url
@@ -880,10 +933,11 @@ class Twitch(object):
             name="VOD minute watched",
         )
 
-    def simulate_vod_playback(self, streamer: Streamer, max_minutes: int = 8):
+    def simulate_vod_playback(self, streamer: Streamer, vod: VideoEdge, max_minutes: int = 8):
         """
         Simulates the user watching a VOD.
         :param streamer: The Streamer for whom to watch a VOD.
+        :param vod: The VOD to watch.
         :param max_minutes: The maximum number of minutes to simulate watching.
         :return: True if the playback was successful, False otherwise.
         """
@@ -891,31 +945,6 @@ class Twitch(object):
             f"Simulating VOD playback for {streamer} for up to {max_minutes} minutes",
             extra={"emoji": ":clapper_board:"},
         )
-        recent_broadcasts = None
-        try:
-            recent_broadcasts = self.gql.recent_broadcasts(streamer.username, limit=30)
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to get a recent vod id for {streamer}: {e}"
-            )
-        if recent_broadcasts is None or len(recent_broadcasts.videos.edges) == 0:
-            logger.debug(f"No VOD available for {streamer}")
-            return False
-        vod_id = None
-        for edge in recent_broadcasts.videos.edges:
-            if edge.node.length_seconds > 6 * 60:
-                vod_id = edge.node.id
-                break
-            else:
-                logger.debug(
-                    f"Rejecting VOD {edge.node.id}, it's shorter than 6 minutes ({edge.node.length_seconds}s)"
-                )
-        if vod_id is None:
-            logger.debug(
-                f"All {len(recent_broadcasts.videos.edges)} recent VODs too short"
-            )
-            return False
-        logger.debug(f"Found VOD {vod_id} to watch")
 
         # Ensure we have the spade url
         if streamer.stream.spade_url is None:
@@ -934,7 +963,7 @@ class Twitch(object):
             if not streamer.missing_weekly_reward():
                 return True
             start_time = time.monotonic()
-            if self.send_vod_minutes_watched(streamer, vod_id):
+            if self.send_vod_minutes_watched(streamer, vod.id):
                 accepted += 1
                 request_duration = time.monotonic() - start_time
                 interruptible_sleep(
@@ -1018,6 +1047,25 @@ class Twitch(object):
                 continue
             try:
                 streamer.weekly_rewards = self.gql.weekly_rewards(streamer.channel_id)
+            except RetryError as e:
+                logger.error(
+                    f"Error while trying to sync weekly rewards for {streamer}: {e}"
+                )
+
+    def sync_clips_and_vods(self, streamers: list[Streamer]):
+        for streamer in streamers:
+            if not streamer.settings.weekly_rewards:
+                continue
+            try:
+                clips_response = self.gql.clips(streamer.username, limit=10)
+                vods_response = self.gql.recent_broadcasts(streamer.username, limit=5)
+                # Update the VOD viewable state
+                # TODO, delay this until VOD views are needed
+                vods = [Video(edge=edge.node) for edge in vods_response.videos.edges]
+                for video in vods:
+                    video.viewable = self.vod_viewable(streamer, video)
+                streamer.clips = [clip.node for clip in clips_response.clips.edges]
+                streamer.vods = vods
             except RetryError as e:
                 logger.error(
                     f"Error while trying to sync weekly rewards for {streamer}: {e}"
