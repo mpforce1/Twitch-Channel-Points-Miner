@@ -22,6 +22,7 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     PrioritySelector,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
+from TwitchChannelPointsMiner.classes.WeeklyRewardsProgressor import WeeklyRewardsProgressor
 from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPrediction
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
@@ -592,14 +593,18 @@ class TwitchChannelPointsMiner:
                 sync_weekly_rewards_thread.start()
                 self.background_tasks.append(sync_weekly_rewards_thread)
 
-                vod_watcher_max_concurrent = 2
-                vod_watcher_thread = threading.Thread(
-                    target=self.twitch.weekly_rewards_watcher,
-                    args=(self.streamers, vod_watcher_max_concurrent)
+                weekly_rewards_progressor_max_concurrent = 2
+                weekly_rewards_max_seconds_clips = 30
+                weekly_rewards_max_minutes_vod = 8
+                weekly_rewards_progressor_thread = WeeklyRewardsProgressor(
+                    twitch=self.twitch,
+                    streamers=self.streamers,
+                    max_concurrent_watch=weekly_rewards_progressor_max_concurrent,
+                    max_seconds_clips=weekly_rewards_max_seconds_clips,
+                    max_minutes_vod=weekly_rewards_max_minutes_vod,
                 )
-                vod_watcher_thread.name = "Weekly Rewards VOD Watcher"
-                vod_watcher_thread.start()
-                self.background_tasks.append(vod_watcher_thread)
+                weekly_rewards_progressor_thread.start()
+                self.background_tasks.append(weekly_rewards_progressor_thread)
 
             # Main loop, sleeps and checks on background tasks/running state
             main_loop_period = timedelta(seconds=30).total_seconds()

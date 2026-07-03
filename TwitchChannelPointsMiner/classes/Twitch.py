@@ -10,7 +10,6 @@ import re
 import string
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed, Future
-from itertools import islice
 from pathlib import Path
 from secrets import choice, token_hex
 
@@ -809,18 +808,16 @@ class Twitch(object):
             f"Simulating Clip playback for {streamer} for up to {max_wait_seconds} seconds",
             extra={"emoji": ":paperclip:"},
         )
-        recent_clips = None
+        top_clips = None
         try:
-            recent_clips = self.gql.clips(streamer.username)
+            top_clips = self.gql.clips(streamer.username)
         except RetryError as e:
-            logger.error(
-                f"Error while trying to get a recent clip id for {streamer}: {e}"
-            )
-        if recent_clips is None or len(recent_clips.clips.edges) == 0:
+            logger.error(f"Error while trying to get a Clip for {streamer}: {e}")
+        if top_clips is None or len(top_clips.clips.edges) == 0:
             logger.debug(f"No Clip available for {streamer}")
             return False
         clip = None
-        for edge in recent_clips.clips.edges:
+        for edge in top_clips.clips.edges:
             if edge.node.duration_seconds > 5:
                 clip = edge.node
                 break
@@ -829,9 +826,9 @@ class Twitch(object):
                     f"Rejecting Clip {edge.node.title}, it's shorter than 5 seconds ({edge.node.duration_seconds}s)"
                 )
         if clip is None:
-            logger.debug(f"All {len(recent_clips.clips.edges)} Clips too short")
+            logger.debug(f"All {len(top_clips.clips.edges)} Clips are too short")
             return False
-        logger.debug(f"Found Clip {clip.title} to watch")
+        logger.debug(f"Attempting to watch Clip '{clip.title}'")
 
         # Ensure we have the spade url
         if streamer.stream.spade_url is None:
@@ -840,26 +837,30 @@ class Twitch(object):
             logger.debug(f"Unable to get Spade URL for {streamer}")
             return False
 
-        # Watch the clip
+        # Watch the clip in 5s chunks
+        max_watch_seconds = min(max_wait_seconds, clip.duration_seconds)
+        start_time = time.monotonic()
         play_session_id = create_random_alphanumeric_id(32)
         self.send_clip_video_play(streamer, clip, play_session_id)
-        interruptible_sleep(
-            lambda: self.running and streamer.missing_weekly_reward(),
-            duration=5,
-        )
-        self.send_clip_second_watched(
-            streamer, clip, play_session_id, seconds_watched=5
-        )
-
-        # It can take 15s or so to get the reward
-        interruptible_sleep(
-            lambda: self.running and streamer.missing_weekly_reward(),
-            duration=max_wait_seconds,
-        )
+        seconds_watched = 5
+        while (
+            self.running
+            and streamer.missing_weekly_reward()
+            and time.monotonic() - start_time < max_watch_seconds
+        ):
+            interruptible_sleep(
+                lambda: self.running and streamer.missing_weekly_reward(),
+                duration=5,
+            )
+            self.send_clip_second_watched(
+                streamer, clip, play_session_id, seconds_watched=seconds_watched
+            )
+            seconds_watched += 5
 
         if not streamer.missing_weekly_reward():
             logger.info(f"Weekly Reward obtained for {streamer} via Clip")
             return True
+        logger.debug(f"Unable to progress Weekly Rewards for {streamer} via Clips")
         return False
 
     def send_vod_minutes_watched(self, streamer: Streamer, vod_id: str):
@@ -978,7 +979,7 @@ class Twitch(object):
             ":rose:",
             ":bouquet:",
         ]
-        # Default emoji for if they start doing longer events
+        # Default emoji for if Twitch starts doing longer events
         emoji = emojis[current_tier] if current_tier < len(emojis) else ":calendar:"
         logger.info(
             f"Weekly Reward update for {streamer}: {notification.notification_type}. "
@@ -1026,44 +1027,6 @@ class Twitch(object):
                 logger.error(
                     f"Error while trying to sync weekly rewards for {streamer}: {e}"
                 )
-
-    def weekly_rewards_watcher(
-        self, streamers: list[Streamer], max_concurrent_watch: int = 2
-    ):
-        """
-        Periodically checks all Streamers weekly reward status and attempts to watch VDOs for those that haven't yet
-        advanced theirs this week.
-        :param streamers: The Streamers to monitor.
-        :param max_concurrent_watch: The maximum amount to watch concurrently.
-        :return:
-        """
-        while self.running:
-            target_streamers = list(
-                streamer
-                for streamer in streamers
-                # Don't watch VODs for streamers that are online, we may be able to advance via watching live
-                if streamer.is_online is False
-                # Only watch VODs for streamers that are missing the reward
-                and streamer.missing_weekly_reward()
-            )
-            random.shuffle(target_streamers)
-            # TODO watch concurrently with periodic short circuit
-            for streamer in islice(target_streamers, max_concurrent_watch):
-                # Short circuit to avoid playing back many vods before exiting
-                if self.running:
-                    # TODO provide a reason we didn't make progress
-                    if (
-                        not self.simulate_clip_playback(streamer)
-                        and self.running
-                        and streamer.missing_weekly_reward()
-                    ):
-                        if not self.simulate_vod_playback(streamer):
-                            logger.info(
-                                f"Unable to progress weekly reward with either Clips or VODs for {streamer}",
-                                extra={"emoji": ":crying_face:"},
-                            )
-                time.sleep(1)
-            interruptible_sleep(running_flag=lambda: self.running, duration=20)
 
     # === CHANNEL POINTS / PREDICTION === #
     # Load the amount of current points for a channel, check if a bonus is available
