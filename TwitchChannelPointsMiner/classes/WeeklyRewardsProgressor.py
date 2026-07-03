@@ -6,7 +6,6 @@ from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
 import logging
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from itertools import islice
-import random
 from threading import Thread
 
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class Result(TypedDict):
-    type: str
+    success: bool
     reason: str
 
 
@@ -29,18 +28,25 @@ class WeeklyRewardsProgressor(Thread):
         max_concurrent_watch: int = 2,
         max_seconds_clips: int = 30,
         max_minutes_vod: int = 8,
+        loop_interval_seconds: int = 20,
     ):
         super().__init__(target=self.watch_loop, name="Weekly Rewards Progressor")
         self.twitch = twitch
         """ The Twitch API instance. """
         self.streamers = streamers
         """ The Streamers to monitor. """
+        if max_concurrent_watch <= 0:
+            raise ValueError(
+                f"max_concurrent_watch must be greater than 0: {max_concurrent_watch}"
+            )
         self.max_concurrent_watch = max_concurrent_watch
         """ The maximum amount to watch concurrently. """
         self.max_seconds_clips = max_seconds_clips
         """ The maximum amount of time to wait for watching a clip to trigger progress. """
         self.max_minutes_vod = max_minutes_vod
         """ The maximum amount of time to watch a vod. """
+        self.loop_interval_seconds = loop_interval_seconds
+        """ The amount of seconds in between iterations of the watch loop. """
         self._full_timeout = (self.max_minutes_vod * 60) + self.max_seconds_clips + 10
 
     def select_streamers(self):
@@ -56,7 +62,6 @@ class WeeklyRewardsProgressor(Thread):
             # Only watch VODs for streamers that are missing the reward
             and streamer.missing_weekly_reward()
         )
-        random.shuffle(target_streamers)
         return list(islice(target_streamers, self.max_concurrent_watch))
 
     def do_watch(self, streamer: Streamer) -> Result:
@@ -68,28 +73,25 @@ class WeeklyRewardsProgressor(Thread):
         if self.twitch.simulate_clip_playback(
             streamer, max_wait_seconds=self.max_seconds_clips
         ):
-            return Result(type="success", reason="clip")
+            return Result(success=True, reason="clip")
         elif not self.twitch.running:
-            return Result(type="failure", reason="miner not running")
-        elif not streamer.missing_weekly_reward():
-            # Assume it was the clip if we've gained the reward this soon
-            return Result(type="failure", reason="clip")
+            return Result(success=False, reason="miner not running")
+        elif self.twitch.simulate_vod_playback(
+            streamer, max_minutes=self.max_minutes_vod
+        ):
+            return Result(success=True, reason="vod")
+        elif not self.twitch.running:
+            return Result(success=False, reason="miner not running")
         else:
-            if self.twitch.simulate_vod_playback(
-                streamer, max_minutes=self.max_minutes_vod
-            ):
-                return Result(type="success", reason="vod")
-            else:
-                return Result(type="failure", reason="both failed")
+            return Result(success=False, reason="both failed")
 
-    @staticmethod
-    def process_result(streamer: Streamer, result: Result):
+    def process_result(self, streamer: Streamer, result: Result):
         """
         Processes a result of a watch attempt.
         :param streamer: The Streamer we attempted to watch.
         :param result: The result to process.
         """
-        if result["type"] == "success":
+        if result["success"]:
             logger.info(
                 f"Weekly Reward obtained for {streamer} via {result["reason"]}",
                 extra={"emoji": ":grinning_face:"},
@@ -119,10 +121,11 @@ class WeeklyRewardsProgressor(Thread):
         if self.max_concurrent_watch == 1:
             while self.twitch.running:
                 target_streamers = self.select_streamers()
-                if len(target_streamers) == 1:
+                if len(target_streamers) > 0:
                     self.watch_single(target_streamers[0])
                 interruptible_sleep(
-                    running_flag=lambda: self.twitch.running, duration=20
+                    running_flag=lambda: self.twitch.running,
+                    duration=self.loop_interval_seconds,
                 )
         else:
             with ThreadPoolExecutor(
@@ -157,5 +160,6 @@ class WeeklyRewardsProgressor(Thread):
                         self.watch_single(target_streamers[0])
 
                     interruptible_sleep(
-                        running_flag=lambda: self.twitch.running, duration=20
+                        running_flag=lambda: self.twitch.running,
+                        duration=self.loop_interval_seconds,
                     )

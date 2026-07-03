@@ -857,11 +857,7 @@ class Twitch(object):
             )
             seconds_watched += 5
 
-        if not streamer.missing_weekly_reward():
-            logger.info(f"Weekly Reward obtained for {streamer} via Clip")
-            return True
-        logger.debug(f"Unable to progress Weekly Rewards for {streamer} via Clips")
-        return False
+        return not streamer.missing_weekly_reward()
 
     def send_vod_minutes_watched(self, streamer: Streamer, vod_id: str):
         return self.send_spade_payload(
@@ -936,7 +932,6 @@ class Twitch(object):
         while self.running and time.monotonic() - overall_start_time <= max_seconds:
             # TODO make condition a Callable arg to make it more generically usable
             if not streamer.missing_weekly_reward():
-                logger.info(f"Weekly Reward obtained for {streamer} via VOD")
                 return True
             start_time = time.monotonic()
             if self.send_vod_minutes_watched(streamer, vod_id):
