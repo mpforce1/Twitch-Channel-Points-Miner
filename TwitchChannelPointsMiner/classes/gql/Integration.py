@@ -35,6 +35,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.GetIdFromLogin import (
 )
 from TwitchChannelPointsMiner.classes.gql.data.response.PlaybackAccessToken import (
     PlaybackAccessTokenResponse,
+    VideoPlaybackAccessToken,
 )
 from TwitchChannelPointsMiner.classes.gql.data.response.Predictions import (
     MakePredictionResponse,
@@ -465,6 +466,31 @@ class GQL:
             GQLOperations.PlaybackAccessToken["operationName"],
             json_data,
             self.parser.parse_playback_access_token_response,
+        )
+
+    def get_video_playback_access_token(
+        self, username: str, vod_id: str
+    ) -> VideoPlaybackAccessToken:
+        """
+        Gets a playback access token for the streamer with the given username.
+        :param username: The username of the streamer.
+        :param vod_id: The ID of the VOD to access, leave as None to access a Stream.
+        :return: The playback access token.
+        :raises RetryError: If one or more errors occurred while attempting the request.
+        """
+        json_data = copy.deepcopy(GQLOperations.PlaybackAccessToken)
+        json_data["variables"] = {
+            "login": username,
+            "isLive": False,
+            "isVod": True,
+            "vodID": vod_id,
+            "playerType": "site",
+            "platform": "web",
+        }
+        return self.post_gql_request_single(
+            GQLOperations.PlaybackAccessToken["operationName"],
+            json_data,
+            self.parser.parse_vod_playback_access_token_response,
         )
 
     def get_channel_points_context(self, username: str) -> ChannelPointsContextResponse:

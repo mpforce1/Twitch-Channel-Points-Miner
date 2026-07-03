@@ -11,7 +11,9 @@ from TwitchChannelPointsMiner.classes.Settings import Events, Settings, Streamer
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings, DelayMode
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
+from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.gql import Properties
+from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import WeeklyRewards
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
@@ -119,6 +121,8 @@ class Streamer(object):
         "streamer_url",
         "gift_sub",
         "weekly_rewards",
+        "clips",
+        "vods",
         "mutex",
     ]
 
@@ -137,6 +141,8 @@ class Streamer(object):
         source: StreamerSource = StreamerSource.Streamers,
         gift_sub: GiftSub | None = None,
         weekly_rewards: WeeklyRewards | None = None,
+        clips: list[Clip] | None = None,
+        vods: list[Video] | None = None,
     ):
         self.username: str = username.lower().strip()
         self.channel_id: str = channel_id if channel_id is not None else ""
@@ -156,6 +162,8 @@ class Streamer(object):
         self.irc_chat = None
         self.gift_sub = gift_sub
         self.weekly_rewards = weekly_rewards
+        self.clips = clips if clips is not None else []
+        self.vods = vods if vods is not None else []
 
         self.stream = stream if stream is not None else Stream()
 
