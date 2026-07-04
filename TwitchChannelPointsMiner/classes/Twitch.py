@@ -1060,16 +1060,14 @@ class Twitch(object):
                 clips_response = self.gql.clips(streamer.username, limit=10)
                 vods_response = self.gql.recent_broadcasts(streamer.username, limit=5)
                 # Update the VOD viewable state
-                # TODO, delay this until VOD views are needed
                 vods = [Video(edge=edge.node) for edge in vods_response.videos.edges]
-                for video in vods:
-                    video.viewable = self.vod_viewable(streamer, video)
                 streamer.clips = [clip.node for clip in clips_response.clips.edges]
                 streamer.vods = vods
             except RetryError as e:
                 logger.error(
                     f"Error while trying to sync weekly rewards for {streamer}: {e}"
                 )
+            time.sleep(1)
 
     # === CHANNEL POINTS / PREDICTION === #
     # Load the amount of current points for a channel, check if a bonus is available

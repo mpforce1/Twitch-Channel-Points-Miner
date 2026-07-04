@@ -90,17 +90,16 @@ class WeeklyRewardsProgressor(Thread):
             logger.debug(f"No VOD available for {streamer}")
             return None
         for video in recent_broadcasts:
-            if not video.viewable:
+            if not self.twitch.vod_viewable(streamer, video):
                 logger.debug(f"rejecting VOD {video.edge.id}, it's not viewable (probably subscriber-only)")
                 continue
-
             vod = video.edge
-            if vod.length_seconds > 6 * 60:
-                return vod
-            else:
+            if vod.length_seconds < 6 * 60:
                 logger.debug(
                     f"Rejecting VOD {vod.id}, it's shorter than 6 minutes ({vod.length_seconds}s)"
                 )
+            else:
+                return vod
         logger.debug(f"All {len(recent_broadcasts)} recent VODs too short")
         return None
 
@@ -131,7 +130,7 @@ class WeeklyRewardsProgressor(Thread):
                 return Result(success=False, reason="vod timed out")
         if vod is None:
             return Result(
-                success=False, reason="clip timed out and streamer has no vods"
+                success=False, reason="clip timed out and streamer has no viewable vods"
             )
         return Result(success=False, reason="clip and vod both timed out")
 
