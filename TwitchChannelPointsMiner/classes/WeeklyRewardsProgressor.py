@@ -1,14 +1,14 @@
-from concurrent.futures import ALL_COMPLETED
-from concurrent.futures import wait
-from concurrent.futures.thread import ThreadPoolExecutor
-from typing import TypedDict
-from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
 import logging
-from TwitchChannelPointsMiner.classes.Twitch import Twitch
+import time
+from concurrent.futures import Future
+from concurrent.futures.thread import ThreadPoolExecutor
 from itertools import islice
 from threading import Thread
+from typing import TypedDict
 
+from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 class Result(TypedDict):
     success: bool
     reason: str
+
+
+class Slot:
+    def __init__(self, streamer: Streamer, future: Future[Result], start_time: float):
+        self.streamer = streamer
+        self.future = future
+        self.start_time = start_time
 
 
 class WeeklyRewardsProgressor(Thread):
@@ -26,9 +33,9 @@ class WeeklyRewardsProgressor(Thread):
         twitch: Twitch,
         streamers: list[Streamer],
         max_concurrent_watch: int = 2,
-        max_seconds_clips: int = 30,
-        max_minutes_vod: int = 8,
-        loop_interval_seconds: int = 20,
+        max_seconds_clips: float = 30,
+        max_seconds_vods: float = 8 * 60,
+        loop_interval_seconds: float = 20,
     ):
         super().__init__(target=self.watch_loop, name="Weekly Rewards Progressor")
         self.twitch = twitch
@@ -43,11 +50,11 @@ class WeeklyRewardsProgressor(Thread):
         """ The maximum amount to watch concurrently. """
         self.max_seconds_clips = max_seconds_clips
         """ The maximum amount of time to wait for watching a clip to trigger progress. """
-        self.max_minutes_vod = max_minutes_vod
+        self.max_seconds_vods = max_seconds_vods
         """ The maximum amount of time to watch a vod. """
         self.loop_interval_seconds = loop_interval_seconds
         """ The amount of seconds in between iterations of the watch loop. """
-        self._full_timeout = (self.max_minutes_vod * 60) + self.max_seconds_clips + 10
+        self._full_timeout = self.max_seconds_vods + self.max_seconds_clips + 10
 
     def select_streamers(self):
         """
@@ -91,7 +98,9 @@ class WeeklyRewardsProgressor(Thread):
             return None
         for video in recent_broadcasts:
             if not self.twitch.vod_viewable(streamer, video):
-                logger.debug(f"rejecting VOD {video.edge.id}, it's not viewable (probably subscriber-only)")
+                logger.debug(
+                    f"rejecting VOD {video.edge.id}, it's not viewable (probably subscriber-only)"
+                )
                 continue
             vod = video.edge
             if vod.length_seconds < 6 * 60:
@@ -111,14 +120,14 @@ class WeeklyRewardsProgressor(Thread):
         """
         clip = self.get_clip(streamer)
         if clip is not None and self.twitch.simulate_clip_playback(
-            streamer, clip, max_wait_seconds=self.max_seconds_clips
+            streamer, clip, max_watch_seconds=self.max_seconds_clips
         ):
             return Result(success=True, reason="clip")
         if not self.twitch.running:
             return Result(success=False, reason="miner not running")
         vod = self.get_vod(streamer)
         if vod is not None and self.twitch.simulate_vod_playback(
-            streamer, vod, max_minutes=self.max_minutes_vod
+            streamer, vod, max_watch_seconds=self.max_seconds_vods
         ):
             return Result(success=True, reason="vod")
         if not self.twitch.running:
@@ -161,6 +170,46 @@ class WeeklyRewardsProgressor(Thread):
         except Exception as e:
             logger.error(f"Error when trying to get Weekly Reward for {streamer}: {e}")
 
+    def manage_slots(self, slots: list[Slot | None]):
+        for slot_index in range(len(slots)):
+            slot = slots[slot_index]
+            if slot is not None:
+                try:
+                    if slot.future.done():
+                        slots[slot_index] = None
+                        self.process_result(slot.streamer, slot.future.result())
+                    elif time.monotonic() - slot.start_time > self._full_timeout:
+                        slots[slot_index] = None
+                        logger.error(
+                            f"Unable to get Weekly Reward for {slot.streamer}, took more than {self._full_timeout} seconds",
+                        )
+                        slot.future.cancel()
+                except Exception as e:
+                    logger.error(
+                        f"Error when trying to get Weekly Reward for {slot.streamer}: {e}"
+                    )
+
+    def watch_multiple(self, thread_pool: ThreadPoolExecutor, slots: list[Slot | None]):
+        # Select new streamers to watch
+        target_streamers = self.select_streamers()
+        # When there are no targets we don't need to do anything
+        if len(target_streamers) == 0:
+            pass
+        # When there's only 1 target and all slots are empty, we can do this inline sync
+        elif len(target_streamers) == 1 and all(slot is None for slot in slots):
+            self.watch_single(target_streamers[0])
+        # When there's at least 1 target and at least 1 filled slot we must use the slots
+        elif len(target_streamers) > 1 and any(slot is None for slot in slots):
+            for streamer, index in zip(
+                target_streamers,
+                (index for index in range(len(slots)) if slots[index] is None),
+            ):
+                slots[index] = Slot(
+                    streamer,
+                    thread_pool.submit(self.do_watch, streamer),
+                    time.monotonic(),
+                )
+
     def watch_loop(self):
         """
         Periodically checks all Streamers weekly reward status and attempts to watch Clips/VODs for those that haven't
@@ -181,33 +230,12 @@ class WeeklyRewardsProgressor(Thread):
                 max_workers=self.max_concurrent_watch,
                 thread_name_prefix="weekly_reawrds_watcher",
             ) as thread_pool:
+                slots: list[Slot | None] = [
+                    None for _ in range(self.max_concurrent_watch)
+                ]
                 while self.twitch.running:
-                    target_streamers = self.select_streamers()
-                    if len(target_streamers) > 1:
-                        futures = [
-                            thread_pool.submit(self.do_watch, streamer)
-                            for streamer in target_streamers
-                        ]
-                        wait(
-                            futures,
-                            timeout=self._full_timeout,
-                            return_when=ALL_COMPLETED,
-                        )
-                        for streamer, future in zip(target_streamers, futures):
-                            try:
-                                self.process_result(streamer, future.result())
-                            except TimeoutError:
-                                logger.error(
-                                    f"Unable to get Weekly Reward for {streamer}, took more than {self._full_timeout} seconds",
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Error when trying to get Weekly Reward for {streamer}: {e}"
-                                )
-                    # When there's only 1 target, we don't need to use the pool
-                    elif len(target_streamers) == 1:
-                        self.watch_single(target_streamers[0])
-
+                    self.manage_slots(slots)
+                    self.watch_multiple(thread_pool, slots)
                     interruptible_sleep(
                         running_flag=lambda: self.twitch.running,
                         duration=self.loop_interval_seconds,
