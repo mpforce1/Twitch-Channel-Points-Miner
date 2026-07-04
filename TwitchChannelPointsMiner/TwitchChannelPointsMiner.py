@@ -611,17 +611,17 @@ class TwitchChannelPointsMiner:
                 self.background_tasks.append(sync_clips_and_vods_thread)
 
                 # Progressor
-                weekly_rewards_progressor_max_concurrent = 2
+                weekly_rewards_progressor_max_concurrent = 3
                 weekly_rewards_max_seconds_clips = 30
-                weekly_rewards_max_minutes_vod = 8
+                weekly_rewards_max_seconds_vods = 8 * 60
                 weekly_rewards_loop_interval_seconds = 20
                 weekly_rewards_progressor_thread = WeeklyRewardsProgressor(
                     twitch=self.twitch,
                     streamers=self.streamers,
                     max_concurrent_watch=weekly_rewards_progressor_max_concurrent,
                     max_seconds_clips=weekly_rewards_max_seconds_clips,
-                    max_minutes_vod=weekly_rewards_max_minutes_vod,
-                    loop_interval_seconds=weekly_rewards_loop_interval_seconds
+                    max_seconds_vods=weekly_rewards_max_seconds_vods,
+                    loop_interval_seconds=weekly_rewards_loop_interval_seconds,
                 )
                 weekly_rewards_progressor_thread.start()
                 self.background_tasks.append(weekly_rewards_progressor_thread)

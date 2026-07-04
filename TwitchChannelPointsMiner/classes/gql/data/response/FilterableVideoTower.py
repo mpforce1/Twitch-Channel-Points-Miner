@@ -1,4 +1,5 @@
 from TwitchChannelPointsMiner.classes.gql.data.response.Pagination import Paginated
+from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
 
 class VideoEdge:
@@ -11,6 +12,9 @@ class VideoEdge:
         self.id = _id
         self.broadcast_id = broadcast_id
         self.length_seconds = length_seconds
+
+    def __repr__(self):
+        return simple_repr(self)
 
 
 class Videos:

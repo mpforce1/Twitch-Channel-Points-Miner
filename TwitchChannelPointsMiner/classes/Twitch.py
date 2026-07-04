@@ -869,16 +869,18 @@ class Twitch(object):
             name="second watched",
         )
 
-    def simulate_clip_playback(self, streamer: Streamer, clip: Clip, max_wait_seconds: int = 20):
+    def simulate_clip_playback(
+        self, streamer: Streamer, clip: Clip, max_watch_seconds: float = 20
+    ):
         """
         Simulates the user watching a clip.
         :param streamer: The Streamer for whom to watch a clip.
         :param clip: The Clip to watch.
-        :param max_wait_seconds: The maximum number of seconds to wait for the clip to be processed as watched.
+        :param max_watch_seconds: The maximum number of seconds to wait for the clip to be processed as watched.
         :return: True if playback was successful, False otherwise.
         """
         logger.info(
-            f"Simulating Clip playback for {streamer} for up to {max_wait_seconds} seconds",
+            f"Simulating Clip playback for {streamer} for up to {max_watch_seconds} seconds",
             extra={"emoji": ":paperclip:"},
         )
         logger.debug(f"Attempting to watch Clip '{clip.title}'")
@@ -891,7 +893,7 @@ class Twitch(object):
             return False
 
         # Watch the clip in 5s chunks
-        max_watch_seconds = min(max_wait_seconds, clip.duration_seconds)
+        max_watch_seconds = min(max_watch_seconds, clip.duration_seconds)
         start_time = time.monotonic()
         play_session_id = create_random_alphanumeric_id(32)
         self.send_clip_video_play(streamer, clip, play_session_id)
@@ -933,16 +935,18 @@ class Twitch(object):
             name="VOD minute watched",
         )
 
-    def simulate_vod_playback(self, streamer: Streamer, vod: VideoEdge, max_minutes: int = 8):
+    def simulate_vod_playback(
+        self, streamer: Streamer, vod: VideoEdge, max_watch_seconds: float = 8
+    ):
         """
         Simulates the user watching a VOD.
         :param streamer: The Streamer for whom to watch a VOD.
         :param vod: The VOD to watch.
-        :param max_minutes: The maximum number of minutes to simulate watching.
+        :param max_watch_seconds: The maximum number of minutes to simulate watching.
         :return: True if the playback was successful, False otherwise.
         """
         logger.info(
-            f"Simulating VOD playback for {streamer} for up to {max_minutes} minutes",
+            f"Simulating VOD playback for {streamer} for up to {max_watch_seconds} seconds",
             extra={"emoji": ":clapper_board:"},
         )
 
@@ -956,9 +960,8 @@ class Twitch(object):
         # Watch the VOD
         accepted = 0
         overall_start_time = time.monotonic()
-        max_seconds = max_minutes * 60
         watch_interval = 60
-        while self.running and time.monotonic() - overall_start_time <= max_seconds:
+        while self.running and time.monotonic() - overall_start_time <= max_watch_seconds:
             # TODO make condition a Callable arg to make it more generically usable
             if not streamer.missing_weekly_reward():
                 return True
@@ -978,7 +981,7 @@ class Twitch(object):
                 )
 
         logger.debug(
-            f"Sent {accepted} VOD watch requests for {streamer} over {max_minutes} minutes"
+            f"Sent {accepted} VOD watch requests for {streamer} over {max_watch_seconds} minutes"
         )
         return False
 
