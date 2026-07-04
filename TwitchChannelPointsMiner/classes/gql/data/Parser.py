@@ -98,6 +98,8 @@ def error_parser(value: Any) -> Error:
     recoverable = message in [
         "service timeout",
         "service unavailable",
+        # service error is potentially recoverable
+        "service error",
         "context deadline exceeded",
         "PersistedQueryUnavailable",
     ]
