@@ -198,13 +198,7 @@ class WeeklyRewardsProgressor(Thread):
             set(slot.streamer.channel_id for slot in slots if slot is not None)
         )
         # When there are no targets we don't need to do anything
-        if len(target_streamers) == 0:
-            pass
-        # When there's only 1 target and all slots are empty, we can do this inline sync
-        elif len(target_streamers) == 1 and all(slot is None for slot in slots):
-            self.watch_single(target_streamers[0])
-        # When there's at least 1 target and at least 1 filled slot we must use the slots
-        else:
+        if len(target_streamers) > 0:
             for streamer, index in zip(
                 target_streamers,
                 (index for index in range(len(slots)) if slots[index] is None),
