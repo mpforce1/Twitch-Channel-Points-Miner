@@ -187,6 +187,7 @@ class WeeklyRewardsProgressor(Thread):
                         )
                         slot.future.cancel()
                 except Exception as e:
+                    slots[slot_index] = None
                     logger.error(
                         f"Error when trying to get Weekly Reward for {slot.streamer}: {e}"
                     )
@@ -203,7 +204,7 @@ class WeeklyRewardsProgressor(Thread):
         elif len(target_streamers) == 1 and all(slot is None for slot in slots):
             self.watch_single(target_streamers[0])
         # When there's at least 1 target and at least 1 filled slot we must use the slots
-        elif len(target_streamers) > 1 and any(slot is None for slot in slots):
+        else:
             for streamer, index in zip(
                 target_streamers,
                 (index for index in range(len(slots)) if slots[index] is None),
