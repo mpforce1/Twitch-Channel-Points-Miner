@@ -936,13 +936,13 @@ class Twitch(object):
         )
 
     def simulate_vod_playback(
-        self, streamer: Streamer, vod: VideoEdge, max_watch_seconds: float = 8
+        self, streamer: Streamer, vod: VideoEdge, max_watch_seconds: float = 8 * 60
     ):
         """
         Simulates the user watching a VOD.
         :param streamer: The Streamer for whom to watch a VOD.
         :param vod: The VOD to watch.
-        :param max_watch_seconds: The maximum number of minutes to simulate watching.
+        :param max_watch_seconds: The maximum number of seconds to simulate watching.
         :return: True if the playback was successful, False otherwise.
         """
         logger.info(
