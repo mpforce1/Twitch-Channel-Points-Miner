@@ -56,7 +56,7 @@ class WeeklyRewardsProgressor(Thread):
         """ The amount of seconds in between iterations of the watch loop. """
         self._full_timeout = self.max_seconds_vods + self.max_seconds_clips + 10
 
-    def select_streamers(self):
+    def select_streamers(self, watching: set[str]):
         """
         Selects Streamers to attempt to progress.
         :return: The Streamers.
@@ -73,8 +73,10 @@ class WeeklyRewardsProgressor(Thread):
                 self.get_clip(streamer) is not None
                 or self.get_vod(streamer) is not None
             )
+            # Only select streamers that aren't currently being watched
+            and streamer.channel_id not in watching
         )
-        return list(islice(target_streamers, self.max_concurrent_watch))
+        return list(islice(target_streamers, self.max_concurrent_watch - len(watching)))
 
     def get_clip(self, streamer: Streamer):
         top_clips = streamer.clips
@@ -191,7 +193,9 @@ class WeeklyRewardsProgressor(Thread):
 
     def watch_multiple(self, thread_pool: ThreadPoolExecutor, slots: list[Slot | None]):
         # Select new streamers to watch
-        target_streamers = self.select_streamers()
+        target_streamers = self.select_streamers(
+            set(slot.streamer.channel_id for slot in slots if slot is not None)
+        )
         # When there are no targets we don't need to do anything
         if len(target_streamers) == 0:
             pass
@@ -218,7 +222,7 @@ class WeeklyRewardsProgressor(Thread):
         # When max concurrent is 1 we don't need a thread pool
         if self.max_concurrent_watch == 1:
             while self.twitch.running:
-                target_streamers = self.select_streamers()
+                target_streamers = self.select_streamers(set())
                 if len(target_streamers) > 0:
                     self.watch_single(target_streamers[0])
                 interruptible_sleep(

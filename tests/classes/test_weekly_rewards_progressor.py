@@ -135,20 +135,22 @@ def streamer_setting_disabled(username: str, channel_id: str):
 
 test_select_streamers_data = [
     # Test no streamers selects nothing
-    ([], 1, []),
-    ([], 2, []),
+    ([], 1, set(), []),
+    ([], 2, set(), []),
     # Test all unwatchable selects nothing
-    ([streamer_unwatchable("streamer1", "123456789")], 1, []),
-    ([streamer_unwatchable("streamer1", "123456789")], 2, []),
+    ([streamer_unwatchable("streamer1", "123456789")], 1, set(), []),
+    ([streamer_unwatchable("streamer1", "123456789")], 2, set(), []),
     # Test watchable gets selected up to limit
     (
         [streamer_watchable("streamer1", "123456789")],
         1,
+        set(),
         ["123456789"],
     ),
     (
         [streamer_watchable("streamer1", "123456789")],
         2,
+        set(),
         ["123456789"],
     ),
     (
@@ -157,6 +159,7 @@ test_select_streamers_data = [
             streamer_watchable("streamer2", channel_id="987654321"),
         ],
         1,
+        set(),
         ["123456789"],
     ),
     (
@@ -165,6 +168,7 @@ test_select_streamers_data = [
             streamer_watchable("streamer2", channel_id="987654321"),
         ],
         2,
+        set(),
         ["123456789", "987654321"],
     ),
     (
@@ -174,6 +178,7 @@ test_select_streamers_data = [
             streamer_watchable("streamer3", channel_id="963258741"),
         ],
         2,
+        set(),
         ["123456789", "987654321"],
     ),
     (
@@ -183,6 +188,7 @@ test_select_streamers_data = [
             streamer_watchable("streamer3", channel_id="963258741"),
         ],
         3,
+        set(),
         ["123456789", "987654321", "963258741"],
     ),
     # Test mix of watchable and unwatchable
@@ -192,6 +198,7 @@ test_select_streamers_data = [
             streamer_unwatchable("streamer2", channel_id="987654321"),
         ],
         2,
+        set(),
         ["123456789"],
     ),
     (
@@ -200,6 +207,7 @@ test_select_streamers_data = [
             streamer_watchable("streamer2", channel_id="987654321"),
         ],
         2,
+        set(),
         ["987654321"],
     ),
     # Tests streamers without clips and/or vods
@@ -233,6 +241,7 @@ test_select_streamers_data = [
             ),
         ],
         2,
+        set(),
         ["1"],
     ),
     (
@@ -273,15 +282,68 @@ test_select_streamers_data = [
             ),
         ],
         2,
+        set(),
         ["1"],
+    ),
+    # Test currently watching
+    (
+        [
+            streamer_watchable("a", "a"),
+            streamer_watchable("b", "b"),
+            streamer_watchable("c", "c"),
+            streamer_watchable("d", "d"),
+            streamer_watchable("e", "e"),
+        ],
+        4,
+        {"a"},
+        ["b", "c", "d"],
+    ),
+    (
+        [
+            streamer_watchable("a", "a"),
+            streamer_watchable("b", "b"),
+            streamer_watchable("c", "c"),
+            streamer_watchable("d", "d"),
+            streamer_watchable("e", "e"),
+        ],
+        4,
+        {"a", "d"},
+        ["b", "c"],
+    ),
+    (
+        [
+            streamer_watchable("a", "a"),
+            streamer_watchable("b", "b"),
+            streamer_watchable("c", "c"),
+            streamer_watchable("d", "d"),
+            streamer_watchable("e", "e"),
+        ],
+        5,
+        {"a", "d"},
+        ["b", "c", "e"],
+    ),
+    (
+        [
+            streamer_watchable("a", "a"),
+            streamer_watchable("b", "b"),
+            streamer_watchable("c", "c"),
+            streamer_watchable("d", "d"),
+            streamer_watchable("e", "e"),
+        ],
+        3,
+        {"a", "b", "d"},
+        [],
     ),
 ]
 
 
 @pytest.mark.parametrize(
-    "streamers,max_concurrent_watch,expected", test_select_streamers_data
+    "streamers,max_concurrent_watch,currently_watching,expected",
+    test_select_streamers_data,
 )
-def test_select_streamers(twitch, streamers, max_concurrent_watch, expected):
+def test_select_streamers(
+    twitch, streamers, max_concurrent_watch, currently_watching: set[str], expected
+):
     max_seconds_clips = 30
     max_minutes_vod = 8
 
@@ -294,7 +356,8 @@ def test_select_streamers(twitch, streamers, max_concurrent_watch, expected):
     )
 
     assert [
-        streamer.channel_id for streamer in progressor.select_streamers()
+        streamer.channel_id
+        for streamer in progressor.select_streamers(currently_watching)
     ] == expected
 
 
