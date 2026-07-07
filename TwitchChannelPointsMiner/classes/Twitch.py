@@ -247,6 +247,7 @@ class Twitch(object):
             f"Sent VOD playlist request for {vod_id} for {streamer}, Status: {playlist_response.status_code}"
         )
         if playlist_response.status_code == 200:
+            video.viewable = True
             return True
         error = None
         try:

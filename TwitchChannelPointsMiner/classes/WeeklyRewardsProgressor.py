@@ -152,9 +152,8 @@ class WeeklyRewardsProgressor(Thread):
         :param result: The result to process.
         """
         if result["success"]:
-            logger.info(
-                f"Weekly Reward obtained for {streamer} via {result["reason"]}",
-                extra={"emoji": ":grinning_face:"},
+            logger.debug(
+                f"Weekly Reward obtained for {streamer} via {result["reason"]}"
             )
         else:
             logger.error(
@@ -208,6 +207,9 @@ class WeeklyRewardsProgressor(Thread):
                     thread_pool.submit(self.do_watch, streamer),
                     time.monotonic(),
                 )
+            logger.debug(
+                f"Slots post submit: {list(slot.streamer.username if slot is not None else 'None' for slot in slots)}"
+            )
 
     def watch_loop(self):
         """
