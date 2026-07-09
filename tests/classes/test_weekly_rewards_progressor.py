@@ -361,6 +361,42 @@ def test_select_streamers(
     ] == expected
 
 
+test_select_streamers_cooldown_data = [
+    ([], {}, 1, []),
+    ([streamer_watchable("a", "a")], {}, 1, ["a"]),
+    ([streamer_watchable("a", "a")], {"a": 0}, 1, []),
+    ([streamer_watchable("a", "a"), streamer_watchable("b", "b")], {"a": 0}, 1, ["b"]),
+]
+
+
+@pytest.mark.parametrize(
+    "streamers,cooldowns,max_concurrent_watch,expected",
+    test_select_streamers_cooldown_data,
+)
+def test_select_streamers_cooldown(
+    twitch,
+    streamers: list[Streamer],
+    cooldowns: dict[str, float],
+    max_concurrent_watch: int,
+    expected: list[str],
+):
+    max_seconds_clips = 30
+    max_minutes_vod = 8
+
+    progressor = WeeklyRewardsProgressor(
+        twitch=twitch,
+        streamers=streamers,
+        max_concurrent_watch=max_concurrent_watch,
+        max_seconds_clips=max_seconds_clips,
+        max_seconds_vods=max_minutes_vod,
+    )
+    progressor._cooldowns = cooldowns
+
+    assert [
+        streamer.channel_id for streamer in progressor.select_streamers(set())
+    ] == expected
+
+
 clip_watchable_a = Clip(
     _id="a", slug="slug-a", url="url-a", title="title-a", duration_seconds=10
 )
@@ -629,9 +665,85 @@ def test_do_watch(
     assert progressor.do_watch(streamer) == expected
 
 
-def test_process_result():
-    # Process result currently just logs, nothing to test
-    pass
+test_update_failures_data = [
+    # 0 failures
+    ("a", {}, {}, 0, 0, {}, {"a": 0}),
+    ("a", {}, {"b": 0}, 0, 0, {}, {"a": 0, "b": 0}),
+    # 1 failures
+    ("a", {}, {}, 1, 0, {}, {"a": 0}),
+    ("a", {}, {"b": 0}, 1, 0, {}, {"a": 0, "b": 0}),
+    # 2 failures
+    ("a", {}, {}, 2, 0, {"a": 1}, {}),
+    ("a", {"a": 1}, {}, 2, 0, {}, {"a": 0}),
+    ("a", {}, {"b": 0}, 2, 0, {"a": 1}, {"b": 0}),
+    # 3 failures
+    ("a", {}, {}, 3, 0, {"a": 1}, {}),
+    ("a", {"a": 1}, {}, 3, 0, {"a": 2}, {}),
+    ("a", {"a": 2}, {}, 3, 0, {}, {"a": 0}),
+]
+
+
+@pytest.mark.parametrize(
+    "streamer_id,failures,cooldowns,max_failures_per_streamer,current_time,expected_failures,expected_cooldowns",
+    test_update_failures_data,
+)
+def test_update_failures(
+    twitch,
+    streamer_id: str,
+    failures: dict[str, int],
+    cooldowns: dict[str, float],
+    max_failures_per_streamer: int,
+    current_time: float,
+    expected_failures: dict[str, int],
+    expected_cooldowns: dict[str, float],
+):
+    progressor = WeeklyRewardsProgressor(
+        twitch,
+        streamers=[],
+        max_failures_per_streamer=max_failures_per_streamer,
+    )
+    progressor._failures = failures
+    progressor._cooldowns = cooldowns
+
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(time, "monotonic", lambda: current_time)
+        progressor.update_failures(streamer_id)
+
+    assert progressor._failures == expected_failures
+    assert progressor._cooldowns == expected_cooldowns
+
+
+test_process_result_data = [
+    (Streamer("a", "a"), Result(success=True, reason=""), False, True, True),
+    (Streamer("a", "a"), Result(success=False, reason=""), True, False, False),
+]
+
+
+@pytest.mark.parametrize(
+    "streamer,result,expect_call_update_failures,expect_pop_failures,expect_pop_cooldowns",
+    test_process_result_data,
+)
+def test_process_result(
+    twitch,
+    streamer: Streamer,
+    result: Result,
+    expect_call_update_failures: bool,
+    expect_pop_failures: bool,
+    expect_pop_cooldowns: bool,
+):
+    progressor = WeeklyRewardsProgressor(twitch, streamers=[])
+    progressor.update_failures = MagicMock()
+    progressor._failures = MagicMock()
+    progressor._cooldowns = MagicMock()
+
+    progressor.process_result(streamer, result)
+
+    if expect_call_update_failures:
+        progressor.update_failures.assert_called_once_with(streamer.channel_id)
+    if expect_pop_failures:
+        progressor._failures.pop.assert_called_once_with(streamer.channel_id, None)
+    if expect_pop_cooldowns:
+        progressor._cooldowns.pop.assert_called_once_with(streamer.channel_id, None)
 
 
 def test_watch_single():
@@ -734,6 +846,45 @@ test_watch_multiple_manages_existing_tasks_data = [
 ]
 
 
+test_manage_cooldowns_data = [
+    # Empty cooldowns
+    ({}, 0, 1, {}),
+    ({}, 1000, 10, {}),
+    # Single cooldown
+    ({"a": 0}, 0, 10, {"a": 0}),
+    ({"a": 10}, 19, 10, {"a": 10}),
+    ({"a": 10}, 20, 10, {"a": 10}),
+    ({"a": 10}, 21, 10, {}),
+    # Multiple cooldowns
+    ({"a": 0, "b": 1}, 10, 10, {"a": 0, "b": 1}),
+    ({"a": 0, "b": 1}, 11, 10, {"b": 1}),
+    ({"a": 0, "b": 1}, 12, 10, {}),
+]
+
+
+@pytest.mark.parametrize(
+    "cooldowns,current_time,failure_cooldown_seconds,expected_cooldowns",
+    test_manage_cooldowns_data,
+)
+def test_manage_cooldowns(
+    twitch,
+    cooldowns: dict[str, float],
+    current_time: float,
+    failure_cooldown_seconds: float,
+    expected_cooldowns: dict[str, float],
+):
+    progressor = WeeklyRewardsProgressor(
+        twitch, streamers=[], failure_cooldown_seconds=failure_cooldown_seconds
+    )
+    progressor._cooldowns = cooldowns
+
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(time, "monotonic", lambda: current_time)
+        progressor.manage_cooldowns()
+
+    assert progressor._cooldowns == expected_cooldowns
+
+
 @pytest.mark.parametrize(
     "slots,current_time,max_seconds_clips,max_minutes_vod",
     test_watch_multiple_manages_existing_tasks_data,
@@ -759,6 +910,7 @@ def test_manage_slots(
     progressor.do_watch = MagicMock()
     progressor.watch_single = MagicMock()
     progressor.process_result = MagicMock()
+    progressor.update_failures = MagicMock()
 
     mock_slots = [slot.as_magic_mock() if slot is not None else None for slot in slots]
 
@@ -779,8 +931,9 @@ def test_manage_slots(
                 ) in progressor.process_result.call_args_list, (
                     f"Result for {slot.streamer} was not processed"
                 )
-            elif slot.expect_timeout:
+            if slot.expect_timeout:
                 mock_slot.future.cancel.assert_called_once()
+                progressor.update_failures.assert_called_with(slot.streamer.channel_id)
 
 
 @pytest.mark.parametrize("streamers_amount", [amount for amount in range(10)])
@@ -819,11 +972,13 @@ def test_watch_loop_multiple(max_concurrent_watch: int):
         loop_interval_seconds=0,
     )
     progressor.manage_slots = MagicMock()
+    progressor.manage_cooldowns = MagicMock()
     progressor.watch_multiple = MagicMock()
 
     progressor.watch_loop()
 
     progressor.manage_slots.assert_called_once()
+    progressor.manage_cooldowns.assert_called_once()
     progressor.watch_multiple.assert_called_once()
 
 
