@@ -56,6 +56,8 @@ the [CONTRIBUTING.md](docs/CONTRIBUTING.md) file.
 - Follows raids (_+250_)
 - Earns progress for watch streak rewards (_+300_, _+350_, _+400_, or _+450_ depending on the streak
   count)
+- Makes progress for [Weekly Rewards](https://help.twitch.tv/s/article/weekly-rewards) (_+200_, _+250_, _+300_, _+350_,
+  depending on the week, plus unique chat badges)
 - Advances progress for drops
 - Claims any earned drops
 - Makes predictions using your channel points
