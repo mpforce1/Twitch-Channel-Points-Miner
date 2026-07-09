@@ -4,6 +4,7 @@ import logging
 from colorama import Fore
 from TwitchChannelPointsMiner import TwitchChannelPointsMiner
 from TwitchChannelPointsMiner.classes.Anonymiser import ConsistentAnonymiser
+from TwitchChannelPointsMiner.classes import WeeklyRewardsProgressor
 from TwitchChannelPointsMiner.logger import LoggerSettings, ColorPalette
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence
 from TwitchChannelPointsMiner.classes.Discord import Discord
@@ -81,7 +82,7 @@ twitch_miner = TwitchChannelPointsMiner(
             endpoint="https://example.com/message?token=TOKEN",
             priority=8,
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION], 
+                    Events.BET_LOSE, Events.CHAT_MENTION],
         ),
         hooks=[
             Discord(
@@ -131,6 +132,14 @@ twitch_miner = TwitchChannelPointsMiner(
     gql=AttemptStrategy(
         attempts=3,                             # Number of attempts to make per GQL request
         attempt_interval_seconds=1              # Number of seconds to wait between attempts
+    ),
+    weekly_rewards=WeeklyRewardsProgressor.BasicConfiguration( # Set to None in order to use this default configuration, False to disable, can also use a custom factory
+        max_concurrent_watch=2,                                # The maximum number of streamers to attempt to progress concurrently
+        max_seconds_clips=30,                                  # The maximum number of seconds to attempt to watch Clips
+        max_seconds_vods=8*60,                                 # The maximum number of seconds to attempt to watch VODs
+        loop_interval_seconds=20,                              # The number of seconds between checking if a streamer needs progression
+        max_failures_per_streamer=1,                           # The maximum number of failed progression attempts for each streamer before they get put on cooldown
+        failure_cooldown_seconds=60*60,                        # The number of seconds a streamer is on cooldown, during which time we won't attempt to make progress
     )
 )
 
