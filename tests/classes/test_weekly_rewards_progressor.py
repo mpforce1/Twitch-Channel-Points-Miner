@@ -9,7 +9,8 @@ from TwitchChannelPointsMiner.classes import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.WeeklyRewardsProgressor import (
     Result,
-    WeeklyRewardsProgressor,
+    BasicWeeklyRewardsProgressor,
+    BasicConfiguration,
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
@@ -347,12 +348,14 @@ def test_select_streamers(
     max_seconds_clips = 30
     max_minutes_vod = 8
 
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
-        max_concurrent_watch=max_concurrent_watch,
-        max_seconds_clips=max_seconds_clips,
-        max_seconds_vods=max_minutes_vod,
+        config=BasicConfiguration(
+            max_concurrent_watch=max_concurrent_watch,
+            max_seconds_clips=max_seconds_clips,
+            max_seconds_vods=max_minutes_vod,
+        ),
     )
 
     assert [
@@ -383,12 +386,14 @@ def test_select_streamers_cooldown(
     max_seconds_clips = 30
     max_minutes_vod = 8
 
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
-        max_concurrent_watch=max_concurrent_watch,
-        max_seconds_clips=max_seconds_clips,
-        max_seconds_vods=max_minutes_vod,
+        config=BasicConfiguration(
+            max_concurrent_watch=max_concurrent_watch,
+            max_seconds_clips=max_seconds_clips,
+            max_seconds_vods=max_minutes_vod,
+        ),
     )
     progressor._cooldowns = cooldowns
 
@@ -431,13 +436,15 @@ test_get_clips_data = [
 def test_get_clip(clips: list[Clip], expected: Clip | None):
     twitch = MagicMock()
 
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=[],
-        max_concurrent_watch=2,
-        max_seconds_clips=30,
-        max_seconds_vods=10,
-        loop_interval_seconds=20,
+        config=BasicConfiguration(
+            max_concurrent_watch=2,
+            max_seconds_clips=30,
+            max_seconds_vods=10,
+            loop_interval_seconds=20,
+        ),
     )
 
     streamer = MagicMock()
@@ -500,13 +507,15 @@ def test_get_vod(vods: list[Video], expected: Video | None):
     twitch = MagicMock()
     twitch.vod_viewable = lambda s, vod: vod.viewable
 
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=[],
-        max_concurrent_watch=2,
-        max_seconds_clips=30,
-        max_seconds_vods=10,
-        loop_interval_seconds=20,
+        config=BasicConfiguration(
+            max_concurrent_watch=2,
+            max_seconds_clips=30,
+            max_seconds_vods=10,
+            loop_interval_seconds=20,
+        ),
     )
 
     streamer = MagicMock()
@@ -646,12 +655,14 @@ def test_do_watch(
     max_seconds_clips = 30
     max_seconds_vods = 8
 
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
-        max_concurrent_watch=max_concurrent_watch,
-        max_seconds_clips=max_seconds_clips,
-        max_seconds_vods=max_seconds_vods,
+        config=BasicConfiguration(
+            max_concurrent_watch=max_concurrent_watch,
+            max_seconds_clips=max_seconds_clips,
+            max_seconds_vods=max_seconds_vods,
+        ),
     )
 
     progressor.get_clip = MagicMock()
@@ -697,10 +708,12 @@ def test_update_failures(
     expected_failures: dict[str, int],
     expected_cooldowns: dict[str, float],
 ):
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch,
         streamers=[],
-        max_failures_per_streamer=max_failures_per_streamer,
+        config=BasicConfiguration(
+            max_failures_per_streamer=max_failures_per_streamer,
+        ),
     )
     progressor._failures = failures
     progressor._cooldowns = cooldowns
@@ -731,7 +744,7 @@ def test_process_result(
     expect_pop_failures: bool,
     expect_pop_cooldowns: bool,
 ):
-    progressor = WeeklyRewardsProgressor(twitch, streamers=[])
+    progressor = BasicWeeklyRewardsProgressor(twitch, streamers=[])
     progressor.update_failures = MagicMock()
     progressor._failures = MagicMock()
     progressor._cooldowns = MagicMock()
@@ -747,12 +760,14 @@ def test_process_result(
 
 
 def test_watch_single():
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=MagicMock(),
         streamers=[],
-        max_concurrent_watch=2,
-        max_seconds_clips=30,
-        max_seconds_vods=8,
+        config=BasicConfiguration(
+            max_concurrent_watch=2,
+            max_seconds_clips=30,
+            max_seconds_vods=8,
+        ),
     )
     progressor.do_watch = MagicMock()
     progressor.process_result = MagicMock()
@@ -873,8 +888,10 @@ def test_manage_cooldowns(
     failure_cooldown_seconds: float,
     expected_cooldowns: dict[str, float],
 ):
-    progressor = WeeklyRewardsProgressor(
-        twitch, streamers=[], failure_cooldown_seconds=failure_cooldown_seconds
+    progressor = BasicWeeklyRewardsProgressor(
+        twitch,
+        streamers=[],
+        config=BasicConfiguration(failure_cooldown_seconds=failure_cooldown_seconds),
     )
     progressor._cooldowns = cooldowns
 
@@ -897,13 +914,15 @@ def test_manage_slots(
 ):
     twitch: Any = MockTwitch(clip=False, running=True, vod=False, running_2=False)
     streamers = []
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
-        max_concurrent_watch=len(slots),
-        max_seconds_clips=max_seconds_clips,
-        max_seconds_vods=max_minutes_vod,
-        loop_interval_seconds=0,
+        config=BasicConfiguration(
+            max_concurrent_watch=len(slots),
+            max_seconds_clips=max_seconds_clips,
+            max_seconds_vods=max_minutes_vod,
+            loop_interval_seconds=0,
+        ),
     )
     progressor.select_streamers = MagicMock()
     progressor.select_streamers.return_value = streamers
@@ -940,13 +959,15 @@ def test_manage_slots(
 def test_watch_loop_single(streamers_amount: int):
     twitch: Any = MockTwitch(clip=False, running=True, vod=False, running_2=False)
     streamers = [Streamer(f"streamer{index}") for index in range(streamers_amount)]
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
-        max_concurrent_watch=1,
-        max_seconds_clips=30,
-        max_seconds_vods=8,
-        loop_interval_seconds=0,
+        config=BasicConfiguration(
+            max_concurrent_watch=1,
+            max_seconds_clips=30,
+            max_seconds_vods=8,
+            loop_interval_seconds=0,
+        ),
     )
     progressor.select_streamers = MagicMock()
     progressor.select_streamers.return_value = streamers
@@ -963,13 +984,15 @@ def test_watch_loop_single(streamers_amount: int):
 def test_watch_loop_multiple(max_concurrent_watch: int):
     twitch: Any = MockTwitch(clip=False, running=True, vod=False, running_2=False)
     streamers = []
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
-        max_concurrent_watch=max_concurrent_watch,
-        max_seconds_clips=1,
-        max_seconds_vods=1,
-        loop_interval_seconds=0,
+        config=BasicConfiguration(
+            max_concurrent_watch=max_concurrent_watch,
+            max_seconds_clips=1,
+            max_seconds_vods=1,
+            loop_interval_seconds=0,
+        ),
     )
     progressor.manage_slots = MagicMock()
     progressor.manage_cooldowns = MagicMock()
@@ -1140,13 +1163,15 @@ def test_full():
         ),
     ]
 
-    progressor = WeeklyRewardsProgressor(
+    progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
-        max_concurrent_watch=3,
-        max_seconds_clips=4,
-        max_seconds_vods=5,
-        loop_interval_seconds=1,
+        config=BasicConfiguration(
+            max_concurrent_watch=3,
+            max_seconds_clips=4,
+            max_seconds_vods=5,
+            loop_interval_seconds=1,
+        ),
     )
 
     twitch.vod_watchable = lambda _, vod: vod.id in {"a", "b", "c"}

@@ -51,7 +51,7 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
         self,
         twitch: Twitch,
         streamers: list[Streamer],
-        config: BasicConfiguration | None,
+        config: BasicConfiguration | None = None,
     ):
         super().__init__(target=self.watch_loop, name="Weekly Rewards Progressor")
         self.twitch = twitch
