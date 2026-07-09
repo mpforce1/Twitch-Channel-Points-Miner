@@ -1,7 +1,9 @@
+import abc
 import logging
 import time
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import dataclass
 from itertools import islice
 from threading import Thread
 from typing import TypedDict
@@ -26,40 +28,53 @@ class Slot:
         self.start_time = start_time
 
 
-class WeeklyRewardsProgressor(Thread):
+class WeeklyRewardsProgressor(abc.ABC, Thread):
+    @abc.abstractmethod
+    def watch_loop(self):
+        pass
+
+
+@dataclass
+class BasicConfiguration:
+    max_concurrent_watch: int = 2
+    max_seconds_clips: float = 30
+    max_seconds_vods: float = 8 * 60
+    loop_interval_seconds: float = 20
+    max_failures_per_streamer: int = 1
+    failure_cooldown_seconds: float = 60 * 60
+
+
+class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
     """Attempts to progress Weekly Rewards by watching Clips and VODs."""
 
     def __init__(
         self,
         twitch: Twitch,
         streamers: list[Streamer],
-        max_concurrent_watch: int = 2,
-        max_seconds_clips: float = 30,
-        max_seconds_vods: float = 8 * 60,
-        loop_interval_seconds: float = 20,
-        max_failures_per_streamer: int = 1,
-        failure_cooldown_seconds: float = 60 * 60,
+        config: BasicConfiguration | None,
     ):
         super().__init__(target=self.watch_loop, name="Weekly Rewards Progressor")
         self.twitch = twitch
         """ The Twitch API instance. """
         self.streamers = streamers
         """ The Streamers to monitor. """
-        if max_concurrent_watch <= 0:
+        if config is None:
+            config = BasicConfiguration()
+        if config.max_concurrent_watch <= 0:
             raise ValueError(
-                f"max_concurrent_watch must be greater than 0: {max_concurrent_watch}"
+                f"max_concurrent_watch must be greater than 0: {config.max_concurrent_watch}"
             )
-        self.max_concurrent_watch = max_concurrent_watch
+        self.max_concurrent_watch = config.max_concurrent_watch
         """ The maximum amount to watch concurrently. """
-        self.max_seconds_clips = max_seconds_clips
+        self.max_seconds_clips = config.max_seconds_clips
         """ The maximum amount of time to wait for watching a clip to trigger progress. """
-        self.max_seconds_vods = max_seconds_vods
+        self.max_seconds_vods = config.max_seconds_vods
         """ The maximum amount of time to watch a vod. """
-        self.loop_interval_seconds = loop_interval_seconds
+        self.loop_interval_seconds = config.loop_interval_seconds
         """ The amount of seconds in between iterations of the watch loop. """
-        self.max_failures_per_streamer = max_failures_per_streamer
+        self.max_failures_per_streamer = config.max_failures_per_streamer
         """ The maximum number of failed attempt to do per streamer before putting them into a cooldown. """
-        self.failure_cooldown_seconds = failure_cooldown_seconds
+        self.failure_cooldown_seconds = config.failure_cooldown_seconds
         """ The amount of seconds to wait after failing to make progress `max_attempts_per_streamer` times for a Streamer. """
         self._full_timeout = self.max_seconds_vods + self.max_seconds_clips + 10
         self._failures = dict[str, int]()
@@ -298,3 +313,21 @@ class WeeklyRewardsProgressor(Thread):
                         running_flag=lambda: self.twitch.running,
                         duration=self.loop_interval_seconds,
                     )
+
+
+class WeeklyRewardsProgressorFactory(abc.ABC):
+    """Factory that produces WeeklyRewardProgressors."""
+
+    @abc.abstractmethod
+    def create(
+        self, twitch: Twitch, streamers: list[Streamer]
+    ) -> WeeklyRewardsProgressor:
+        pass
+
+
+class BasicWeeklyRewardsProgressorFactory(WeeklyRewardsProgressorFactory):
+    def __init__(self, config: BasicConfiguration | None = None):
+        self.config = config
+
+    def create(self, twitch: Twitch, streamers: list[Streamer]):
+        return BasicWeeklyRewardsProgressor(twitch, streamers, config=self.config)

@@ -11,6 +11,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 import TwitchChannelPointsMiner.classes.websocket.hermes.data as hermes_data
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
@@ -22,7 +23,11 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     PrioritySelector,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
-from TwitchChannelPointsMiner.classes.WeeklyRewardsProgressor import WeeklyRewardsProgressor
+from TwitchChannelPointsMiner.classes.WeeklyRewardsProgressor import (
+    BasicConfiguration,
+    BasicWeeklyRewardsProgressorFactory,
+    WeeklyRewardsProgressorFactory
+)
 from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPrediction
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
@@ -31,6 +36,7 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
 )
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory, GQL
 from TwitchChannelPointsMiner.classes.websocket import HermesWebSocketPool, PubSubWebSocketPool
+from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 from TwitchChannelPointsMiner.constants import HERMES_WEBSOCKET, CLIENT_ID_WEB
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers
 from TwitchChannelPointsMiner.utils import (
@@ -44,7 +50,6 @@ from TwitchChannelPointsMiner.utils import (
     interruptible_sleep,
 )
 from TwitchChannelPointsMiner.utils.Utils import interruptible_repeating_task
-from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 
 # Suppress:
 #   - chardet.charsetprober - [feed]
@@ -83,6 +88,7 @@ class TwitchChannelPointsMiner:
         "original_streamers",
         "logs_file",
         "queue_listener",
+        "weekly_rewards_factory"
     ]
 
     def __init__(
@@ -103,6 +109,10 @@ class TwitchChannelPointsMiner:
         gql: GQL | AttemptStrategy | GQLFactory | None = None,
         # True if we want to use the new Hermes WebSocket API
         use_hermes: bool = False,
+        # Weekly Rewards Progression
+        weekly_rewards: (
+            BasicConfiguration | WeeklyRewardsProgressorFactory | Literal[False] | None
+        ) = None,
     ):
         # Validate the user has changed default username and password
         startup_error = None
@@ -174,6 +184,26 @@ class TwitchChannelPointsMiner:
             raise ValueError(f"gql must be an instance of be one of None, AttemptStrategy, or GQLFactory")
 
         self.twitch = Twitch(self.username, user_agent, password, gql_factory=gql)
+
+        self.weekly_rewards_factory: WeeklyRewardsProgressorFactory | None
+        if weekly_rewards is None:
+            # Default factory
+            self.weekly_rewards_factory = BasicWeeklyRewardsProgressorFactory()
+        elif weekly_rewards is False:
+            # Disable
+            self.weekly_rewards_factory = None
+        elif isinstance(weekly_rewards, BasicConfiguration):
+            # Default factory with custom config
+            self.weekly_rewards_factory = BasicWeeklyRewardsProgressorFactory(
+                config=weekly_rewards
+            )
+        elif isinstance(weekly_rewards, WeeklyRewardsProgressorFactory):
+            # Custom factory
+            self.weekly_rewards_factory = weekly_rewards
+        else:
+            raise ValueError(
+                "weekly_rewards must be an instance of one of None, False, BasicConfiguration, or WeeklyRewardsProgressorFactory"
+            )  # pyright: ignore
 
         self.claim_drops_startup = claim_drops_startup
 
@@ -611,22 +641,13 @@ class TwitchChannelPointsMiner:
                 self.background_tasks.append(sync_clips_and_vods_thread)
 
                 # Progressor
-                weekly_rewards_progressor_max_concurrent = 3
-                weekly_rewards_max_seconds_clips = 30
-                weekly_rewards_max_seconds_vods = 8 * 60
-                weekly_rewards_loop_interval_seconds = 20
-                weekly_rewards_progressor_thread = WeeklyRewardsProgressor(
-                    twitch=self.twitch,
-                    streamers=self.streamers,
-                    max_concurrent_watch=weekly_rewards_progressor_max_concurrent,
-                    max_seconds_clips=weekly_rewards_max_seconds_clips,
-                    max_seconds_vods=weekly_rewards_max_seconds_vods,
-                    loop_interval_seconds=weekly_rewards_loop_interval_seconds,
-                    max_failures_per_streamer=2,
-                    failure_cooldown_seconds=60 * 60
-                )
-                weekly_rewards_progressor_thread.start()
-                self.background_tasks.append(weekly_rewards_progressor_thread)
+                if self.weekly_rewards_factory is not None:
+                    weekly_rewards_progressor_thread = (
+                        self.weekly_rewards_factory.create(self.twitch, self.streamers)
+                    )
+                    weekly_rewards_progressor_thread.name = "Weekly Rewards Progressor"
+                    weekly_rewards_progressor_thread.start()
+                    self.background_tasks.append(weekly_rewards_progressor_thread)
 
             # Main loop, sleeps and checks on background tasks/running state
             main_loop_period = timedelta(seconds=30).total_seconds()
