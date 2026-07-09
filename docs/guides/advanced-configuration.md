@@ -71,6 +71,8 @@ will prioritise watching streams according to each priority from left to right i
 - `WATCH_SESSION`: This prioritises streams that were previously being watched but haven't yet received a `WATCH`
   message. This is useful to avoid wasting minutes of watch time for a current stream when a new stream comes online, as
   Twitch may drop those minutes if you swap to another stream.
+- `WEEKLY_REWARDS`: This prioritises streams that have Weekly Rewards enabled, have yet to make progress this week, and 
+  have yet to make progress today.
   
 #### `StreamerSelector`
 
@@ -453,6 +455,241 @@ hooks=[
 This sends `GAIN_FOR...` events to one Discord Webhook and `BET...` events to a different one. It also sends
 `STREAMER_ONLINE/OFFLINE` events to a Gotify application and sends `JOIN_RAID` and `CHAT_MENTION` events to another. 
 
+#### `redact_secrets`
+
+Set this to `True` to have secrets (passwords and authentication tokens) redacted from the logs. In particular, this
+currently affects PubSub request logging.
+
+#### `anonymiser`
+
+> [!NOTE]
+> Credit to [Klaro](https://github.com/0x8fv) and their
+> work [here](https://github.com/0x8fv/Twitch-Channel-Points-Miner/blob/940c98409e5821900752815cd9550ae5b750b597/TwitchChannelPointsMiner/privacy/anonymizer.go)
+> for inspiring this feature!
+
+> [!WARNING]
+> While this does work for logged information the miner _**itself**_ generates, it cannot work for information
+> _**received**_ from external sources like the Twitch GQL and WebSocket APIs.
+
+Set this to `True` to automatically anonymise, to the extent possible, all identifying information in the logs. This
+works for channel ids, usernames, points, WebSocket topics, and Hermes subscription ids.
+
+By default, this is set to `False`. Setting it to `False` or `None` will cause no information to be anonymised.
+
+*Example logs:*
+```text
+12/03 09:18:52 - Twitch Channel Points Miner-1.1.0 (fork by mpforce1)
+12/03 09:18:52 - https://github.com/mpforce1/Twitch-Channel-Points-Miner
+12/03 09:18:54 - 🌐  Analytics running on http://0.0.0.0:5000/
+12/03 09:18:54 - 💣  Start session: 'a0ae3a4d-2cf8-4573-bfg1-a310a060a930'
+12/03 09:18:54 - 🤓  Loading data for 17 streamers. Please wait...
+12/03 09:18:56 - 😴  Streamer7 (195.37k points) is Offline!
+12/03 09:18:56 - 😴  Streamer6 (757.73k points) is Offline!
+12/03 09:18:56 - 😴  Streamer4 (265.12k points) is Offline!
+12/03 09:18:56 - 😴  Streamer1 (517.41k points) is Offline!
+12/03 09:18:56 - 🚀  Detected WATCH_STREAK for Streamer9 (989.18k points)
+12/03 09:18:56 - 😴  Streamer2 (747.28k points) is Offline!
+12/03 09:18:56 - 😴  Streamer10 (559.75k points) is Offline!
+12/03 09:18:56 - 😴  Streamer5 (696.38k points) is Offline!
+12/03 09:18:56 - 😴  Streamer8 (505.82k points) is Offline!
+12/03 09:18:56 - 💬  Join IRC Chat: Streamer3
+12/03 09:18:56 - 🥳  Streamer3 (157.89k points) is Online!
+12/03 09:18:56 - 💬  Join IRC Chat: Streamer9
+12/03 09:18:56 - 🥳  Streamer9 (989.18k points) is Online!
+12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer16 (174.22k points)
+12/03 09:18:58 - 😴  Streamer17 (320.06k points) is Offline!
+12/03 09:18:58 - 😴  Streamer12 (803.47k points) is Offline!
+12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer11 (370.13k points)
+12/03 09:18:58 - 😴  Streamer13 (503.6k points) is Offline!
+12/03 09:18:58 - 😴  Streamer14 (242.69k points) is Offline!
+12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer15 (364.78k points)
+12/03 09:18:58 - 💬  Join IRC Chat: Streamer11
+12/03 09:18:58 - 🥳  Streamer11 (370.13k points) is Online!
+12/03 09:18:59 - 💬  Join IRC Chat: Streamer15
+12/03 09:18:59 - 🥳  Streamer15 (364.78k points) is Online!
+12/03 09:18:59 - 💬  Join IRC Chat: Streamer16
+12/03 09:18:59 - 🥳  Streamer16 (174.22k points) is Online!
+12/03 09:37:21 - 🚀  +10 → Streamer9 (989.19k points) - Reason: WATCH.
+12/03 09:38:12 - 🚀  +10 → Streamer3 (157.9k points) - Reason: WATCH.
+12/03 09:42:21 - 🚀  +10 → Streamer9 (989.2k points) - Reason: WATCH.
+12/03 09:43:12 - 🚀  +10 → Streamer3 (157.91k points) - Reason: WATCH.
+12/03 09:47:22 - 🚀  +10 → Streamer9 (989.21k points) - Reason: WATCH.
+12/03 09:47:22 - 🚀  +50 → Streamer9 (989.26k points) - Reason: CLAIM.
+12/03 09:48:10 - 🚀  +10 → Streamer3 (157.92k points) - Reason: WATCH.
+12/03 09:48:10 - 🚀  +50 → Streamer3 (157.97k points) - Reason: CLAIM.
+12/03 09:52:20 - 🚀  +10 → Streamer9 (989.27k points) - Reason: WATCH.
+12/03 09:53:12 - 🚀  +10 → Streamer3 (157.98k points) - Reason: WATCH.
+12/03 09:57:21 - 🚀  +10 → Streamer9 (989.28k points) - Reason: WATCH.
+12/03 09:58:12 - 🚀  +10 → Streamer3 (157.99k points) - Reason: WATCH.
+12/03 10:02:22 - 🚀  +10 → Streamer9 (989.29k points) - Reason: WATCH.
+12/03 10:02:22 - 🚀  +50 → Streamer9 (989.34k points) - Reason: CLAIM.
+12/03 10:03:11 - 🚀  +10 → Streamer3 (158k points) - Reason: WATCH.
+12/03 10:03:11 - 🚀  +50 → Streamer3 (158.05k points) - Reason: CLAIM.
+12/03 10:04:50 - 🎭  Joining raid from Streamer15 (364.78k points) to Streamer18!
+12/03 10:05:08 - 🚀  +250 → Streamer15 (365.03k points) - Reason: RAID.
+12/03 10:05:26 - 💬  Leave IRC Chat: Streamer15
+12/03 10:05:26 - 😴  Streamer15 (365.03k points) is Offline!
+12/03 10:07:22 - 🚀  +10 → Streamer9 (989.35k points) - Reason: WATCH.
+12/03 10:08:13 - 🚀  +10 → Streamer3 (158.06k points) - Reason: WATCH.
+12/03 10:10:26 - 🚀  +10 → Streamer9 (989.36k points) - Reason: WATCH.
+12/03 10:13:12 - 🚀  +10 → Streamer3 (158.07k points) - Reason: WATCH.
+12/03 10:17:22 - 🚀  +10 → Streamer9 (989.37k points) - Reason: WATCH.
+12/03 10:17:22 - 🚀  +50 → Streamer9 (989.42k points) - Reason: CLAIM.
+12/03 10:18:12 - 🚀  +10 → Streamer3 (158.08k points) - Reason: WATCH.
+12/03 10:18:12 - 🚀  +50 → Streamer3 (158.13k points) - Reason: CLAIM.
+12/03 10:22:22 - 🚀  +10 → Streamer9 (989.43k points) - Reason: WATCH.
+12/03 10:23:13 - 🚀  +10 → Streamer3 (158.14k points) - Reason: WATCH.
+12/03 10:27:22 - 🚀  +10 → Streamer9 (989.44k points) - Reason: WATCH.
+12/03 10:28:12 - 🚀  +10 → Streamer3 (158.15k points) - Reason: WATCH.
+12/03 10:32:21 - 🚀  +10 → Streamer9 (989.45k points) - Reason: WATCH.
+12/03 10:32:21 - 🚀  +50 → Streamer9 (989.5k points) - Reason: CLAIM.
+12/03 10:33:13 - 🚀  +10 → Streamer3 (158.16k points) - Reason: WATCH.
+12/03 10:33:13 - 🚀  +50 → Streamer3 (158.21k points) - Reason: CLAIM.
+12/03 10:37:22 - 🚀  +10 → Streamer9 (989.51k points) - Reason: WATCH.
+12/03 10:38:12 - 🚀  +10 → Streamer3 (158.22k points) - Reason: WATCH.
+12/03 10:42:22 - 🚀  +10 → Streamer9 (989.52k points) - Reason: WATCH.
+12/03 10:43:12 - 🚀  +10 → Streamer3 (158.23k points) - Reason: WATCH.
+12/03 10:43:29 - CTRL+C Detected! Please wait just a moment!
+12/03 10:43:29 - 💬  Leave IRC Chat: Streamer3
+12/03 10:43:29 - 💬  Leave IRC Chat: Streamer9
+12/03 10:43:29 - 💬  Leave IRC Chat: Streamer16
+12/03 10:43:29 - 💬  Leave IRC Chat: Streamer11
+
+
+
+12/03 10:43:38 - 🛑  Ending session: 'a0ae3a4d-2cf8-4573-bfg1-a310a060a930'
+12/03 10:43:38 - 📄  Logs file: /usr/src/app/logs/Streamer19.log
+12/03 10:43:38 - ⌛  Duration 1:24:46.543687
+12/03 10:43:38 - 💰  Streamer3 (158.23k points), Total Points Gained: 340
+                         CLAIM (4 times, 200 gained)
+                         WATCH (14 times, 140 gained)
+12/03 10:43:38 - 💰  Streamer9 (989.52k points), Total Points Gained: 340
+                         CLAIM (4 times, 200 gained)
+                         WATCH (14 times, 140 gained)
+12/03 10:43:38 - 💰  Streamer15 (365.03k points), Total Points Gained: 250
+                         RAID (1 times, 250 gained)
+```
+
+You can see in this example that the amount of points gained from start to end for each Streamer is consistent, along
+with the streamer usernames. Even the `Logs file` path is anonymised, keep this in mind since this should actually be
+in a file named with your real username.
+
+The `ConsistentAnonymiser` and `RandomAnonymiser` can optionally specify some configuration options for each type of
+anonymisation.
+
+**`channel_ids`**
+
+Can be set to `True` to enable anonymising channel ids, this includes your own user id (since users are also channels),
+as well as streamer channel ids. In addition, some Hermes WebSocket API ids include the channel id (Twitch may phase
+this out in future) so these also get anonymised. If `False` then channel ids will not be anonymised. Defaults to
+`True`.
+
+**`usernames`**
+
+Can be set to `True` to enable anonymising streamer usernames, this includes your own username. If `False` then 
+usernames will not be anonymised. Defaults to `True`.
+
+**`channel_points`**
+
+Can be set to `True` to enable anonymising streamer channel points. If `False` then channel points will not be
+anonymised. Defaults to `True`.
+
+**`strict`**
+
+If this is set to `True` then all web API responses will be redacted. This is useful because we cannot guarantee that
+text the miner didn't create doesn't contain data that should be anonymised. You can optionally set it to `False` to
+allow logging these responses. This can be useful if it's not possible to debug an issue without checking the response
+text, although it comes with more risk of leaking data that you might want anonymised.
+
+**`base_path`**
+
+This is the configuration option for filepath anonymisation. This is useful if you want to anonymise your local system
+user's name. You can set this to `True` to enable this feature, this is all you should need to do but advanced users may
+want to specify a `str` that represents the "base path" of files to be redacted. For example:
+
+```text
+If
+    `base_path` = "/home/username/miner"
+Then
+    "/home/username/miner/module_1/module_2/some_python_file.py"
+Becomes
+    "[PATH REDACTED]/module_1/module_2/some_python_file.py"
+```
+
+You can see how the `username` part of the filepath has been removed.
+
+This will apply to all paths logged as part of exception stack traces in `ERROR` logging.
+
+##### `ConsistentAnonymiser`
+
+This is the `Anonymiser` used when `anonymiser` is set to `True`, it will generate random values for each type of
+anonymised data and return the same random value each time that same data is requested. For example, say a Streamer with
+username `bingo` gets logged, the anonymiser may anonymise them as `Streamer5`. Each time the username for this streamer
+is logged, it will log `Streamer5`.
+
+In addition, when logging channel points only the initial value is randomised. As that channel gains/loses points the
+amount logged will reflect the change amount. For example, a channel has `500` points which gets randomised to `2000`
+points. The value you'll initially see logged will be `2000`. If they then gain `50` points you'll see `2050` points
+logged.
+
+```python3
+ConsistentAnonymiser(
+    channel_ids=True,
+    usernames=True,
+    channel_points=True,
+    strict=True,
+    base_path=True,
+    random_points_min=100,
+    random_points_max=1_000_000,
+    random_source=RandomSource(
+        random_int=random.randint,
+        random_uuid=generate_random_uuid,
+    ),
+)
+```
+
+`random_points_min` to `random_points_max` defines the range of possible values when generating the initial random
+channel points for a Streamer. In this example, channel points will be in the range `100` to `1_000_000`.
+
+`random_source` mostly exists for testing. It allows you to override the way randomness is generated. By default, it
+uses the built-in functions [`random.randint`](https://docs.python.org/3/library/random.html#random.randint) and
+[`uuid.v4`](https://docs.python.org/3/library/uuid.html#uuid.uuid4) to generate channel points and UUIDs.
+
+##### `Deanonymiser`
+
+This is the `Anonymiser` used when `anonymiser` is set to `False`. It does not alter information. `strict` is set to
+`False` for this anonymiser, but you can set it to `True` if you want that behaviour.
+
+```python3
+Deanonymiser(
+    strict=False
+)
+```
+
+##### `RandomAnonymiser`
+
+This anonymises information in a more random way. Unlike `ConsistentAnonymiser`, each value is randomly generated each
+time it is logged. For example, a Streamer's username might be `Streamer5` the first time it's logged and `Streamer100`
+the next time.
+
+```python3
+RandomAnonymiser(
+    channel_ids=True,
+    usernames=True,
+    channel_points=True,
+    strict=True,
+    base_path=True,
+    random_source=RandomSource(
+        random_int=random.randint,
+        random_uuid=generate_random_uuid,
+    )
+)
+```
+
+`strict` is `True` by default for this anonymiser, but you can set it to `False` if you want that behaviour.
+
+Configuration for the `RandomSource` is the same as `ConsistentAnonymiser`.
+
 ### `streamer_settings`
 
 This is the default settings to use for each streamer.
@@ -659,240 +896,60 @@ to the API. We don't expect most users to need to do more than override the `att
 passing that directly to the value of `gql`. Advanced users can also override the factory type for even more
 customization, perhaps returning a custom subclass of `GQL` that overrides the original behaviour entirely.
 
-### `redact_secrets`
+### `weekly_rewards`
 
-Set this to `True` to have secrets (passwords and authentication tokens) redacted from the logs. In particular, this
-currently affects PubSub request logging.
+Defines how the miner attempts to make progress on [Weekly Rewards](https://help.twitch.tv/s/article/weekly-rewards).
+The default configuration, which you can use by simply not providing a value for `weekly_rewards` or setting it to 
+`None`, causes the miner to attempt to make progress on up to 2 Streamers at a time. It does this by attempting to watch
+first up to 30 seconds of a Clip from that Streamer. Then, if that doesn't do it (most of the time watching a Clip will
+make progress) it'll watch up to 8 minutes of a VOD. If both of those fail it'll put that Streamer on cooldown for an
+hour, meanwhile other Streamers can be attempted. All of these values can be changed by setting them in the
+`WeeklyRewardsProgressor.BasicConfiguration`:
 
-### `anonymiser`
-
-> [!NOTE]
-> Credit to [Klaro](https://github.com/0x8fv) and their
-> work [here](https://github.com/0x8fv/Twitch-Channel-Points-Miner/blob/940c98409e5821900752815cd9550ae5b750b597/TwitchChannelPointsMiner/privacy/anonymizer.go)
-> for inspiring this feature!
-
-> [!WARNING]
-> While this does work for logged information the miner _**itself**_ generates, it cannot work for information
-> _**received**_ from external sources like the Twitch GQL and WebSocket APIs.
-
-Set this to `True` to automatically anonymise, to the extent possible, all identifying information in the logs. This
-works for channel ids, usernames, points, WebSocket topics, and Hermes subscription ids.
-
-By default, this is set to `False`. Setting it to `False` or `None` will cause no information to be anonymised.
-
-*Example logs:*
-```text
-12/03 09:18:52 - Twitch Channel Points Miner-1.1.0 (fork by mpforce1)
-12/03 09:18:52 - https://github.com/mpforce1/Twitch-Channel-Points-Miner
-12/03 09:18:54 - 🌐  Analytics running on http://0.0.0.0:5000/
-12/03 09:18:54 - 💣  Start session: 'a0ae3a4d-2cf8-4573-bfg1-a310a060a930'
-12/03 09:18:54 - 🤓  Loading data for 17 streamers. Please wait...
-12/03 09:18:56 - 😴  Streamer7 (195.37k points) is Offline!
-12/03 09:18:56 - 😴  Streamer6 (757.73k points) is Offline!
-12/03 09:18:56 - 😴  Streamer4 (265.12k points) is Offline!
-12/03 09:18:56 - 😴  Streamer1 (517.41k points) is Offline!
-12/03 09:18:56 - 🚀  Detected WATCH_STREAK for Streamer9 (989.18k points)
-12/03 09:18:56 - 😴  Streamer2 (747.28k points) is Offline!
-12/03 09:18:56 - 😴  Streamer10 (559.75k points) is Offline!
-12/03 09:18:56 - 😴  Streamer5 (696.38k points) is Offline!
-12/03 09:18:56 - 😴  Streamer8 (505.82k points) is Offline!
-12/03 09:18:56 - 💬  Join IRC Chat: Streamer3
-12/03 09:18:56 - 🥳  Streamer3 (157.89k points) is Online!
-12/03 09:18:56 - 💬  Join IRC Chat: Streamer9
-12/03 09:18:56 - 🥳  Streamer9 (989.18k points) is Online!
-12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer16 (174.22k points)
-12/03 09:18:58 - 😴  Streamer17 (320.06k points) is Offline!
-12/03 09:18:58 - 😴  Streamer12 (803.47k points) is Offline!
-12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer11 (370.13k points)
-12/03 09:18:58 - 😴  Streamer13 (503.6k points) is Offline!
-12/03 09:18:58 - 😴  Streamer14 (242.69k points) is Offline!
-12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer15 (364.78k points)
-12/03 09:18:58 - 💬  Join IRC Chat: Streamer11
-12/03 09:18:58 - 🥳  Streamer11 (370.13k points) is Online!
-12/03 09:18:59 - 💬  Join IRC Chat: Streamer15
-12/03 09:18:59 - 🥳  Streamer15 (364.78k points) is Online!
-12/03 09:18:59 - 💬  Join IRC Chat: Streamer16
-12/03 09:18:59 - 🥳  Streamer16 (174.22k points) is Online!
-12/03 09:37:21 - 🚀  +10 → Streamer9 (989.19k points) - Reason: WATCH.
-12/03 09:38:12 - 🚀  +10 → Streamer3 (157.9k points) - Reason: WATCH.
-12/03 09:42:21 - 🚀  +10 → Streamer9 (989.2k points) - Reason: WATCH.
-12/03 09:43:12 - 🚀  +10 → Streamer3 (157.91k points) - Reason: WATCH.
-12/03 09:47:22 - 🚀  +10 → Streamer9 (989.21k points) - Reason: WATCH.
-12/03 09:47:22 - 🚀  +50 → Streamer9 (989.26k points) - Reason: CLAIM.
-12/03 09:48:10 - 🚀  +10 → Streamer3 (157.92k points) - Reason: WATCH.
-12/03 09:48:10 - 🚀  +50 → Streamer3 (157.97k points) - Reason: CLAIM.
-12/03 09:52:20 - 🚀  +10 → Streamer9 (989.27k points) - Reason: WATCH.
-12/03 09:53:12 - 🚀  +10 → Streamer3 (157.98k points) - Reason: WATCH.
-12/03 09:57:21 - 🚀  +10 → Streamer9 (989.28k points) - Reason: WATCH.
-12/03 09:58:12 - 🚀  +10 → Streamer3 (157.99k points) - Reason: WATCH.
-12/03 10:02:22 - 🚀  +10 → Streamer9 (989.29k points) - Reason: WATCH.
-12/03 10:02:22 - 🚀  +50 → Streamer9 (989.34k points) - Reason: CLAIM.
-12/03 10:03:11 - 🚀  +10 → Streamer3 (158k points) - Reason: WATCH.
-12/03 10:03:11 - 🚀  +50 → Streamer3 (158.05k points) - Reason: CLAIM.
-12/03 10:04:50 - 🎭  Joining raid from Streamer15 (364.78k points) to Streamer18!
-12/03 10:05:08 - 🚀  +250 → Streamer15 (365.03k points) - Reason: RAID.
-12/03 10:05:26 - 💬  Leave IRC Chat: Streamer15
-12/03 10:05:26 - 😴  Streamer15 (365.03k points) is Offline!
-12/03 10:07:22 - 🚀  +10 → Streamer9 (989.35k points) - Reason: WATCH.
-12/03 10:08:13 - 🚀  +10 → Streamer3 (158.06k points) - Reason: WATCH.
-12/03 10:10:26 - 🚀  +10 → Streamer9 (989.36k points) - Reason: WATCH.
-12/03 10:13:12 - 🚀  +10 → Streamer3 (158.07k points) - Reason: WATCH.
-12/03 10:17:22 - 🚀  +10 → Streamer9 (989.37k points) - Reason: WATCH.
-12/03 10:17:22 - 🚀  +50 → Streamer9 (989.42k points) - Reason: CLAIM.
-12/03 10:18:12 - 🚀  +10 → Streamer3 (158.08k points) - Reason: WATCH.
-12/03 10:18:12 - 🚀  +50 → Streamer3 (158.13k points) - Reason: CLAIM.
-12/03 10:22:22 - 🚀  +10 → Streamer9 (989.43k points) - Reason: WATCH.
-12/03 10:23:13 - 🚀  +10 → Streamer3 (158.14k points) - Reason: WATCH.
-12/03 10:27:22 - 🚀  +10 → Streamer9 (989.44k points) - Reason: WATCH.
-12/03 10:28:12 - 🚀  +10 → Streamer3 (158.15k points) - Reason: WATCH.
-12/03 10:32:21 - 🚀  +10 → Streamer9 (989.45k points) - Reason: WATCH.
-12/03 10:32:21 - 🚀  +50 → Streamer9 (989.5k points) - Reason: CLAIM.
-12/03 10:33:13 - 🚀  +10 → Streamer3 (158.16k points) - Reason: WATCH.
-12/03 10:33:13 - 🚀  +50 → Streamer3 (158.21k points) - Reason: CLAIM.
-12/03 10:37:22 - 🚀  +10 → Streamer9 (989.51k points) - Reason: WATCH.
-12/03 10:38:12 - 🚀  +10 → Streamer3 (158.22k points) - Reason: WATCH.
-12/03 10:42:22 - 🚀  +10 → Streamer9 (989.52k points) - Reason: WATCH.
-12/03 10:43:12 - 🚀  +10 → Streamer3 (158.23k points) - Reason: WATCH.
-12/03 10:43:29 - CTRL+C Detected! Please wait just a moment!
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer3
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer9
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer16
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer11
-
-
-
-12/03 10:43:38 - 🛑  Ending session: 'a0ae3a4d-2cf8-4573-bfg1-a310a060a930'
-12/03 10:43:38 - 📄  Logs file: /usr/src/app/logs/Streamer19.log
-12/03 10:43:38 - ⌛  Duration 1:24:46.543687
-12/03 10:43:38 - 💰  Streamer3 (158.23k points), Total Points Gained: 340
-                         CLAIM (4 times, 200 gained)
-                         WATCH (14 times, 140 gained)
-12/03 10:43:38 - 💰  Streamer9 (989.52k points), Total Points Gained: 340
-                         CLAIM (4 times, 200 gained)
-                         WATCH (14 times, 140 gained)
-12/03 10:43:38 - 💰  Streamer15 (365.03k points), Total Points Gained: 250
-                         RAID (1 times, 250 gained)
-```
-
-You can see in this example that the amount of points gained from start to end for each Streamer is consistent, along
-with the streamer usernames. Even the `Logs file` path is anonymised, keep this in mind since this should actually be
-in a file named with your real username.
-
-The `ConsistentAnonymiser` and `RandomAnonymiser` can optionally specify some configuration options for each type of
-anonymisation.
-
-**`channel_ids`**
-
-Can be set to `True` to enable anonymising channel ids, this includes your own user id (since users are also channels),
-as well as streamer channel ids. In addition, some Hermes WebSocket API ids include the channel id (Twitch may phase
-this out in future) so these also get anonymised. If `False` then channel ids will not be anonymised. Defaults to
-`True`.
-
-**`usernames`**
-
-Can be set to `True` to enable anonymising streamer usernames, this includes your own username. If `False` then 
-usernames will not be anonymised. Defaults to `True`.
-
-**`channel_points`**
-
-Can be set to `True` to enable anonymising streamer channel points. If `False` then channel points will not be
-anonymised. Defaults to `True`.
-
-**`strict`**
-
-If this is set to `True` then all web API responses will be redacted. This is useful because we cannot guarantee that
-text the miner didn't create doesn't contain data that should be anonymised. You can optionally set it to `False` to
-allow logging these responses. This can be useful if it's not possible to debug an issue without checking the response
-text, although it comes with more risk of leaking data that you might want anonymised.
-
-**`base_path`**
-
-This is the configuration option for filepath anonymisation. This is useful if you want to anonymise your local system
-user's name. You can set this to `True` to enable this feature, this is all you should need to do but advanced users may
-want to specify a `str` that represents the "base path" of files to be redacted. For example:
-
-```text
-If
-    `base_path` = "/home/username/miner"
-Then
-    "/home/username/miner/module_1/module_2/some_python_file.py"
-Becomes
-    "[PATH REDACTED]/module_1/module_2/some_python_file.py"
-```
-
-You can see how the `username` part of the filepath has been removed.
-
-This will apply to all paths logged as part of exception stack traces in `ERROR` logging.
-
-#### `ConsistentAnonymiser`
-
-This is the `Anonymiser` used when `anonymiser` is set to `True`, it will generate random values for each type of
-anonymised data and return the same random value each time that same data is requested. For example, say a Streamer with
-username `bingo` gets logged, the anonymiser may anonymise them as `Streamer5`. Each time the username for this streamer
-is logged, it will log `Streamer5`.
-
-In addition, when logging channel points only the initial value is randomised. As that channel gains/loses points the
-amount logged will reflect the change amount. For example, a channel has `500` points which gets randomised to `2000`
-points. The value you'll initially see logged will be `2000`. If they then gain `50` points you'll see `2050` points
-logged.
-
-```python3
-ConsistentAnonymiser(
-    channel_ids=True,
-    usernames=True,
-    channel_points=True,
-    strict=True,
-    base_path=True,
-    random_points_min=100,
-    random_points_max=1_000_000,
-    random_source=RandomSource(
-        random_int=random.randint,
-        random_uuid=generate_random_uuid,
-    ),
+```python
+weekly_rewards=WeeklyRewardsProgressor.BasicConfiguration(
+  max_concurrent_watch=2,
+  max_seconds_clips=30,
+  max_seconds_vods=8*60,
+  loop_interval_seconds=20,
+  max_failures_per_streamer=1,
+  failure_cooldown_seconds=60*60,
 )
 ```
 
-`random_points_min` to `random_points_max` defines the range of possible values when generating the initial random
-channel points for a Streamer. In this example, channel points will be in the range `100` to `1_000_000`.
+You can also just specify what you want to override:
 
-`random_source` mostly exists for testing. It allows you to override the way randomness is generated. By default, it
-uses the built-in functions [`random.randint`](https://docs.python.org/3/library/random.html#random.randint) and
-[`uuid.v4`](https://docs.python.org/3/library/uuid.html#uuid.uuid4) to generate channel points and UUIDs.
-
-#### `Deanonymiser`
-
-This is the `Anonymiser` used when `anonymiser` is set to `False`. It does not alter information. `strict` is set to
-`False` for this anonymiser, but you can set it to `True` if you want that behaviour.
-
-```python3
-Deanonymiser(
-    strict=False
+```python
+weekly_rewards=WeeklyRewardsProgressor.BasicConfiguration(
+  max_concurrent_watch=10,
+  max_failures_per_streamer=3,
+  failure_cooldown_seconds=2*60*60,
 )
 ```
 
-#### `RandomAnonymiser`
+This has the same behaviour as just described except it'll attempt to watch up to 10 Streamers at once, it'll try to
+progress the same Streamer up to 3 times before putting them on cooldown, and the cooldown time is 2 hours.
 
-This anonymises information in a more random way. Unlike `ConsistentAnonymiser`, each value is randomly generated each
-time it is logged. For example, a Streamer's username might be `Streamer5` the first time it's logged and `Streamer100`
-the next time.
+You may also set it to `False` which will disable automatic Weekly Rewards progression.
 
-```python3
-RandomAnonymiser(
-    channel_ids=True,
-    usernames=True,
-    channel_points=True,
-    strict=True,
-    base_path=True,
-    random_source=RandomSource(
-        random_int=random.randint,
-        random_uuid=generate_random_uuid,
-    )
-)
+```python
+weekly_rewards=False,
 ```
 
-`strict` is `True` by default for this anonymiser, but you can set it to `False` if you want that behaviour.
+#### `WeeklyRewardsProgressorFactory`
 
-Configuration for the `RandomSource` is the same as `ConsistentAnonymiser`.
+> [!IMPORTANT]
+> This is intended for advanced users only.
+
+Advanced users may opt to completely override behaviour by providing a custom `WeeklyRewardsProgressorFactory`. This
+defines a `create` method that the miner uses to produce a `WeeklyRewardsProgressor` instance. By default, it'll use a
+`BasicWeeklyRewardsProgressorFactory` which produces a `BasicWeeklyRewardsProgressor`. This is useful if you have a
+different method for progressing weekly rewards, an optimisation, or if you need better hooks into the process. For
+example, this is how the default behaviour could be defined:
+
+```python
+weekly_rewards=WeeklyRewards.BasicWeeklyRewardsProgressorFactory()
+```
 
 ## `TwitchChannelPointsMiner.mine`
 
