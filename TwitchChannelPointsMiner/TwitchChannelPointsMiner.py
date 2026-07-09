@@ -622,6 +622,8 @@ class TwitchChannelPointsMiner:
                     max_seconds_clips=weekly_rewards_max_seconds_clips,
                     max_seconds_vods=weekly_rewards_max_seconds_vods,
                     loop_interval_seconds=weekly_rewards_loop_interval_seconds,
+                    max_failures_per_streamer=2,
+                    failure_cooldown_seconds=60 * 60
                 )
                 weekly_rewards_progressor_thread.start()
                 self.background_tasks.append(weekly_rewards_progressor_thread)
