@@ -50,6 +50,7 @@ class PubSubHandler(MessageListener):
                 "onsite-notifications",
                 "user-subscribe-events-v1",
                 "weekly-rewards",
+                "viewer-milestones",
             }:
                 # these topics aren't channel specific
                 return
@@ -333,6 +334,22 @@ class PubSubHandler(MessageListener):
                     logger.debug(
                         f"Received weekly rewards notification for non-miner channel: {Settings.logger.anonymiser.channel_id(notification.channel_id)}"
                     )
+            elif message.topic == "viewer-milestones":
+                logger.debug("Received viewer-milestones")
+                viewer_milestones = self.parser.parse_viewer_milestones(message.message)
+                if viewer_milestones is not None:
+                    # streak-recovered
+                    logger.info(
+                        f"Watch Streak recovered for {streamer}",
+                        extra={
+                            "emoji": ":ambulance:",
+                            "event": Events.get("WATCH_STREAK_RECOVERY"),
+                        },
+                    )
+                    for streamer in self.streamers:
+                        if streamer.channel_id == viewer_milestones.channel_id:
+                            streamer.watch_streak_missed_streams = set()
+                            break
 
         except Exception:
             message_loggable = (

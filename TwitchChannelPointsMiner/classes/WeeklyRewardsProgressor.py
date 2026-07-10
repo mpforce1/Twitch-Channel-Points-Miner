@@ -109,7 +109,7 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
         :param streamer: The Streamer to check.
         :return: The Clip or None.
         """
-        top_clips = streamer.clips
+        top_clips = streamer.clips.all_time
         if len(top_clips) == 0:
             logger.debug(f"No Clip available for {streamer}")
             return None
@@ -164,7 +164,10 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
             return Result(success=False, reason="miner not running")
         vod = self.get_vod(streamer)
         if vod is not None and self.twitch.simulate_vod_playback(
-            streamer, vod, max_watch_seconds=self.max_seconds_vods
+            streamer,
+            vod,
+            max_watch_seconds=self.max_seconds_vods,
+            done=lambda s: not s.missing_weekly_reward(),
         ):
             return Result(success=True, reason="vod")
         if not self.twitch.running:

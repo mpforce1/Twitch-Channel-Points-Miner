@@ -27,12 +27,14 @@ class WatchStreakMilestone:
         threshold: int,
         copo_bonus: int,
         state: str,
+        missed_streams: set[str] | None,
         expires_at: datetime | None,
     ):
         self.viewer_milestone = viewer_milestone
         self.threshold = threshold
         self.copo_bonus = copo_bonus
         self.state = state
+        self.missed_streams = missed_streams if missed_streams is not None else set[str]()
         self.expires_at = expires_at
 
     def __repr__(self):
