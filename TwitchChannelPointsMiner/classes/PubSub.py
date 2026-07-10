@@ -1,11 +1,9 @@
-import abc
 import logging
 import time
 from threading import Timer
 
 from dateutil import parser as dateparser
 
-from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings, Events
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
@@ -13,19 +11,11 @@ from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPredi
 from TwitchChannelPointsMiner.classes.entities.Message import Message
 from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 from TwitchChannelPointsMiner.classes.websocket.data import OnsiteNotification
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser
 
 logger = logging.getLogger(__name__)
-
-
-class MessageListener(abc.ABC):
-    def on_message(self, message: Message):
-        """
-        Called when a PubSub Message is received.
-        :param message: The message received.
-        """
-        pass
 
 
 class PubSubHandler(MessageListener):

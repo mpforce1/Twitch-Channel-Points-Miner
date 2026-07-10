@@ -6,7 +6,7 @@ from typing import Iterable
 
 from websocket import WebSocketConnectionClosedException
 
-from TwitchChannelPointsMiner.classes.PubSub import MessageListener
+from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
