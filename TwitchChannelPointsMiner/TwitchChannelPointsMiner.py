@@ -35,7 +35,8 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory, GQL
-from TwitchChannelPointsMiner.classes.websocket import HermesWebSocketPool, PubSubWebSocketPool
+from TwitchChannelPointsMiner.classes.websocket.hermes import HermesWebSocketPool
+from TwitchChannelPointsMiner.classes.websocket.pubsub import PubSubWebSocketPool
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 from TwitchChannelPointsMiner.constants import HERMES_WEBSOCKET, CLIENT_ID_WEB
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers

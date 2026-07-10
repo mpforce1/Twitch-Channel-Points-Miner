@@ -5,7 +5,7 @@ import time
 from threading import Thread
 from typing import Iterable
 
-from TwitchChannelPointsMiner.classes.PubSub import MessageListener
+from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Message import Message
