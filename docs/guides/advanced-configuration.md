@@ -751,6 +751,17 @@ In this example, I've set the number of seconds to `5 * 60` or 5 minutes. This w
 once we get to 5 minutes before the token expires. Tokens typically last for 20 minutes. The default is 120 seconds (2
 minutes).
 
+#### `weekly_rewards`
+
+Enables automatic progression of Weekly Rewards for this streamer. This includes both selecting them when using
+`Priority.WEEKLY_REWARDS` and automatic progression when the streamer is offline. Defaults to `True`.
+
+#### 'points_limit'
+
+Set this to a whole positive number (e.g. `1000`, `50000`) to enable a limit on the amount of points that the miner will
+attempt to get for this Streamer. This only applies to `Priority.ORDER`, `Priority.POINTS_ASCENDING`,
+`Priority.POINTS_DESCENDING`, and `Priority.SUBSCRIBED`. Set this to `None` or `False` to disable.
+
 
 #### `bet`
 

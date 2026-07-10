@@ -113,6 +113,8 @@ twitch_miner = TwitchChannelPointsMiner(
         simulate_hls_playback=HLSSettings(      # Set to False to disable HLS playback.
             refresh_before=120,                 # Set to the number of seconds before expiry to refresh the PlaybackAccessToken.
         ),
+        weekly_rewards=True,                    # Automatically progress Weekly Rewards
+        points_limit=50000,                     # The limit on the number of points the miner will attempt to mine for the` Streamer
         bet=BetSettings(
             strategy=Strategy.SMART,            # Choose you strategy!
             percentage=5,                       # Place the x% of your channel points
