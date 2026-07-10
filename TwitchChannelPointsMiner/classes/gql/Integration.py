@@ -1,7 +1,7 @@
 import copy
 import logging
 from secrets import token_hex
-from typing import Callable, Any, Protocol
+from typing import Callable, Any, Literal, Protocol
 
 import requests
 from requests import Response
@@ -794,15 +794,24 @@ class GQL:
             self.parser.parse_filterable_video_tower_videos
         )
 
-    def clips(self, channel_login: str, limit: int = 20):
+    def clips(
+        self,
+        channel_login: str,
+        limit: int = 20,
+        _filter: Literal[
+            "ALL_TIME", "LAST_MONTH", "LAST_WEEK", "LAST_DAY"
+        ] = "ALL_TIME",
+    ):
         json_data = copy.deepcopy(GQLOperations.ClipsCards__User)
         json_data["variables"]["login"] = channel_login
         json_data["variables"]["limit"] = limit
+        json_data["variables"]["criteria"]["filter"] = _filter
         return self.post_gql_request_single(
             GQLOperations.ClipsCards__User["operationName"],
             json_data,
             self.parser.parse_clips_cards_user,
         )
+
 
 class GQLFactory:
     """Factory class for creating GQL objects."""

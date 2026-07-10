@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 import json
 import logging
 import os
@@ -14,7 +15,9 @@ from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.gql import Properties
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
-from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import WeeklyRewards
+from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import (
+    WeeklyRewards,
+)
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
 from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list, simple_repr
@@ -102,6 +105,14 @@ class StreamerSettings(object):
         return f"StreamerSettings(make_predictions={self.make_predictions}, follow_raid={self.follow_raid}, claim_drops={self.claim_drops}, claim_moments={self.claim_moments}, watch_streak={self.watch_streak}, community_goals={self.community_goals}, bet={self.bet}, chat={self.chat}, simulate_hls_playback={self.simulate_hls_playback}, weekly_rewards={self.weekly_rewards})"
 
 
+@dataclass
+class Clips:
+    last_day: list[Clip] = field(default_factory=lambda: [])
+    last_week: list[Clip] = field(default_factory=lambda: [])
+    last_month: list[Clip] = field(default_factory=lambda: [])
+    all_time: list[Clip] = field(default_factory=lambda: [])
+
+
 class Streamer(object):
     __slots__ = [
         "username",
@@ -128,6 +139,7 @@ class Streamer(object):
         "weekly_rewards",
         "clips",
         "vods",
+        "watch_streak_missed_streams",
         "mutex",
     ]
 
@@ -146,8 +158,9 @@ class Streamer(object):
         source: StreamerSource = StreamerSource.Streamers,
         gift_sub: GiftSub | None = None,
         weekly_rewards: WeeklyRewards | None = None,
-        clips: list[Clip] | None = None,
+        clips: Clips | None = None,
         vods: list[Video] | None = None,
+        watch_streak_missed_streams: set[str] | None = None,
     ):
         self.username: str = username.lower().strip()
         self.channel_id: str = channel_id if channel_id is not None else ""
@@ -167,8 +180,13 @@ class Streamer(object):
         self.irc_chat = None
         self.gift_sub = gift_sub
         self.weekly_rewards = weekly_rewards
-        self.clips = clips if clips is not None else []
+        self.clips = clips if clips is not None else Clips()
         self.vods = vods if vods is not None else []
+        self.watch_streak_missed_streams = (
+            watch_streak_missed_streams
+            if watch_streak_missed_streams is not None
+            else []
+        )
 
         self.stream = stream if stream is not None else Stream()
 
@@ -391,7 +409,18 @@ class Streamer(object):
             self.settings.weekly_rewards is True
             and self.weekly_rewards is not None
             # We aren't missing a week if there are no more rewards to obtain
-            and self.weekly_rewards.accumulated_weeks < len(self.weekly_rewards.event_config.reward_tiers)
+            and self.weekly_rewards.accumulated_weeks
+            < len(self.weekly_rewards.event_config.reward_tiers)
             and not self.weekly_rewards.has_earned_weekly_reward_this_week
             and not self.weekly_rewards.has_visited_today
+        )
+
+    def has_missed_streams(self):
+        return len(self.watch_streak_missed_streams) > 0
+
+    def needs_watch_streak_recovery(self):
+        return (
+            self.settings.watch_streak is True
+            and not self.is_online
+            and len(self.watch_streak_missed_streams) > 0
         )

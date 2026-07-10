@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from TwitchChannelPointsMiner.classes.WatchStreakRecovery import WatchStreakRecovery
 import TwitchChannelPointsMiner.classes.websocket.hermes.data as hermes_data
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
@@ -534,6 +535,9 @@ class TwitchChannelPointsMiner:
                 PubsubTopic("user-subscribe-events-v1", user_id=user_id)
             )
 
+            # viewer-milestones gives us information about recovered streaks
+            self.ws_pool.submit(PubsubTopic("viewer-milestones", user_id=user_id))
+
             sync_weekly_rewards = False
 
             for streamer in self.streamers:
@@ -649,6 +653,12 @@ class TwitchChannelPointsMiner:
                     weekly_rewards_progressor_thread.name = "Weekly Rewards Progressor"
                     weekly_rewards_progressor_thread.start()
                     self.background_tasks.append(weekly_rewards_progressor_thread)
+
+            # Watch Streak Recovery
+            watch_streak_recovery_thread = WatchStreakRecovery(self.twitch, self.streamers, 30, 8 * 60)
+            watch_streak_recovery_thread.name = "Watch Streak Recovery"
+            watch_streak_recovery_thread.start()
+            self.background_tasks.append(watch_streak_recovery_thread)
 
             # Main loop, sleeps and checks on background tasks/running state
             main_loop_period = timedelta(seconds=30).total_seconds()

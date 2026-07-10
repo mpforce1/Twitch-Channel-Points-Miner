@@ -12,6 +12,7 @@ from TwitchChannelPointsMiner.JsonParser import (
 )
 from TwitchChannelPointsMiner.classes.websocket.data import (
     UserSubscribeEvents,
+    ViewerMilestones,
     WeeklyRewards,
 )
 from TwitchChannelPointsMiner.classes.websocket.data.OnsiteNotification import (
@@ -170,9 +171,7 @@ class Parser:
             days_visited_this_week=parse_expected_value(
                 value, "daysVisitedThisWeek", expect_int
             ),
-            accumulated_weeks=parse_value(
-                value, "accumulatedWeeks", expect_int
-            ),
+            accumulated_weeks=parse_value(value, "accumulatedWeeks", expect_int),
             notification_type=parse_expected_value(
                 value, "notificationType", expect_str
             ),
@@ -183,3 +182,22 @@ class Parser:
                 value, "eventConfig", self.parse_weekly_rewards_config
             ),
         )
+
+    # viewer-milestones
+    def parse_streak_recovered(self, value) -> ViewerMilestones.StreakRecovered:
+        return ViewerMilestones.StreakRecovered(
+            channel_id=parse_expected_value(value, "channel_id", expect_str)
+        )
+
+    def parse_viewer_milestones(
+        self, value
+    ) -> ViewerMilestones.ViewerMilestones | None:
+        value = expect_dict(value)
+        type = parse_expected_value(value, "type", expect_str)
+        if type == "streak-recovered":
+            return self.parse_streak_recovered(
+                parse_expected_value(value, "data", expect_dict)
+            )
+        else:
+            logger.debug(f"Unknown viewer-milestones type: {type}")
+            return None

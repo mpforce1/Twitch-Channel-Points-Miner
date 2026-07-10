@@ -3,8 +3,18 @@ from TwitchChannelPointsMiner.utils import simple_repr
 
 
 class Clip:
-    def __init__(self, _id: str, slug: str, url: str, title: str, duration_seconds: int):
+
+    def __init__(
+        self,
+        _id: str,
+        broadcast_id: str | None,
+        slug: str,
+        url: str,
+        title: str,
+        duration_seconds: int,
+    ):
         self.id = _id
+        self.broadcast_id = broadcast_id
         self.slug = slug
         self.url = url
         self.title = title
@@ -12,6 +22,7 @@ class Clip:
 
     def __repr__(self):
         return simple_repr(self)
+
 
 class Response:
     def __init__(self, clips: Paginated[Clip]):

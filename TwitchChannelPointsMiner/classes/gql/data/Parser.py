@@ -490,6 +490,21 @@ def reward_list_viewer_milestone_parser(value: Any) -> RewardList.ViewerMileston
     )
 
 
+def watch_streak_missed_stream_parser(value) -> set[str]:
+    value = expect_list(value)
+    ids = set()
+    # Each missed stream is a dict containing a "broadcastIdentifiers", which is a list of dicts each containing an "id"
+    for index in range(len(value)):
+        stream = expect_dict(value[index])
+        with JsonParentContext(index):
+            broadcast_ids = parse_expected_value(stream, "broadcastIdentifiers", list_parser(expect_dict))
+            with JsonParentContext("broadcastIdentifiers"):
+                for id_index in range(len(broadcast_ids)):
+                    _id = broadcast_ids[id_index]
+                    with JsonParentContext(id_index):
+                        ids.add(parse_expected_value(_id, "id", expect_str))
+    return ids
+
 def reward_list_watch_streak_milestone_parser(
     value: Any,
 ) -> RewardList.WatchStreakMilestone:
@@ -501,6 +516,7 @@ def reward_list_watch_streak_milestone_parser(
         threshold=parse_expected_value(value, "watchStreakThreshold", expect_int),
         copo_bonus=parse_expected_value(value, "watchStreakCopoBonus", expect_int),
         state=parse_expected_value(value, "state", expect_str),
+        missed_streams=parse_expected_value(value, "missedStreams", optional_parser(watch_streak_missed_stream_parser)),
         expires_at=parse_expected_value(
             value, "expiresAt", optional_parser(expect_iso_8601)
         ),
@@ -645,8 +661,17 @@ def filterable_video_tower_video_edge_parser(value) -> FilterableVideoTower.Vide
 
 def clips_cards_user_clip_edge_parser(value) -> ClipsCardsUser.Clip:
     value = expect_dict(value)
+
+    broadcast_identifier = parse_expected_value(
+        value, "broadcastIdentifier", optional_parser(expect_dict)
+    )
+    broadcast_id = None
+    if broadcast_identifier is not None:
+        with JsonParentContext("broadcastIdentifier"):
+            broadcast_id = parse_expected_value(broadcast_identifier, "id", expect_str)
     return ClipsCardsUser.Clip(
         _id=parse_expected_value(value, "id", expect_str),
+        broadcast_id=broadcast_id,
         slug=parse_expected_value(value, "slug", expect_str),
         url=parse_expected_value(value, "url", expect_str),
         title=parse_expected_value(value, "title", expect_str),

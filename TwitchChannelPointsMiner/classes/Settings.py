@@ -42,6 +42,7 @@ class Events(Enum):
     GAIN_FOR_WATCH = auto()
     GAIN_FOR_WATCH_STREAK = auto()
     WATCH_STREAK_PROGRESS = auto()
+    WATCH_STREAK_RECOVERY = auto()
     BET_WIN = auto()
     BET_LOSE = auto()
     BET_REFUND = auto()

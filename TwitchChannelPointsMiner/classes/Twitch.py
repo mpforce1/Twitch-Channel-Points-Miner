@@ -13,6 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
 from secrets import choice, token_hex
+from typing import Callable
 
 import requests
 import validators
@@ -40,7 +41,7 @@ from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
     PlaybackAccessToken,
 )
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
@@ -283,6 +284,31 @@ class Twitch(object):
             chat_room_ban_status = self.gql.chat_room_ban_status(
                 self.client_session.login.get_user_id(), streamer.channel_id
             )
+            # Update Watch Streak now as it relates to the Streamer not the current Stream
+            had_missed_streams = len(streamer.watch_streak_missed_streams) > 0
+            if reward_list_response.channel.self.watch_streak_milestone is not None:
+                streamer.watch_streak_missed_streams = (
+                    reward_list_response.channel.self.watch_streak_milestone.missed_streams
+                )
+                if (
+                    had_missed_streams
+                    and len(streamer.watch_streak_missed_streams) <= 0
+                ):
+                    logger.info(
+                        f"Watch Streak recovered for {streamer}",
+                        extra={
+                            "emoji": ":ambulance:",
+                            "event": Events.get("WATCH_STREAK_RECOVERY"),
+                        },
+                    )
+                if (
+                    not had_missed_streams
+                    and len(streamer.watch_streak_missed_streams) > 0
+                ):
+                    logger.info(
+                        f"Missing Watch Streak for {streamer}",
+                        extra={"emoji": ":red_question_mark:"},
+                    )
         except RetryError as e:
             logger.error(
                 f"Error getting stream info for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
@@ -871,13 +897,18 @@ class Twitch(object):
         )
 
     def simulate_clip_playback(
-        self, streamer: Streamer, clip: Clip, max_watch_seconds: float = 20
+        self,
+        streamer: Streamer,
+        clip: Clip,
+        max_watch_seconds: float = 20,
+        done: Callable[[Streamer], bool] = lambda _: False,
     ):
         """
         Simulates the user watching a clip.
         :param streamer: The Streamer for whom to watch a clip.
         :param clip: The Clip to watch.
         :param max_watch_seconds: The maximum number of seconds to wait for the clip to be processed as watched.
+        :param done: A function that should return True if clip playback should end early.
         :return: True if playback was successful, False otherwise.
         """
         logger.info(
@@ -901,7 +932,7 @@ class Twitch(object):
         seconds_watched = 5
         while (
             self.running
-            and streamer.missing_weekly_reward()
+            and not done(streamer)
             and time.monotonic() - start_time < max_watch_seconds
         ):
             interruptible_sleep(
@@ -913,7 +944,7 @@ class Twitch(object):
             )
             seconds_watched += 5
 
-        return not streamer.missing_weekly_reward()
+        return done(streamer)
 
     def send_vod_minutes_watched(self, streamer: Streamer, vod_id: str):
         return self.send_spade_payload(
@@ -937,13 +968,18 @@ class Twitch(object):
         )
 
     def simulate_vod_playback(
-        self, streamer: Streamer, vod: VideoEdge, max_watch_seconds: float = 8 * 60
+        self,
+        streamer: Streamer,
+        vod: VideoEdge,
+        max_watch_seconds: float = 8 * 60,
+        done: Callable[[Streamer], bool] = lambda _: False,
     ):
         """
         Simulates the user watching a VOD.
         :param streamer: The Streamer for whom to watch a VOD.
         :param vod: The VOD to watch.
         :param max_watch_seconds: The maximum number of seconds to simulate watching.
+        :param done: A function that should return True if VOD playback should end early.
         :return: True if the playback was successful, False otherwise.
         """
         logger.info(
@@ -963,15 +999,14 @@ class Twitch(object):
         overall_start_time = time.monotonic()
         watch_interval = 60
         while self.running and time.monotonic() - overall_start_time <= max_watch_seconds:
-            # TODO make condition a Callable arg to make it more generically usable
-            if not streamer.missing_weekly_reward():
+            if done(streamer):
                 return True
             start_time = time.monotonic()
             if self.send_vod_minutes_watched(streamer, vod.id):
                 accepted += 1
                 request_duration = time.monotonic() - start_time
                 interruptible_sleep(
-                    lambda: self.running and streamer.missing_weekly_reward(),
+                    lambda: self.running and not done(streamer),
                     duration=max(1, watch_interval - request_duration),
                 )
             else:
@@ -1061,11 +1096,21 @@ class Twitch(object):
             if not streamer.settings.weekly_rewards:
                 continue
             try:
-                clips_response = self.gql.clips(streamer.username, limit=10)
+                clips_last_day = self.gql.clips(streamer.username, limit=30, _filter="LAST_DAY")
+                clips_last_week = self.gql.clips(streamer.username, limit=10, _filter="LAST_WEEK")
+                # last month isn't currently used anywhere
+                # clips_last_month = self.gql.clips(streamer.username, limit=10, _filter="LAST_MONTH")
+                clips_all_time = self.gql.clips(streamer.username, limit=10, _filter="ALL_TIME")
+
                 vods_response = self.gql.recent_broadcasts(streamer.username, limit=5)
-                # Update the VOD viewable state
+
                 vods = [Video(edge=edge.node) for edge in vods_response.videos.edges]
-                streamer.clips = [clip.node for clip in clips_response.clips.edges]
+                streamer.clips = Clips(
+                    last_day=[clip.node for clip in clips_last_day.clips.edges],
+                    last_week=[clip.node for clip in clips_last_week.clips.edges],
+                    #last_month=[clip.node for clip in clips_last_month.clips.edges],
+                    all_time=[clip.node for clip in clips_all_time.clips.edges],
+                )
                 streamer.vods = vods
             except RetryError as e:
                 logger.error(
