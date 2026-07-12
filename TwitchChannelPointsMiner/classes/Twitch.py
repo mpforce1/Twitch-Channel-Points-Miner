@@ -52,6 +52,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropCampaignDashboard,
 )
 from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import VideoEdge
+from TwitchChannelPointsMiner.classes.gql.data.response.RewardList import RewardListResponse
 from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.constants import (
     CLIENT_ID,
@@ -267,6 +268,80 @@ class Twitch(object):
         )
         return False
 
+    def update_reward_list(self, streamer: Streamer, reward_list: RewardListResponse):
+        """
+        Updates the given Streamer's reward list state. Checks for missed streams.
+        :param streamer: The Streamer to update.
+        :param reward_list: The new reward list state.
+        """
+
+        had_missed_streams = len(streamer.watch_streak_missed_streams) > 0
+        if reward_list.channel.self.watch_streak_milestone is not None:
+            streamer.watch_streak_missed_streams = (
+                reward_list.channel.self.watch_streak_milestone.missed_streams
+            )
+            if had_missed_streams and len(streamer.watch_streak_missed_streams) <= 0:
+                logger.info(
+                    f"Watch Streak recovered for {streamer}",
+                    extra={
+                        "emoji": ":ambulance:",
+                        "event": Events.get("WATCH_STREAK_RECOVERY"),
+                    },
+                )
+            if not had_missed_streams and len(streamer.watch_streak_missed_streams) > 0:
+                logger.info(
+                    f"Missing Watch Streak for {streamer}",
+                    extra={"emoji": ":red_question_mark:"},
+                )
+
+    def get_streamer_info(self, streamer: Streamer, first_run: bool):
+        """
+        Updates general state info for the given Streamer. This includes Clips, VODs, Reward List, and Gift Subs.
+        :param streamer: The Streamer to update.
+        :param first_run: If True some events won't be emitted.
+        """
+        try:
+            # We don't currently need clips/vods for anything else
+            if (
+                streamer.settings.weekly_rewards is True
+                or streamer.settings.watch_streak is True
+            ):
+                clips_last_day = self.gql.clips(
+                    streamer.username, limit=30, _filter="LAST_DAY"
+                )
+                clips_last_week = self.gql.clips(
+                    streamer.username, limit=10, _filter="LAST_WEEK"
+                )
+                # last month isn't currently used anywhere
+                # clips_last_month = self.gql.clips(streamer.username, limit=10, _filter="LAST_MONTH")
+                clips_all_time = self.gql.clips(
+                    streamer.username, limit=10, _filter="ALL_TIME"
+                )
+                vods_response = self.gql.recent_broadcasts(
+                    streamer.username, limit=5
+                )
+                streamer.clips = Clips(
+                    all_time=list(clip.node for clip in clips_all_time.clips.edges),
+                    last_week=list(
+                        clip.node for clip in clips_last_week.clips.edges
+                    ),
+                    last_day=list(clip.node for clip in clips_last_day.clips.edges),
+                )
+                streamer.vods = [
+                    Video(edge=edge.node) for edge in vods_response.videos.edges
+                ]
+
+            # Reward list
+            self.update_reward_list(
+                streamer, self.gql.reward_list(streamer.channel_id)
+            )
+
+            # Gift subs
+            self.check_gift_sub(streamer, not first_run)
+
+        except RetryError as e:
+            logger.error(f"Error while syncing state for {streamer}: {e}")
+
     def get_stream_info(self, streamer: Streamer):
         """
         Gets information about the stream for the given streamer.
@@ -284,31 +359,6 @@ class Twitch(object):
             chat_room_ban_status = self.gql.chat_room_ban_status(
                 self.client_session.login.get_user_id(), streamer.channel_id
             )
-            # Update Watch Streak now as it relates to the Streamer not the current Stream
-            had_missed_streams = len(streamer.watch_streak_missed_streams) > 0
-            if reward_list_response.channel.self.watch_streak_milestone is not None:
-                streamer.watch_streak_missed_streams = (
-                    reward_list_response.channel.self.watch_streak_milestone.missed_streams
-                )
-                if (
-                    had_missed_streams
-                    and len(streamer.watch_streak_missed_streams) <= 0
-                ):
-                    logger.info(
-                        f"Watch Streak recovered for {streamer}",
-                        extra={
-                            "emoji": ":ambulance:",
-                            "event": Events.get("WATCH_STREAK_RECOVERY"),
-                        },
-                    )
-                if (
-                    not had_missed_streams
-                    and len(streamer.watch_streak_missed_streams) > 0
-                ):
-                    logger.info(
-                        f"Missing Watch Streak for {streamer}",
-                        extra={"emoji": ":red_question_mark:"},
-                    )
         except RetryError as e:
             logger.error(
                 f"Error getting stream info for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
@@ -325,7 +375,7 @@ class Twitch(object):
                 chat_room_ban_status.status,
             )
 
-    def check_streamer_online(self, streamer):
+    def check_streamer_online(self, streamer: Streamer):
         if time.time() < streamer.offline_at + 60:
             return
 
@@ -1090,33 +1140,9 @@ class Twitch(object):
                 logger.error(
                     f"Error while trying to sync weekly rewards for {streamer}: {e}"
                 )
-
-    def sync_clips_and_vods(self, streamers: list[Streamer]):
-        for streamer in streamers:
-            if not streamer.settings.weekly_rewards:
-                continue
-            try:
-                clips_last_day = self.gql.clips(streamer.username, limit=30, _filter="LAST_DAY")
-                clips_last_week = self.gql.clips(streamer.username, limit=10, _filter="LAST_WEEK")
-                # last month isn't currently used anywhere
-                # clips_last_month = self.gql.clips(streamer.username, limit=10, _filter="LAST_MONTH")
-                clips_all_time = self.gql.clips(streamer.username, limit=10, _filter="ALL_TIME")
-
-                vods_response = self.gql.recent_broadcasts(streamer.username, limit=5)
-
-                vods = [Video(edge=edge.node) for edge in vods_response.videos.edges]
-                streamer.clips = Clips(
-                    last_day=[clip.node for clip in clips_last_day.clips.edges],
-                    last_week=[clip.node for clip in clips_last_week.clips.edges],
-                    #last_month=[clip.node for clip in clips_last_month.clips.edges],
-                    all_time=[clip.node for clip in clips_all_time.clips.edges],
-                )
-                streamer.vods = vods
-            except RetryError as e:
-                logger.error(
-                    f"Error while trying to sync weekly rewards for {streamer}: {e}"
-                )
-            time.sleep(1)
+            time.sleep(random.uniform(0.1, 1))
+            if not self.running:
+                return
 
     # === CHANNEL POINTS / PREDICTION === #
     # Load the amount of current points for a channel, check if a bonus is available
@@ -1164,6 +1190,7 @@ class Twitch(object):
         def _load_streamer_context(streamer):
             time.sleep(random.uniform(0.15, 0.35))
             self.load_channel_points_context(streamer)
+            self.get_streamer_info(streamer, first_run=True)
             self.check_streamer_online(streamer)
 
         # Initialize channel context in parallel so large streamer lists do not block startup
@@ -1215,6 +1242,9 @@ class Twitch(object):
                         f"Detected that Streamer '{Settings.logger.anonymiser.streamer_username(streamer)}' no longer exists."
                     )
                     pass
+                time.sleep(random.uniform(0.1, 1))
+                if not self.running:
+                    return
 
     def make_predictions(self, event):
         decision = event.bet.calculate(event.streamer.channel_points)
@@ -1634,7 +1664,7 @@ class Twitch(object):
     ):
         """
         Repeating task that synchronises gift subs. Stops once `self.running` is False.
-        :param streamers: The Streamers to synd.
+        :param streamers: The Streamers to sync.
         :param period_seconds: The amount of time, in seconds, between syncs.
         :param step: The interval between checking if the task should run.
         """
@@ -1643,4 +1673,26 @@ class Twitch(object):
             self.check_gift_subs(streamers, not first_run)
             if first_run:
                 first_run = False
+            time.sleep(random.uniform(0.1, 1))
+            if not self.running:
+                return
+            interruptible_sleep(lambda: self.running, period_seconds, step)
+
+    def sync_streamers_state(
+        self, streamers: list[Streamer], period_seconds: float, step: float = 1.0
+    ):
+        """
+        Repeating task that synchronises the streamers' state. Stops once `self.running` is False.
+        :param streamers: The Streamers to sync.
+        :param period_seconds: The amount of time, in seconds, between syncs.
+        :param step: The interval between checking if the task should run.
+        """
+        # Sleep at the start since we should have synced during startup
+        interruptible_sleep(lambda: self.running, period_seconds, step)
+        while self.running:
+            for streamer in streamers:
+                self.get_streamer_info(streamer, first_run=False)
+                time.sleep(random.uniform(0.1, 1))
+                if not self.running:
+                    return
             interruptible_sleep(lambda: self.running, period_seconds, step)
