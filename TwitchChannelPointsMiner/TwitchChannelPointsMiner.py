@@ -629,22 +629,6 @@ class TwitchChannelPointsMiner:
                 sync_weekly_rewards_thread.start()
                 self.background_tasks.append(sync_weekly_rewards_thread)
 
-                # Clips/VODs syncer
-                sync_clips_and_vods_period = timedelta(hours=1).total_seconds()
-                sync_clips_and_vods_thread = threading.Thread(
-                    target=lambda: interruptible_repeating_task(
-                        task=lambda: self.twitch.sync_clips_and_vods(self.streamers),
-                        running_flag=lambda: self.running,
-                        run_early_flag=lambda: False,
-                        period_seconds=sync_clips_and_vods_period,
-                        step=background_task_sleep_step,
-                        run_now=True
-                    )
-                )
-                sync_clips_and_vods_thread.name = "Sync Clips and VODs"
-                sync_clips_and_vods_thread.start()
-                self.background_tasks.append(sync_clips_and_vods_thread)
-
                 # Progressor
                 if self.weekly_rewards_factory is not None:
                     weekly_rewards_progressor_thread = (
@@ -655,10 +639,21 @@ class TwitchChannelPointsMiner:
                     self.background_tasks.append(weekly_rewards_progressor_thread)
 
             # Watch Streak Recovery
-            watch_streak_recovery_thread = WatchStreakRecovery(self.twitch, self.streamers, 30, 8 * 60)
-            watch_streak_recovery_thread.name = "Watch Streak Recovery"
-            watch_streak_recovery_thread.start()
-            self.background_tasks.append(watch_streak_recovery_thread)
+            if any(streamer.settings.watch_streak for streamer in self.streamers):
+                watch_streak_recovery_thread = WatchStreakRecovery(self.twitch, self.streamers, 30, 8 * 60)
+                watch_streak_recovery_thread.name = "Watch Streak Recovery"
+                watch_streak_recovery_thread.start()
+                self.background_tasks.append(watch_streak_recovery_thread)
+
+            # General streamer state
+            sync_streamer_state_period = timedelta(minutes=60).total_seconds()
+            sync_streamer_state_thread = threading.Thread(
+                name="Sync Streamer State",
+                target=self.twitch.sync_streamers_state,
+                args=(self.streamers, sync_streamer_state_period),
+            )
+            sync_streamer_state_thread.start()
+            self.background_tasks.append(sync_streamer_state_thread)
 
             # Main loop, sleeps and checks on background tasks/running state
             main_loop_period = timedelta(seconds=30).total_seconds()

@@ -49,15 +49,14 @@ class WatchStreakRecovery(Thread):
         :return: The VOD or None if one couldn't be found.
         """
         if len(streamer.watch_streak_missed_streams) > 0:
-            # We can match these with the exact VOD
+            # We can match these with the exact VOD, nothing else will work
             for vod in streamer.vods:
                 if (
                     vod.edge.broadcast_id in streamer.watch_streak_missed_streams
                     and self.twitch.vod_viewable(streamer, vod)
                 ):
                     return vod
-        # If we don't know the missed stream ids or can't find the vod, try the first one
-        return streamer.vods[0] if len(streamer.vods) > 0 else None
+        return None
 
     def recover_clip(self, streamer: Streamer):
         """
@@ -143,8 +142,8 @@ class WatchStreakRecovery(Thread):
                     result = self.recover(streamer)
                     logger.debug(f"Streak Recovery: {result}")
 
-                except Exception:
-                    logger.exception("Exception in WatchStreakRecovery")
+                except Exception as e:
+                    logger.error(f"Exception in WatchStreakRecovery: {e}")
                 finally:
                     self._queued.remove(streamer.channel_id)
             except Empty:
