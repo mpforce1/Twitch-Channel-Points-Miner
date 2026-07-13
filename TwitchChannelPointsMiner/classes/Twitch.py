@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
 from secrets import choice, token_hex
-from typing import Callable
+from typing import Callable, Literal
 
 import requests
 import validators
@@ -296,7 +296,7 @@ class Twitch(object):
 
     def get_streamer_info(self, streamer: Streamer, first_run: bool):
         """
-        Updates general state info for the given Streamer. This includes Clips, VODs, Reward List, and Gift Subs.
+        Updates general state info for the given Streamer. This includes Clips, VODs, Reward List, Weekly Rewards, and Gift Subs.
         :param streamer: The Streamer to update.
         :param first_run: If True some events won't be emitted.
         """
@@ -338,6 +338,9 @@ class Twitch(object):
 
             # Gift subs
             self.check_gift_sub(streamer, not first_run)
+
+            # Weekly Rewards
+            self.get_weekly_reward(streamer)
 
         except RetryError as e:
             logger.error(f"Error while syncing state for {streamer}: {e}")
@@ -1072,8 +1075,13 @@ class Twitch(object):
         return False
 
     def update_weekly_reward(
-        self, streamer: Streamer, notification: WeeklyRewards.Notification
+        self, streamer: Streamer, notification: WeeklyRewards.Notification | Literal[False] | None
     ):
+        if notification is False:
+            return
+        if notification is None:
+            streamer.weekly_rewards = None
+            return
         if streamer.weekly_rewards is None:
             logger.error(
                 f"Unable to update weekly reward for {streamer}, no existing reward found"
@@ -1126,23 +1134,14 @@ class Twitch(object):
             notification.event_config.days_required_per_week
         )
 
-    def sync_weekly_rewards(self, streamers: list[Streamer]):
-        """
-        Syncs the current Weekly Rewards state for the given streamers.
-        :param streamers: The Streamers to sync.
-        """
-        for streamer in streamers:
-            if not streamer.settings.weekly_rewards:
-                continue
+    def get_weekly_reward(self, streamer: Streamer):
+        if streamer.settings.weekly_rewards:
             try:
                 streamer.weekly_rewards = self.gql.weekly_rewards(streamer.channel_id)
             except RetryError as e:
                 logger.error(
                     f"Error while trying to sync weekly rewards for {streamer}: {e}"
                 )
-            time.sleep(random.uniform(0.1, 1))
-            if not self.running:
-                return
 
     # === CHANNEL POINTS / PREDICTION === #
     # Load the amount of current points for a channel, check if a bonus is available

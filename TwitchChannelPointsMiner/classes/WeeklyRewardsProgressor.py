@@ -1,13 +1,14 @@
 import abc
 import logging
 import time
-from concurrent.futures import Future
-from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
-from itertools import islice
 from threading import Thread
 from typing import TypedDict
 
+from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
+    SlottedTaskRunner,
+    SlottedTaskRunnerFactory,
+)
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
@@ -21,16 +22,15 @@ class Result(TypedDict):
     reason: str
 
 
-class Slot:
-    def __init__(self, streamer: Streamer, future: Future[Result], start_time: float):
-        self.streamer = streamer
-        self.future = future
-        self.start_time = start_time
-
-
 class WeeklyRewardsProgressor(abc.ABC, Thread):
+    """Attempts to progress Weekly Rewards."""
     @abc.abstractmethod
-    def watch_loop(self):
+    def attempt_progress(self, streamer: Streamer) -> Result:
+        """
+        Attempts to make progress for the Weekly Rewards for the given Streamer.
+        :param streamer: The Streamer to progress.
+        :return: The result.
+        """
         pass
 
 
@@ -51,20 +51,18 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
         self,
         twitch: Twitch,
         streamers: list[Streamer],
+        runner: SlottedTaskRunner[Streamer, Result],
         config: BasicConfiguration | None = None,
     ):
-        super().__init__(target=self.watch_loop, name="Weekly Rewards Progressor")
+        super().__init__(name="Weekly Rewards Progressor")
         self.twitch = twitch
         """ The Twitch API instance. """
         self.streamers = streamers
         """ The Streamers to monitor. """
+        self.runner = runner
+        """ The runner used to manage concurrent watching. """
         if config is None:
             config = BasicConfiguration()
-        if config.max_concurrent_watch <= 0:
-            raise ValueError(
-                f"max_concurrent_watch must be greater than 0: {config.max_concurrent_watch}"
-            )
-        self.max_concurrent_watch = config.max_concurrent_watch
         """ The maximum amount to watch concurrently. """
         self.max_seconds_clips = config.max_seconds_clips
         """ The maximum amount of time to wait for watching a clip to trigger progress. """
@@ -80,12 +78,12 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
         self._failures = dict[str, int]()
         self._cooldowns = dict[str, float]()
 
-    def select_streamers(self, watching: set[str]):
+    def select_streamers(self):
         """
         Selects Streamers to attempt to progress.
         :return: The Streamers.
         """
-        target_streamers = (
+        return (
             streamer
             for streamer in self.streamers
             # Don't watch VODs for streamers that are online, we may be able to advance via watching live
@@ -98,10 +96,10 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
                 or self.get_vod(streamer) is not None
             )
             # Only select streamers that aren't currently being watched
-            and streamer.channel_id not in watching
+            and not self.runner.has_context(streamer)
+            # Avoid streamers that are on cooldown
             and streamer.channel_id not in self._cooldowns
         )
-        return list(islice(target_streamers, self.max_concurrent_watch - len(watching)))
 
     def get_clip(self, streamer: Streamer) -> Clip | None:
         """
@@ -149,15 +147,13 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
         logger.debug(f"All {len(recent_broadcasts)} recent VODs too short")
         return None
 
-    def do_watch(self, streamer: Streamer) -> Result:
-        """
-        Attempts to watch a Clip/VOD for the given Streamer.
-        :param streamer: The Streamer to watch.
-        :return: A result.
-        """
+    def attempt_progress(self, streamer: Streamer) -> Result:
         clip = self.get_clip(streamer)
         if clip is not None and self.twitch.simulate_clip_playback(
-            streamer, clip, max_watch_seconds=self.max_seconds_clips
+            streamer,
+            clip,
+            max_watch_seconds=self.max_seconds_clips,
+            done=lambda s: not s.missing_weekly_reward(),
         ):
             return Result(success=True, reason="clip")
         if not self.twitch.running:
@@ -183,13 +179,15 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
             )
         return Result(success=False, reason="clip and vod both timed out")
 
+    def _attempt_progress_lambda(self, streamer: Streamer):
+        return lambda: self.attempt_progress(streamer)
+
     def update_failures(self, streamer_id: str):
         """
         Increments the number of failures for the given streamer. If the number of failures exceeds the maximum the
         streamer will be put on cooldown.
         :param streamer_id: The id of the Streamer.
         """
-
         failures = self._failures.get(streamer_id, 0) + 1
         if failures >= self.max_failures_per_streamer:
             self._cooldowns[streamer_id] = time.monotonic()
@@ -215,17 +213,6 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
                 f"Unable to progress Weekly Reward for {streamer} with Clips or VODs: {result["reason"]}",
             )
 
-    # Watch a single streamer, process the result, and handle errors
-    def watch_single(self, streamer: Streamer):
-        """
-        Watches a single Streamer, processes the result, and handles any errors.
-        :param streamer: The Streamer to watch.
-        """
-        try:
-            self.process_result(streamer, self.do_watch(streamer))
-        except Exception as e:
-            logger.error(f"Error when trying to get Weekly Reward for {streamer}: {e}")
-
     def manage_cooldowns(self):
         """Checks the cooldowns list and removes items that have been on cooldown long enough."""
         for streamer_id in list(self._cooldowns.keys()):
@@ -233,89 +220,32 @@ class BasicWeeklyRewardsProgressor(WeeklyRewardsProgressor):
             if (time.monotonic() - start_time) > self.failure_cooldown_seconds:
                 self._cooldowns.pop(streamer_id)
 
-    def manage_slots(self, slots: list[Slot | None]):
-        """
-        Checks the given slots and removes items that have finished or timed out.
-        :param slots: The slots to check.
-        """
-        for slot_index in range(len(slots)):
-            slot = slots[slot_index]
-            if slot is not None:
-                try:
-                    if slot.future.done():
-                        slots[slot_index] = None
-                        self.process_result(slot.streamer, slot.future.result())
-                    elif time.monotonic() - slot.start_time > self._full_timeout:
-                        slots[slot_index] = None
-                        self.update_failures(slot.streamer.channel_id)
-                        logger.error(
-                            f"Unable to get Weekly Reward for {slot.streamer}, took more than {self._full_timeout} seconds",
-                        )
-                        slot.future.cancel()
-                except Exception as e:
-                    slots[slot_index] = None
-                    self.update_failures(slot.streamer.channel_id)
-                    logger.error(
-                        f"Error when trying to get Weekly Reward for {slot.streamer}: {e}"
-                    )
-
-    def watch_multiple(self, thread_pool: ThreadPoolExecutor, slots: list[Slot | None]):
-        """
-        Uses the given ThreadPoolExecutor to submit watch tasks for the given slots.
-        :param thread_pool: The pool to use when submitting tasks.
-        :param slots: The watch slots.
-        """
-        # Select new streamers to watch
-        target_streamers = self.select_streamers(
-            set(slot.streamer.channel_id for slot in slots if slot is not None)
-        )
-        # When there are no targets we don't need to do anything
-        if len(target_streamers) > 0:
-            for streamer, index in zip(
-                target_streamers,
-                (index for index in range(len(slots)) if slots[index] is None),
+    def submit_streamers(self):
+        """Finds valid streamers and submits them to be watched."""
+        streamers = self.select_streamers()
+        while self.runner.has_free_slot():
+            streamer = next(streamers, None)
+            if streamer is not None:
+                logger.debug(f"Beginning progression task for {streamer}")
+            if streamer is None or not self.runner.start_task(
+                streamer,
+                self._attempt_progress_lambda(streamer),
+                self._full_timeout,
+                on_complete=self.process_result,
             ):
-                slots[index] = Slot(
-                    streamer,
-                    thread_pool.submit(self.do_watch, streamer),
-                    time.monotonic(),
-                )
-            logger.debug(
-                f"Slots post submit: {list(slot.streamer.username if slot is not None else 'None' for slot in slots)}"
-            )
+                break
 
-    def watch_loop(self):
-        """
-        Periodically checks all Streamers weekly reward status and attempts to watch Clips/VODs for those that haven't
-        yet advanced theirs today/this week.
-        """
-        # When max concurrent is 1 we don't need a thread pool
-        if self.max_concurrent_watch == 1:
-            while self.twitch.running:
-                self.manage_cooldowns()
-                target_streamers = self.select_streamers(set())
-                if len(target_streamers) > 0:
-                    self.watch_single(target_streamers[0])
-                interruptible_sleep(
-                    running_flag=lambda: self.twitch.running,
-                    duration=self.loop_interval_seconds,
-                )
-        else:
-            with ThreadPoolExecutor(
-                max_workers=self.max_concurrent_watch,
-                thread_name_prefix="weekly_reawrds_watcher",
-            ) as thread_pool:
-                slots: list[Slot | None] = [
-                    None for _ in range(self.max_concurrent_watch)
-                ]
-                while self.twitch.running:
-                    self.manage_slots(slots)
-                    self.manage_cooldowns()
-                    self.watch_multiple(thread_pool, slots)
-                    interruptible_sleep(
-                        running_flag=lambda: self.twitch.running,
-                        duration=self.loop_interval_seconds,
-                    )
+    def _run(self):
+        self.manage_cooldowns()
+        self.submit_streamers()
+
+    def run(self):
+        while self.twitch.running:
+            self._run()
+            interruptible_sleep(
+                running_flag=lambda: self.twitch.running,
+                duration=self.loop_interval_seconds,
+            )
 
 
 class WeeklyRewardsProgressorFactory(abc.ABC):
@@ -323,14 +253,28 @@ class WeeklyRewardsProgressorFactory(abc.ABC):
 
     @abc.abstractmethod
     def create(
-        self, twitch: Twitch, streamers: list[Streamer]
+        self,
+        twitch: Twitch,
+        streamers: list[Streamer],
     ) -> WeeklyRewardsProgressor:
         pass
 
 
 class BasicWeeklyRewardsProgressorFactory(WeeklyRewardsProgressorFactory):
-    def __init__(self, config: BasicConfiguration | None = None):
+    def __init__(
+        self,
+        runner_factory: SlottedTaskRunnerFactory,
+        config: BasicConfiguration | None = None,
+    ):
+        self.runner_factory = runner_factory
         self.config = config
 
-    def create(self, twitch: Twitch, streamers: list[Streamer]):
-        return BasicWeeklyRewardsProgressor(twitch, streamers, config=self.config)
+    def create(
+        self,
+        twitch: Twitch,
+        streamers: list[Streamer],
+    ):
+        runner = self.runner_factory.create(twitch, "Weekly Rewards Progressor")
+        return BasicWeeklyRewardsProgressor(
+            twitch, streamers, runner, config=self.config
+        )
