@@ -294,11 +294,10 @@ class Twitch(object):
                     extra={"emoji": ":red_question_mark:"},
                 )
 
-    def get_streamer_info(self, streamer: Streamer, first_run: bool):
+    def get_streamer_info(self, streamer: Streamer):
         """
-        Updates general state info for the given Streamer. This includes Clips, VODs, Reward List, Weekly Rewards, and Gift Subs.
+        Updates general state info for the given Streamer. This includes Clips, VODs, Reward List, and Weekly Rewards.
         :param streamer: The Streamer to update.
-        :param first_run: If True some events won't be emitted.
         """
         try:
             # We don't currently need clips/vods for anything else
@@ -335,9 +334,6 @@ class Twitch(object):
             self.update_reward_list(
                 streamer, self.gql.reward_list(streamer.channel_id)
             )
-
-            # Gift subs
-            self.check_gift_sub(streamer, not first_run)
 
             # Weekly Rewards
             self.get_weekly_reward(streamer)
@@ -1189,7 +1185,7 @@ class Twitch(object):
         def _load_streamer_context(streamer):
             time.sleep(random.uniform(0.15, 0.35))
             self.load_channel_points_context(streamer)
-            self.get_streamer_info(streamer, first_run=True)
+            self.get_streamer_info(streamer)
             self.check_streamer_online(streamer)
 
         # Initialize channel context in parallel so large streamer lists do not block startup
@@ -1690,7 +1686,7 @@ class Twitch(object):
         interruptible_sleep(lambda: self.running, period_seconds, step)
         while self.running:
             for streamer in streamers:
-                self.get_streamer_info(streamer, first_run=False)
+                self.get_streamer_info(streamer)
                 time.sleep(random.uniform(0.1, 1))
                 if not self.running:
                     return
