@@ -13,22 +13,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from TwitchChannelPointsMiner.classes.WatchStreakRecovery import WatchStreakRecovery
 import TwitchChannelPointsMiner.classes.websocket.hermes.data as hermes_data
+from TwitchChannelPointsMiner.classes import WatchStreakRecovery, WeeklyRewardsProgressor
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings, StreamerSource
+from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerThreadFactory
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
     StreamerSelector,
     PrioritySelector,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
-from TwitchChannelPointsMiner.classes.WeeklyRewardsProgressor import (
-    BasicConfiguration,
-    BasicWeeklyRewardsProgressorFactory,
-    WeeklyRewardsProgressorFactory
-)
 from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPrediction
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
@@ -36,9 +32,9 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory, GQL
+from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 from TwitchChannelPointsMiner.classes.websocket.hermes import HermesWebSocketPool
 from TwitchChannelPointsMiner.classes.websocket.pubsub import PubSubWebSocketPool
-from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 from TwitchChannelPointsMiner.constants import HERMES_WEBSOCKET, CLIENT_ID_WEB
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers
 from TwitchChannelPointsMiner.utils import (
@@ -90,7 +86,8 @@ class TwitchChannelPointsMiner:
         "original_streamers",
         "logs_file",
         "queue_listener",
-        "weekly_rewards_factory"
+        "weekly_rewards_factory",
+        "watch_streak_recovery_factory",
     ]
 
     def __init__(
@@ -113,7 +110,10 @@ class TwitchChannelPointsMiner:
         use_hermes: bool = False,
         # Weekly Rewards Progression
         weekly_rewards: (
-            BasicConfiguration | WeeklyRewardsProgressorFactory | Literal[False] | None
+            WeeklyRewardsProgressor.BasicConfiguration | WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory | Literal[False] | None
+        ) = None,
+        watch_streak_recovery: (
+            WatchStreakRecovery.BasicConfiguration | WatchStreakRecovery.WatchStreakRecoveryFactory | Literal[False] | None
         ) = None,
     ):
         # Validate the user has changed default username and password
@@ -187,25 +187,76 @@ class TwitchChannelPointsMiner:
 
         self.twitch = Twitch(self.username, user_agent, password, gql_factory=gql)
 
-        self.weekly_rewards_factory: WeeklyRewardsProgressorFactory | None
+        self.weekly_rewards_factory: (
+            WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory | None
+        )
         if weekly_rewards is None:
             # Default factory
-            self.weekly_rewards_factory = BasicWeeklyRewardsProgressorFactory()
+            runner_factory = SlottedTaskRunnerThreadFactory()
+            self.weekly_rewards_factory = (
+                WeeklyRewardsProgressor.BasicWeeklyRewardsProgressorFactory(
+                    runner_factory=runner_factory,
+                )
+            )
         elif weekly_rewards is False:
             # Disable
             self.weekly_rewards_factory = None
-        elif isinstance(weekly_rewards, BasicConfiguration):
+        elif isinstance(weekly_rewards, WeeklyRewardsProgressor.BasicConfiguration):
             # Default factory with custom config
-            self.weekly_rewards_factory = BasicWeeklyRewardsProgressorFactory(
-                config=weekly_rewards
+            runner_factory = SlottedTaskRunnerThreadFactory(
+                max_concurrent=weekly_rewards.max_concurrent_watch,
+                loop_interval_seconds=weekly_rewards.loop_interval_seconds,
             )
-        elif isinstance(weekly_rewards, WeeklyRewardsProgressorFactory):
+            self.weekly_rewards_factory = (
+                WeeklyRewardsProgressor.BasicWeeklyRewardsProgressorFactory(
+                    runner_factory=runner_factory,
+                    config=weekly_rewards,
+                )
+            )
+        elif isinstance(
+            weekly_rewards, WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory
+        ):
             # Custom factory
             self.weekly_rewards_factory = weekly_rewards
         else:
             raise ValueError(
                 "weekly_rewards must be an instance of one of None, False, BasicConfiguration, or WeeklyRewardsProgressorFactory"
             )  # pyright: ignore
+
+        self.watch_streak_recovery_factory: (
+            WatchStreakRecovery.WatchStreakRecoveryFactory | None
+        )
+        if watch_streak_recovery is None:
+            # Default factory
+            runner_factory = SlottedTaskRunnerThreadFactory()
+            self.watch_streak_recovery_factory = (
+                WatchStreakRecovery.BasicWatchStreakRecoveryFactory(
+                    runner_factory=runner_factory
+                )
+            )
+        elif watch_streak_recovery is False:
+            # Disable
+            self.watch_streak_recovery_factory = None
+        elif isinstance(watch_streak_recovery, WatchStreakRecovery.BasicConfiguration):
+            # Default factory with custom config
+            runner_factory = SlottedTaskRunnerThreadFactory(
+                max_concurrent=watch_streak_recovery.max_concurrent,
+                loop_interval_seconds=watch_streak_recovery.interval_seconds,
+            )
+            self.watch_streak_recovery_factory = (
+                WatchStreakRecovery.BasicWatchStreakRecoveryFactory(
+                    runner_factory=runner_factory, config=watch_streak_recovery
+                )
+            )
+        elif isinstance(
+            watch_streak_recovery, WatchStreakRecovery.WatchStreakRecoveryFactory
+        ):
+            # Custom factory
+            self.watch_streak_recovery_factory = watch_streak_recovery
+        else:
+            raise ValueError(
+                f"watch_streak_recovery must be an instance of one of None, False, BasicConfiguration, or WatchStreakRecoveryFactory"
+            )
 
         self.claim_drops_startup = claim_drops_startup
 
@@ -538,7 +589,7 @@ class TwitchChannelPointsMiner:
             # viewer-milestones gives us information about recovered streaks
             self.ws_pool.submit(PubsubTopic("viewer-milestones", user_id=user_id))
 
-            sync_weekly_rewards = False
+            progress_weekly_rewards = False
 
             for streamer in self.streamers:
                 self.ws_pool.submit(
@@ -564,7 +615,7 @@ class TwitchChannelPointsMiner:
                     )
 
                 if streamer.settings.weekly_rewards is True:
-                    sync_weekly_rewards = True
+                    progress_weekly_rewards = True
                     self.ws_pool.submit(
                         PubsubTopic(
                             "weekly-rewards", user_id=user_id, streamer=streamer
@@ -612,35 +663,29 @@ class TwitchChannelPointsMiner:
             self.background_tasks.append(context_refresh_thread)
 
             # Periodic task to refresh Weekly Rewards
-            if sync_weekly_rewards:
-                # Syncer
-                sync_weekly_rewards_period = timedelta(hours=1).total_seconds()
-                sync_weekly_rewards_thread = threading.Thread(
-                    target=lambda: interruptible_repeating_task(
-                        task=lambda: self.twitch.sync_weekly_rewards(self.streamers),
-                        running_flag=lambda: self.running,
-                        run_early_flag=lambda: False,
-                        period_seconds=sync_weekly_rewards_period,
-                        step=background_task_sleep_step,
-                        run_now=True
-                    )
-                )
-                sync_weekly_rewards_thread.name = "Sync weekly rewards"
-                sync_weekly_rewards_thread.start()
-                self.background_tasks.append(sync_weekly_rewards_thread)
-
+            if progress_weekly_rewards:
                 # Progressor
                 if self.weekly_rewards_factory is not None:
                     weekly_rewards_progressor_thread = (
-                        self.weekly_rewards_factory.create(self.twitch, self.streamers)
+                        self.weekly_rewards_factory.create(
+                            self.twitch,
+                            self.streamers,
+                        )
                     )
                     weekly_rewards_progressor_thread.name = "Weekly Rewards Progressor"
                     weekly_rewards_progressor_thread.start()
                     self.background_tasks.append(weekly_rewards_progressor_thread)
 
             # Watch Streak Recovery
-            if any(streamer.settings.watch_streak for streamer in self.streamers):
-                watch_streak_recovery_thread = WatchStreakRecovery(self.twitch, self.streamers, 30, 8 * 60)
+            if (
+                any(streamer.settings.watch_streak for streamer in self.streamers)
+                and self.watch_streak_recovery_factory is not None
+            ):
+                watch_streak_recovery_thread = (
+                    self.watch_streak_recovery_factory.create(
+                        self.twitch, self.streamers
+                    )
+                )
                 watch_streak_recovery_thread.name = "Watch Streak Recovery"
                 watch_streak_recovery_thread.start()
                 self.background_tasks.append(watch_streak_recovery_thread)
