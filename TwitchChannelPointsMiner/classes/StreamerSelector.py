@@ -511,6 +511,17 @@ sort_points_ascending = sort_points(ascending=True)
 sort_points_descending = sort_points(ascending=False)
 
 
+def sort_oldest_stream(streamer: Streamer):
+    return (
+        streamer.stream.created_at.timestamp()
+        if streamer.stream.created_at is not None
+        else 0
+    )
+
+def sort_newest_stream(streamer: Streamer):
+    return -sort_oldest_stream(streamer)
+
+
 # Priorities
 
 
