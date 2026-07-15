@@ -402,3 +402,11 @@ def create_random_alphanumeric_id(length: int) -> str:
         random.choice(string.ascii_lowercase + string.digits)
         for _ in range(length)
     )
+
+def normalise_username(username: str):
+    """
+    Converts the given username to lowercase and strips spaces.
+    :param username: The username tro normalise.
+    :return: The normalised username.
+    """
+    return username.lower().strip().replace(" ", "")

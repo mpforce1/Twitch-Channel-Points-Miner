@@ -1562,7 +1562,7 @@ test_filter_sort_selector_data = [
     "_filter,sorting,streamers,max_amount,expected", test_filter_sort_selector_data
 )
 def test_filter_sort_selector(_filter, sorting, streamers, max_amount, expected):
-    selector = FilterSortSelector(_filter, sorting)
+    selector = FilterSortSelector(reason="test", _filter=_filter, sorting=sorting)
 
     assert selector.select(streamers, max_amount) == expected
 
