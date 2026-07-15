@@ -373,11 +373,12 @@ class TwitchChannelPointsMiner:
             streamers_dict: dict[str, str | Streamer] = {}
 
             for streamer in streamers_input:
-                username = (
-                    normalize_login(streamer.username)
-                    if isinstance(streamer, Streamer)
-                    else normalize_login(str(streamer))
-                )
+                raw_username = streamer.username if isinstance(streamer, Streamer) else str(streamer)
+                username = normalize_login(raw_username)
+                if username in streamers_dict:
+                    logger.warning(
+                        f"Duplicate found in streamers list, ignoring duplicate. Please remove one of '{raw_username}'."
+                    )
                 if username not in blacklist_input:
                     streamers_pre_loaded.append((username, StreamerSource.Streamers))
                     streamers_dict[username] = streamer
