@@ -7,7 +7,10 @@ import pytest
 
 from TwitchChannelPointsMiner.classes import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
-from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunner, SlottedTaskRunnerThread
+from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
+    SlottedTaskRunner,
+    SlottedTaskRunnerThread,
+)
 from TwitchChannelPointsMiner.classes.WeeklyRewardsProgressor import (
     Result,
     BasicWeeklyRewardsProgressor,
@@ -637,7 +640,11 @@ class MockTwitch:
         return self.clip
 
     def simulate_vod_playback(
-        self, streamer, vod: VideoEdge, max_watch_seconds: float, done  # pyright: ignore
+        self,
+        streamer,
+        vod: VideoEdge,
+        max_watch_seconds: float,
+        done,  # pyright: ignore
     ):
         return self.vod
 

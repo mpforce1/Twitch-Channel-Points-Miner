@@ -17,6 +17,16 @@ class Reward:
     def __repr__(self) -> str:
         return simple_repr(self)
 
+    def __eq__(self, value: object, /) -> bool:
+        if not isinstance(value, Reward):
+            return False
+        return (
+            self.tier == value.tier
+            and self.channel_points == value.channel_points
+            and self.badge_set_id == value.badge_set_id
+            and self.badge_version == value.badge_version
+        )
+
 
 class Config:
     def __init__(self, days_required_per_week: int):
@@ -24,6 +34,12 @@ class Config:
 
     def __repr__(self):
         return simple_repr(self)
+
+    def __eq__(self, value: object, /) -> bool:
+        if not isinstance(value, Config):
+            return False
+        return self.days_required_per_week == value.days_required_per_week
+
 
 class Notification:
     def __init__(
@@ -48,3 +64,17 @@ class Notification:
 
     def __repr__(self) -> str:
         return simple_repr(self)
+
+    def __eq__(self, value: object, /) -> bool:
+        if not isinstance(value, Notification):
+            return False
+        return (
+            self.viewer_id == value.viewer_id
+            and self.channel_id == value.channel_id
+            and self.event_id == value.event_id
+            and self.days_visited_this_week == value.days_visited_this_week
+            and self.accumulated_weeks == value.accumulated_weeks
+            and self.notification_type == value.notification_type
+            and self.current_reward == value.current_reward
+            and self.event_config == value.event_config
+        )

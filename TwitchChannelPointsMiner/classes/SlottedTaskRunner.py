@@ -4,7 +4,7 @@ import time
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass
-from threading import Thread
+from threading import Lock, Thread
 from typing import Callable
 
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
@@ -92,12 +92,15 @@ class SlottedTaskRunnerThread[Context, Result](
         self._slots: list[Slot[Context, Result] | None] = [
             None for _ in range(max_concurrent)
         ]
+        self._lock = Lock()
 
     def has_free_slot(self) -> bool:
-        return any(slot is None for slot in self._slots)
+        with self._lock:
+            return any(slot is None for slot in self._slots)
 
     def has_context(self, context: Context):
-        return any(slot.context == context for slot in self._slots if slot is not None)
+        with self._lock:
+            return any(slot.context == context for slot in self._slots if slot is not None)
 
     def start_task(
         self,
@@ -106,56 +109,59 @@ class SlottedTaskRunnerThread[Context, Result](
         timeout_seconds: float,
         on_complete: Callable[[Context, Result], None],
     ) -> bool:
-        for index, slot in enumerate(self._slots):
-            if slot is None:
-                future = self._executor.submit(task)
-                self._slots[index] = Slot(
-                    context=context,
-                    future=future,
-                    start_time=time.monotonic(),
-                    timeout_seconds=timeout_seconds,
-                    on_complete=on_complete,
-                )
-                return True
-        return False
+        with self._lock:
+            for index, slot in enumerate(self._slots):
+                if slot is None:
+                    logger.debug(f"{self.name}: Submitting {context} in slot {index}")
+                    future = self._executor.submit(task)
+                    self._slots[index] = Slot(
+                        context=context,
+                        future=future,
+                        start_time=time.monotonic(),
+                        timeout_seconds=timeout_seconds,
+                        on_complete=on_complete,
+                    )
+                    return True
+            return False
 
     def manage_slots(self):
         """
         Checks the slots and removes items that have finished or timed out.
         """
-        for slot_index in range(len(self._slots)):
-            slot = self._slots[slot_index]
-            if slot is not None:
-                try:
-                    done = False
-                    if slot.future.done():
-                        logger.debug(
-                            f"{self.name}: Slot {slot_index} done: {slot.context}"
-                        )
-                        self._slots[slot_index] = None
-                        done = True
-                    elif time.monotonic() - slot.start_time > slot.timeout_seconds:
-                        logger.debug(
-                            f"{self.name}: Slot {slot_index} timed out: {slot.context}"
-                        )
-                        self._slots[slot_index] = None
-                        done = True
-                except Exception as e:
-                    logger.error(
-                        f"{self.name}: Slot {slot_index} for: {slot.context}: error: {e}"
-                    )
-                    self._slots[slot_index] = None
-                    done = True
-                if done:
+        with self._lock:
+            for slot_index in range(len(self._slots)):
+                slot = self._slots[slot_index]
+                if slot is not None:
                     try:
-                        result = next(
-                            futures.as_completed([slot.future], timeout=0)
-                        ).result(timeout=0)
-                        slot.on_complete(slot.context, result)
-                    except TimeoutError:
-                        pass
+                        done = False
+                        if slot.future.done():
+                            logger.debug(
+                                f"{self.name}: Slot {slot_index} done: {slot.context}"
+                            )
+                            self._slots[slot_index] = None
+                            done = True
+                        elif time.monotonic() - slot.start_time > slot.timeout_seconds:
+                            logger.debug(
+                                f"{self.name}: Slot {slot_index} timed out: {slot.context}"
+                            )
+                            self._slots[slot_index] = None
+                            done = True
                     except Exception as e:
-                        logger.error(f"Exception processing result: {e}")
+                        logger.error(
+                            f"{self.name}: Slot {slot_index} for: {slot.context}: error: {e}"
+                        )
+                        self._slots[slot_index] = None
+                        done = True
+                    if done:
+                        try:
+                            result = next(
+                                futures.as_completed([slot.future], timeout=0)
+                            ).result(timeout=0)
+                            slot.on_complete(slot.context, result)
+                        except TimeoutError:
+                            pass
+                        except Exception as e:
+                            logger.error(f"Exception processing result: {e}")
 
     def run(self):
         """
