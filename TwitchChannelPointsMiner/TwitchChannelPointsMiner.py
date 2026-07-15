@@ -21,6 +21,7 @@ from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerThreadFactory
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
+    NestedSelector,
     StreamerSelector,
     PrioritySelector,
 )
@@ -47,7 +48,7 @@ from TwitchChannelPointsMiner.utils import (
     AttemptStrategy,
     interruptible_sleep,
 )
-from TwitchChannelPointsMiner.utils.Utils import interruptible_repeating_task
+from TwitchChannelPointsMiner.utils.Utils import interruptible_repeating_task, normalise_username
 
 # Suppress:
 #   - chardet.charsetprober - [feed]
@@ -99,7 +100,7 @@ class TwitchChannelPointsMiner:
         disable_ssl_cert_verification: bool = False,
         disable_at_in_nickname: bool = False,
         # Settings for logging and selenium as you can see.
-        priority: StreamerSelector | list[Priority] | Priority | None = None,
+        priority: StreamerSelector | list[StreamerSelector] | list[Priority] | Priority | None = None,
         # This settings will be global shared trought Settings class
         logger_settings: LoggerSettings = LoggerSettings(),
         # Default values for all streamers
@@ -262,13 +263,38 @@ class TwitchChannelPointsMiner:
 
         # Convert priority setting into a StreamerSelector
         if priority is None:
-            self.streamer_selector = PrioritySelector([Priority.STREAK, Priority.DROPS, Priority.ORDER])
+            self.streamer_selector = PrioritySelector(
+                [Priority.STREAK, Priority.DROPS, Priority.ORDER]
+            )
         elif isinstance(priority, Priority):
             self.streamer_selector = PrioritySelector([priority])
         elif isinstance(priority, StreamerSelector):
             self.streamer_selector = priority
+        elif isinstance(priority, list):
+            is_list_priority = True
+            is_list_selector = True
+            for item in priority:
+                if isinstance(item, Priority):
+                    is_list_selector = False
+                elif isinstance(item, StreamerSelector):
+                    is_list_priority = False
+            if is_list_priority:
+                self.streamer_selector = PrioritySelector(
+                    priority  # pyright: ignore [reportArgumentType]
+                )
+            elif is_list_selector:
+                self.streamer_selector = NestedSelector(
+                    priority  # pyright: ignore [reportArgumentType]
+                )
+            else:
+                logger.error(
+                    f"Unable to parse priority list, cannot contain a mix of Priority and StreamerSelector."
+                )
+                return
         else:
-            self.streamer_selector = PrioritySelector(priority)
+            logger.error(
+                f"priority must be an instance of one of None, Priority, StreamerSelector, list[Priority], or list[StreamerSelector]"
+            )  # pyright: ignore
 
         self.streamers: list[Streamer] = []
         self.events_predictions: dict[str, EventPrediction] = {}
@@ -366,15 +392,16 @@ class TwitchChannelPointsMiner:
             if self.claim_drops_startup is True:
                 self.twitch.claim_all_drops_from_inventory()
 
-            def normalize_login(name: str) -> str:
-                return name.lower().strip().replace(" ", "")
-
             streamers_pre_loaded: list[tuple[str, StreamerSource]] = []
             streamers_dict: dict[str, str | Streamer] = {}
 
             for streamer in streamers_input:
-                raw_username = streamer.username if isinstance(streamer, Streamer) else str(streamer)
-                username = normalize_login(raw_username)
+                raw_username = (
+                    streamer.username
+                    if isinstance(streamer, Streamer)
+                    else str(streamer)
+                )
+                username = normalise_username(raw_username)
                 if username in streamers_dict:
                     logger.warning(
                         f"Duplicate found in streamers list, ignoring duplicate. Please remove one of '{raw_username}'."
@@ -392,9 +419,9 @@ class TwitchChannelPointsMiner:
                 for username in followers_array:
                     if (
                         username not in streamers_dict
-                        and normalize_login(username) not in blacklist_input
+                        and normalise_username(username) not in blacklist_input
                     ):
-                        norm = normalize_login(username)
+                        norm = normalise_username(username)
                         streamers_pre_loaded.append((norm, StreamerSource.Followers))
                         streamers_dict[norm] = norm
 

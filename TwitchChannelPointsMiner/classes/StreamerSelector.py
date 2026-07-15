@@ -8,6 +8,7 @@ from typing import Protocol, Sequence, Callable
 from TwitchChannelPointsMiner.classes.Settings import Priority, StreamerSource
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.utils.LimitedSet import LimitedSet
+from TwitchChannelPointsMiner.utils.Utils import normalise_username
 
 logger = logging.getLogger(__name__)
 
@@ -287,9 +288,14 @@ class PriorityGroupSelector(StreamerSelector):
         streamers: list[str] | StreamerSource | Callable[[Streamer], bool] | None,
         selector: StreamerSelector,
     ) -> None:
-        self.streamers = streamers
+        self.streamers = (
+            streamers
+            if not isinstance(streamers, list)
+            else [normalise_username(streamer) for streamer in streamers]
+        )
         """
         If `list[str]` selects from only those streamers with the matching usernames.
+        Automatically normalises names by converting to lowercase and stripping spaces.
         
         If `StreamerSource` selects from only streamers sourced in the given way.
         
@@ -394,11 +400,13 @@ def priority_subscribed_by_highest_multiplier_then_least_points(
 
 class GetSortKey(Protocol):
     """A function that, given a Streamer, returns an object that supports rich comparison (<, >, <=, >=, ==, !=)."""
+
     def __call__(self, streamer: Streamer) -> object: ...
 
 
 class FilterFunction(Protocol):
     """A function that, given a Streamer, returns True if they pass the filter."""
+
     def __call__(self, streamer: Streamer) -> bool: ...
 
 
@@ -409,8 +417,13 @@ class FilterSortSelector(StreamerSelector):
     """
 
     def __init__(
-        self, _filter: FilterFunction, sorting: list[GetSortKey] | None = None
+        self,
+        reason: object,
+        _filter: FilterFunction,
+        sorting: list[GetSortKey] | None = None,
     ):
+        self.reason = reason
+        """A description of the reason for selection. (i.e. 'WATCH_STREAK')"""
         self.filter = _filter
         """A function that should return True if the Streamer can be selected."""
         self.sorting: list[GetSortKey] = sorting if sorting is not None else []
@@ -420,7 +433,7 @@ class FilterSortSelector(StreamerSelector):
         """
 
     def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
-        return list(
+        selected = list(
             islice(
                 map(
                     lambda streamer: streamer.channel_id,
@@ -434,6 +447,8 @@ class FilterSortSelector(StreamerSelector):
                 max_amount,
             )
         )
+        logger.debug(f"Selecting {selected} for {self.reason}")
+        return selected
 
 
 # Filters
@@ -500,45 +515,57 @@ sort_points_descending = sort_points(ascending=False)
 
 
 def order(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(_filter=match_order, sorting=sorting)
+    return FilterSortSelector(
+        reason=Priority.ORDER, _filter=match_order, sorting=sorting
+    )
 
 
 def watch_streak(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(_filter=needs_watch_streak, sorting=sorting)
+    return FilterSortSelector(
+        reason=Priority.STREAK, _filter=needs_watch_streak, sorting=sorting
+    )
 
 
 def drops(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(_filter=has_drops, sorting=sorting)
+    return FilterSortSelector(reason=Priority.DROPS, _filter=has_drops, sorting=sorting)
 
 
 def subscribed(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(_filter=is_subscribed, sorting=sorting)
+    return FilterSortSelector(
+        reason=Priority.SUBSCRIBED, _filter=is_subscribed, sorting=sorting
+    )
 
 
-def points(ascending: bool, sorting: list[GetSortKey] | None = None):
+def points(reason: object, ascending: bool, sorting: list[GetSortKey] | None = None):
     # insert points sorting at the front
     sorting_with_default = [
         sort_points_ascending if ascending else sort_points_descending
     ]
     if sorting is not None:
         sorting_with_default.extend(sorting)
-    return FilterSortSelector(_filter=match_points, sorting=sorting_with_default)
+    return FilterSortSelector(
+        reason=reason, _filter=match_points, sorting=sorting_with_default
+    )
 
 
 def points_ascending(sorting: list[GetSortKey] | None = None):
-    return points(ascending=True, sorting=sorting)
+    return points(reason=Priority.POINTS_ASCENDING, ascending=True, sorting=sorting)
 
 
 def points_descending(sorting: list[GetSortKey] | None = None):
-    return points(ascending=False, sorting=sorting)
+    return points(reason=Priority.POINTS_DESCENDING, ascending=False, sorting=sorting)
 
 
 def watch_session(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(_filter=in_watch_session, sorting=sorting)
+    return FilterSortSelector(
+        reason=Priority.WATCH_SESSION, _filter=in_watch_session, sorting=sorting
+    )
 
 
 def weekly_rewards(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(_filter=needs_weekly_reward, sorting=sorting)
+    return FilterSortSelector(
+        reason=Priority.WEEKLY_REWARDS, _filter=needs_weekly_reward, sorting=sorting
+    )
 
 
 # Group
