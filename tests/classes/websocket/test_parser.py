@@ -4,6 +4,7 @@ import pathlib
 
 import pytest
 
+from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.classes.websocket.data.OnsiteNotification import (
     UserDropRewardReminderNotification,
     UserEarnedQuestsRewardBadgeNotification,
@@ -72,3 +73,32 @@ test_parse_onsite_notification_data = [
 def test_parse_onsite_notification(parser: Parser, file: str, expected):
     data = read_data(file)
     assert parser.parse_onsite_notification(data) == expected
+
+test_parse_weekly_rewards_data = [
+    (
+        "tests/classes/websocket/test_data/weekly-rewards-01.json",
+        WeeklyRewards.Notification(
+            viewer_id="123456789",
+            channel_id="987654321",
+            event_id="weekly-rewards-event-id",
+            days_visited_this_week=2,
+            accumulated_weeks=1,
+            notification_type="PARTIAL_PROGRESS",
+            current_reward=WeeklyRewards.Reward(
+                tier=2,
+                channel_points=250,
+                badge_set_id="event-badge",
+                badge_version="2",
+            ),
+            event_config=WeeklyRewards.Config(
+                days_required_per_week=3
+            )
+        ),
+    )
+]
+
+
+@pytest.mark.parametrize("file,expected", test_parse_weekly_rewards_data)
+def test_parse_weekly_rewards(parser: Parser, file: str, expected):
+    data = read_data(file)
+    assert parser.parse_weekly_rewards(data) == expected

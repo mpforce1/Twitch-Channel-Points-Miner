@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
 from secrets import choice, token_hex
-from typing import Callable, Literal
+from typing import Callable
 
 import requests
 import validators
@@ -1071,13 +1071,8 @@ class Twitch(object):
         return False
 
     def update_weekly_reward(
-        self, streamer: Streamer, notification: WeeklyRewards.Notification | Literal[False] | None
+        self, streamer: Streamer, notification: WeeklyRewards.Notification
     ):
-        if notification is False:
-            return
-        if notification is None:
-            streamer.weekly_rewards = None
-            return
         if streamer.weekly_rewards is None:
             logger.error(
                 f"Unable to update weekly reward for {streamer}, no existing reward found"

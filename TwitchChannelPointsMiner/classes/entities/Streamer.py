@@ -151,6 +151,7 @@ class Streamer(object):
         channel_points_enabled: bool = True,
         chat_banned: bool = False,
         stream: Stream | None = None,
+        is_online: bool | None = None,
         online_at: float | None = None,
         offline_at: float | None = None,
         active_multipliers: list[Properties.Multiplier] | None = None,
@@ -166,7 +167,7 @@ class Streamer(object):
         self.channel_id: str = channel_id if channel_id is not None else ""
         self.settings = settings
         self.source = source
-        self.is_online = False
+        self.is_online = is_online if is_online is not None else False
         self.stream_up = 0
         self.online_at = online_at if online_at is not None else 0.0
         self.offline_at = offline_at if offline_at is not None else 0.0
@@ -409,8 +410,10 @@ class Streamer(object):
             self.settings.weekly_rewards is True
             and self.weekly_rewards is not None
             # We aren't missing a week if there are no more rewards to obtain
-            and self.weekly_rewards.accumulated_weeks
-            < len(self.weekly_rewards.event_config.reward_tiers)
+            and (
+                self.weekly_rewards.accumulated_weeks
+                < len(self.weekly_rewards.event_config.reward_tiers)
+            )
             and not self.weekly_rewards.has_earned_weekly_reward_this_week
             and not self.weekly_rewards.has_visited_today
         )

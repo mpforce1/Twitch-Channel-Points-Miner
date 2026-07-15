@@ -1,0 +1,18 @@
+{
+    "viewerId": "123456789",
+    "channelId": "987654321",
+    "eventId": "weekly-rewards-event-id",
+    "daysVisitedThisWeek": 2,
+    "accumulatedWeeks": 1,
+    "notificationType": "PARTIAL_PROGRESS",
+    "currentReward": {
+        "tier": 2,
+        "channelPoints": 250,
+        "badgeSetId": "event-badge",
+        "badgeVersion": "2",
+        "isBadgeUpgrade": true
+    },
+    "eventConfig": {
+        "daysRequiredPerWeek": 3
+    }
+}
