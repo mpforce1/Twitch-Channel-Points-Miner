@@ -34,6 +34,7 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     StreamerSelector,
     priority_streak_by_earliest_stream_created_at,
     priority_subscribed_by_highest_multiplier_then_least_points,
+    sort_oldest_stream,
     subscribed,
     under_points_limit,
     sort_points_ascending,
@@ -1827,6 +1828,19 @@ def test_sort_points_descending():
     assert sort_points_descending(Streamer("a", channel_points=100)) == -100
     assert sort_points_descending(Streamer("a", channel_points=200)) == -200
     assert sort_points_descending(Streamer("a", channel_points=300)) == -300
+
+
+def test_sort_oldest_stream():
+    assert sort_oldest_stream(Streamer("a", stream=None)) == 0
+
+    stream = Stream()
+    stream.created_at = None
+    assert sort_oldest_stream(Streamer("a", stream=stream)) == 0
+
+    stream = Stream()
+    time.time()
+    stream.created_at = datetime.datetime.fromtimestamp(1784121062)
+    assert sort_oldest_stream(Streamer("a", stream=stream)) == 1784121062
 
 
 def test_order():
