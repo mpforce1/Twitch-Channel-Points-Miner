@@ -571,6 +571,8 @@ def weekly_rewards(sorting: list[GetSortKey] | None = None):
 # Group
 def group(
     streamers: list[str] | StreamerSource | Callable[[Streamer], bool] | None,
-    selector: StreamerSelector,
+    selector: StreamerSelector | None = None,
 ):
+    if selector is None:
+        selector = order()
     return PriorityGroupSelector(streamers=streamers, selector=selector)
