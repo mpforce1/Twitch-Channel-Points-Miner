@@ -285,7 +285,7 @@ class PriorityGroupSelector(StreamerSelector):
     def __init__(
         self,
         streamers: list[str] | StreamerSource | Callable[[Streamer], bool] | None,
-        selector: PrioritySelector,
+        selector: StreamerSelector,
     ) -> None:
         self.streamers = streamers
         """
@@ -298,7 +298,7 @@ class PriorityGroupSelector(StreamerSelector):
         If `None` selects from all streamers. 
         """
         self.selector = selector
-        """ The `PrioritySelector` to use for the given streamers. """
+        """ The `StreamerSelector` to use for the given streamers. """
 
         # Cache filter function now to avoid doing isinstance every time
         self._filter: Callable[[Sequence[Streamer]], Sequence[Streamer]]
@@ -371,3 +371,179 @@ def priority_streak_by_earliest_stream_created_at(
         reverse=False,
     )
     return priority_streak(ordered, max_amount)
+
+
+def priority_subscribed_by_highest_multiplier_then_least_points(
+    streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
+    streamers_with_multiplier = [
+        streamer
+        for streamer in streamers
+        if under_points_limit(streamer) and streamer.viewer_has_points_multiplier()
+    ]
+    streamers_with_multiplier = sorted(
+        streamers_with_multiplier,
+        key=lambda x: (-x.total_points_multiplier(), x.channel_points),
+    )
+    return [streamer.channel_id for streamer in streamers_with_multiplier[:max_amount]]
+
+
+# Convenience functions for easier selector construction
+# most selectors first filter out streamers then sort them
+
+
+class GetSortKey(Protocol):
+    """A function that, given a Streamer, returns an object that supports rich comparison (<, >, <=, >=, ==, !=)."""
+    def __call__(self, streamer: Streamer) -> object: ...
+
+
+class FilterFunction(Protocol):
+    """A function that, given a Streamer, returns True if they pass the filter."""
+    def __call__(self, streamer: Streamer) -> bool: ...
+
+
+class FilterSortSelector(StreamerSelector):
+    """
+    A StreamerSelector that first filters the streamers according to a custom filter function, then sorts them according
+    to a list of sort keys derived from a custom function.
+    """
+
+    def __init__(
+        self, _filter: FilterFunction, sorting: list[GetSortKey] | None = None
+    ):
+        self.filter = _filter
+        """A function that should return True if the Streamer can be selected."""
+        self.sorting: list[GetSortKey] = sorting if sorting is not None else []
+        """
+        A function that should return a sorting key.
+        (i.e. `streamer.channel_points` or `-streamer.channel_points`)
+        """
+
+    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+        return list(
+            islice(
+                map(
+                    lambda streamer: streamer.channel_id,
+                    sorted(
+                        (streamer for streamer in streamers if self.filter(streamer)),
+                        key=lambda streamer: [
+                            get_sort_key(streamer) for get_sort_key in self.sorting
+                        ],
+                    ),
+                ),
+                max_amount,
+            )
+        )
+
+
+# Filters
+
+
+def match_order(streamer: Streamer):
+    return under_points_limit(streamer)
+
+
+def match_points(streamer: Streamer):
+    return under_points_limit(streamer)
+
+
+def needs_watch_streak(streamer: Streamer):
+    return (
+        streamer.settings.watch_streak is True
+        and streamer.stream.watch_streak_missing is True
+        and (
+            streamer.offline_at == 0 or ((time.time() - streamer.offline_at) // 60) > 30
+        )
+    )
+
+
+def has_drops(streamer: Streamer):
+    return streamer.any_campaign_has_claimable_drop() is True
+
+
+def is_subscribed(streamer: Streamer):
+    return under_points_limit(streamer) and streamer.viewer_has_points_multiplier()
+
+
+def in_watch_session(streamer: Streamer):
+    return streamer.stream.watch_session_state is not None and (
+        (
+            datetime.datetime.now(datetime.timezone.utc)
+            - streamer.stream.watch_session_state
+        ).total_seconds()
+        <= 60 * 7
+    )
+
+
+def needs_weekly_reward(streamer: Streamer):
+    # We should have obtained the reward if we've already got the streak
+    return (
+        streamer.stream.watch_streak_missing is True
+        and streamer.missing_weekly_reward()
+    )
+
+
+# Sorting
+
+
+def sort_points(ascending: bool) -> GetSortKey:
+    return lambda streamer: (
+        streamer.channel_points if ascending else -streamer.channel_points
+    )
+
+
+sort_points_ascending = sort_points(ascending=True)
+sort_points_descending = sort_points(ascending=False)
+
+
+# Priorities
+
+
+def order(sorting: list[GetSortKey] | None = None):
+    return FilterSortSelector(_filter=match_order, sorting=sorting)
+
+
+def watch_streak(sorting: list[GetSortKey] | None = None):
+    return FilterSortSelector(_filter=needs_watch_streak, sorting=sorting)
+
+
+def drops(sorting: list[GetSortKey] | None = None):
+    return FilterSortSelector(_filter=has_drops, sorting=sorting)
+
+
+def subscribed(sorting: list[GetSortKey] | None = None):
+    return FilterSortSelector(_filter=is_subscribed, sorting=sorting)
+
+
+def points(ascending: bool, sorting: list[GetSortKey] | None = None):
+    # insert points sorting at the front
+    sorting_with_default = [
+        sort_points_ascending if ascending else sort_points_descending
+    ]
+    if sorting is not None:
+        sorting_with_default.extend(sorting)
+    return FilterSortSelector(_filter=match_points, sorting=sorting_with_default)
+
+
+def points_ascending(sorting: list[GetSortKey] | None = None):
+    return points(ascending=True, sorting=sorting)
+
+
+def points_descending(sorting: list[GetSortKey] | None = None):
+    return points(ascending=False, sorting=sorting)
+
+
+def watch_session(sorting: list[GetSortKey] | None = None):
+    return FilterSortSelector(_filter=in_watch_session, sorting=sorting)
+
+
+def weekly_rewards(sorting: list[GetSortKey] | None = None):
+    return FilterSortSelector(_filter=needs_weekly_reward, sorting=sorting)
+
+
+# Group
+def group(
+    streamers: list[str] | StreamerSource | Callable[[Streamer], bool] | None,
+    selector: StreamerSelector,
+):
+    return PriorityGroupSelector(streamers=streamers, selector=selector)
