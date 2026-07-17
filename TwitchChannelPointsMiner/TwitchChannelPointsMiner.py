@@ -24,6 +24,11 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     NestedSelector,
     StreamerSelector,
     PrioritySelector,
+    drops,
+    order,
+    watch_session,
+    watch_streak,
+    weekly_rewards as weekly_rewards_selector,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPrediction
@@ -263,8 +268,14 @@ class TwitchChannelPointsMiner:
 
         # Convert priority setting into a StreamerSelector
         if priority is None:
-            self.streamer_selector = PrioritySelector(
-                [Priority.STREAK, Priority.DROPS, Priority.ORDER]
+            self.streamer_selector = NestedSelector(
+                [
+                    watch_session(),
+                    watch_streak(),
+                    weekly_rewards_selector(),
+                    drops(),
+                    order(),
+                ]
             )
         elif isinstance(priority, Priority):
             self.streamer_selector = PrioritySelector([priority])

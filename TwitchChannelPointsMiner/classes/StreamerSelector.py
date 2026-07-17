@@ -532,6 +532,8 @@ def order(sorting: list[GetSortKey] | None = None):
 
 
 def watch_streak(sorting: list[GetSortKey] | None = None):
+    if sorting is None:
+        sorting = [sort_oldest_stream]
     return FilterSortSelector(
         reason=Priority.STREAK, _filter=needs_watch_streak, sorting=sorting
     )
