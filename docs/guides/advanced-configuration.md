@@ -14,21 +14,21 @@ There are 2 main sections to the file: [`TwitchChannelPointsMiner`](#twitchchann
 This section explains all the configuration options for the miner. Each option is explained in the example, here we
 expand more on their usage.
 
-| Name                            | Type                                                 | Default                                             |
-|---------------------------------|------------------------------------------------------|-----------------------------------------------------|
-| `username`                      | `str`                                                | `"your-twitch-username"`                            |
-| `password`                      | `str`                                                | `"write-your-secure-pws"`                           |
-| `claim_drops_startup`           | `bool`                                               | `False`                                             |
-| `priority`                      | `StreamerSelector` or `list[Priority]` or `Priority` | `[Priority.STREAK, Priority.DROPS, Priority.ORDER]` |
-| `enable_analytics`              | `bool`                                               | `False`                                             |
-| `disable_ssl_cert_verification` | `bool`                                               | `False`                                             |
-| `disable_at_in_nickname`        | `bool`                                               | `False`                                             |
-| `use_hermes`                    | `bool`                                               | `False`                                             |
-| `logger_settings`               | `LoggerSettings`                                     | (see [here](#logger_settings))                      |
-| `streamer_settings`             | `StreamerSettings`                                   | (see [here](#streamer_settings))                    |
-| `gql`                           | `AttemptStrategy` or `GQLFactory`                    | `GQLFactory`                                        |
-| `redact_secrets`                | `bool`                                               | `False`                                             |
-| `anonymiser`                    | `Anonymiser` or `bool` or `None`                     | `None`                                              |
+| Name                            | Type                                                                            | Default                                                                 |
+|---------------------------------|---------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| `username`                      | `str`                                                                           | `"your-twitch-username"`                                                |
+| `password`                      | `str`                                                                           | `"write-your-secure-pws"`                                               |
+| `claim_drops_startup`           | `bool`                                                                          | `False`                                                                 |
+| `priority`                      | `StreamerSelector` or `list[StreamerSelector]` or `list[Priority]` or `Priority` | `[watch_session(), watch_streak(), weekly_rewards(), drops(), order()]` |
+| `enable_analytics`              | `bool`                                                                          | `False`                                                                 |
+| `disable_ssl_cert_verification` | `bool`                                                                          | `False`                                                                 |
+| `disable_at_in_nickname`        | `bool`                                                                          | `False`                                                                 |
+| `use_hermes`                    | `bool`                                                                          | `False`                                                                 |
+| `logger_settings`               | `LoggerSettings`                                                                | (see [here](#logger_settings))                                          |
+| `streamer_settings`             | `StreamerSettings`                                                              | (see [here](#streamer_settings))                                        |
+| `gql`                           | `AttemptStrategy` or `GQLFactory`                                               | `GQLFactory`                                                            |
+| `weekly_rewards`                | `BasicConfiguration` or `WeeklyRewardsProgressorFactory` or `False`             | `BasicWeeklyRewardsProgressorFactory`                                   |
+
 
 ### `username`
 
@@ -47,9 +47,9 @@ do this.
 
 ### `priority`
 
-This can be set to one of a `StreamerSelector`, a `list[Priority]`, or a single `Priority`. The value technically
-defaults to `None` but this results in the miner using a priority of
-`[Priority.STREAK, Priority.DROPS, Priority.ORDER]`.
+This can be set to one of a `StreamerSelector`, a `list[StreamerSelector]` a `list[Priority]`, or a single `Priority`.
+The value technically defaults to `None` but this results in the miner using a priority of
+`[watch_session(), watch_streak(), weekly_rewards_selector(), drops(), order()]`.
 
 #### `Priority` or `list[Priority]`
 
@@ -74,6 +74,34 @@ will prioritise watching streams according to each priority from left to right i
 - `WEEKLY_REWARDS`: This prioritises streams that have Weekly Rewards enabled, have yet to make progress this week, and 
   have yet to make progress today.
   
+#### Convenience Functions
+
+If you want a little more customisation, but without having to write your own code, you can use one of the convenience
+functions defined in `StreamerSelector.py`. These functions produce a `StreamerSelector` so they can be put together in
+a list (as in the default for `priority`). Each function optionally takes a `sorting` which can be used to sort matching
+Streamers, with subsequent sorting functions breaking ties in earlier ones, from left to right. This enables you to do
+things like `subscribed([order_points_ascending])` which selects subscribed streamers in points ascending order rather
+than in the run file order. Most of these functions work the same as their `Priority` counterparts, with the exception
+of `watch_streak()` which defaults to sort by `sort_oldest_stream`.
+
+The selector functions are:
+
+ - `order()`
+ - `watch_streak()`
+ - `drops()`
+ - `subscribed()`
+ - `points_ascending()`
+ - `points_descending()`
+ - `watch_session()`
+ - `weekly_rewards()`
+
+The `sorting` functions are:
+
+ - `sort_points_ascending:` which sorts streamers by the number of channel points ascending
+ - `sort_points_descending` which sorts streamers by the number of channel points descending
+ - `sort_oldest_stream` which sorts streamers by the stream start time oldest first
+ - `sort_newset_stream` which sorts streamers by the stream start time newest first
+
 #### `StreamerSelector`
 
 > [!WARNING]
@@ -228,6 +256,37 @@ This would prioritise:
 2. Then `streamer1` and `streamer2`.
 3. Finally, all streamers first by `DROPS` then by `ORDER`.
 
+
+##### `FilterSortSelector`
+
+This selector takes a `reason` which is an object used for debug purposes, it should represent the reason streamers are
+being selected by this selector (e.g. `Priority.ORDER`). It also takes a `_filter` function that should return `True` if
+a Streamer could be selected. And it takes a `sorting` which is an optional list of functions that produce a "sort key"
+for selectable streamers. The `sorting` functions should comply with the `key` argument
+described [here](https://docs.python.org/3/library/functions.html#sorted). The convenience functions are actually
+implemented by this. If `sorting` isn't provided, the streamers will be returned in the order they were provided to
+`select`. For example:
+
+```python
+FilterSortSelector(
+    reason="Has Tag 'DropsEnabled'",
+    _filter=lambda s: "DropsEnabled" in s.stream.tags,
+    sorting=[sort_oldest_stream, sort_points_ascending],
+)
+```
+
+This selects Streamers with a Stream with the `DropsEnabled` tag, sorted by stream start date from earliest to newest,
+then tie-breaking by the number of channel points ascending.
+
+The [convenience functions](#convenience-functions) are actually implemented in terms of this selector:
+
+```python
+def order(sorting: list[GetSortKey] | None = None):
+    return FilterSortSelector(
+        reason=Priority.ORDER, _filter=match_order, sorting=sorting
+    )
+```
+
 ### `enable_analytics`
 
 If set to `True` you can run the analytics server by calling `TwitchChannelPointsMiner.analytics()`. If set to `False`
@@ -259,25 +318,27 @@ and still works.
 
 This allows you to configure logging options. See [here](logs.md) for some examples.
 
-| Name               | Type              | Default             |
-|--------------------|-------------------|---------------------|
-| `save`             | `bool`            | `True`              |
-| `console_level`    | `int`             | `logging.INFO`      |
-| `console_username` | `bool`            | `False`             |
-| `auto_clear`       | `bool`            | `True`              |
-| `time_zone`        | `str`             | `""` (empty string) |
-| `file_level`       | `int`             | `logging.DEBUG`     |
-| `emoji`            | `bool`            | `True`              |
-| `less`             | `bool`            | `False`             |
-| `colored`          | `bool`            | `True`              |
-| `color_palette`    | `ColorPalette`    | `None`              |
-| `telegram`         | `Telegram`        | `None`              |
-| `discord`          | `Discord`         | `None`              |
-| `webhook`          | `WebHook`         | `None`              |
-| `matrix`           | `Matrix`          | `None`              |
-| `pushover`         | `Pushover`        | `None`              |
-| `gotify`           | `Gotify`          | `None`              |
-| `hooks`            | `list[EventHook]` | `[]` (empty list)   |
+| Name               | Type                             | Default             |
+|--------------------|----------------------------------|---------------------|
+| `save`             | `bool`                           | `True`              |
+| `console_level`    | `int`                            | `logging.INFO`      |
+| `console_username` | `bool`                           | `False`             |
+| `auto_clear`       | `bool`                           | `True`              |
+| `time_zone`        | `str`                            | `""` (empty string) |
+| `file_level`       | `int`                            | `logging.DEBUG`     |
+| `emoji`            | `bool`                           | `True`              |
+| `less`             | `bool`                           | `False`             |
+| `colored`          | `bool`                           | `True`              |
+| `color_palette`    | `ColorPalette`                   | `None`              |
+| `telegram`         | `Telegram`                       | `None`              |
+| `discord`          | `Discord`                        | `None`              |
+| `webhook`          | `WebHook`                        | `None`              |
+| `matrix`           | `Matrix`                         | `None`              |
+| `pushover`         | `Pushover`                       | `None`              |
+| `gotify`           | `Gotify`                         | `None`              |
+| `hooks`            | `list[EventHook]`                | `[]` (empty list)   |
+| `redact_secrets`   | `bool`                           | `False`             |
+| `anonymiser`       | `Anonymiser` or `bool` or `None` | `None`              |
 
 #### `save`
 
