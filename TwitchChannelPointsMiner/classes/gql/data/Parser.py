@@ -497,13 +497,16 @@ def watch_streak_missed_stream_parser(value) -> set[str]:
     for index in range(len(value)):
         stream = expect_dict(value[index])
         with JsonParentContext(index):
-            broadcast_ids = parse_expected_value(stream, "broadcastIdentifiers", list_parser(expect_dict))
+            broadcast_ids = parse_expected_value(
+                stream, "broadcastIdentifiers", list_parser(expect_dict)
+            )
             with JsonParentContext("broadcastIdentifiers"):
                 for id_index in range(len(broadcast_ids)):
                     _id = broadcast_ids[id_index]
                     with JsonParentContext(id_index):
                         ids.add(parse_expected_value(_id, "id", expect_str))
     return ids
+
 
 def reward_list_watch_streak_milestone_parser(
     value: Any,
@@ -516,7 +519,9 @@ def reward_list_watch_streak_milestone_parser(
         threshold=parse_expected_value(value, "watchStreakThreshold", expect_int),
         copo_bonus=parse_expected_value(value, "watchStreakCopoBonus", expect_int),
         state=parse_expected_value(value, "state", expect_str),
-        missed_streams=parse_expected_value(value, "missedStreams", optional_parser(watch_streak_missed_stream_parser)),
+        missed_streams=parse_expected_value(
+            value, "missedStreams", optional_parser(watch_streak_missed_stream_parser)
+        ),
         expires_at=parse_expected_value(
             value, "expiresAt", optional_parser(expect_iso_8601)
         ),
@@ -683,15 +688,15 @@ class Parser:
     """Class that can parse responses from the Twitch GQL API."""
 
     def parse_base_response(
-        self, response: Any, expect_no_errors: bool
+        self, response: Any, allowed_errors: set[Error] | None = None
     ) -> tuple[list[Error], str, dict]:
         """
         Minimal parser for a base GQL response. Gets the `errors` and `data` fields and the `operationName` in
         `extensions`.
         :param response: The response to parse.
-        :param expect_no_errors: Whether to expect errors.
-        :return: A tuple of a list of any errors, the operation name, and the data dict.
-        :raises GQLResponseErrors: If `expect_no_errors` is True and errors were found.
+        :param allowed_errors: A list of errors that are allowed.
+        :return: A tuple of a list of any (allowed) errors, the operation name, and the data dict.
+        :raises GQLResponseErrors: If any errors are found that aren't in `allowed_errors`.
         """
         response_dict = expect_dict(response)
         if response_dict == {}:
@@ -703,8 +708,19 @@ class Parser:
             operation_name = parse_expected_value(
                 extensions, "operationName", expect_str
             )
-        if expect_no_errors and errors is not None and len(errors) > 0:
-            raise GQLResponseErrors(operation_name, errors)
+        if errors is not None and len(errors) > 0:
+            # Return errors not in the allowed list
+            allowed_errors = allowed_errors if allowed_errors is not None else set()
+            consumed_errors = []
+            unconsumed_errors = []
+            for error in errors:
+                if error in allowed_errors:
+                    consumed_errors.append(error)
+                else:
+                    unconsumed_errors.append(error)
+            if len(unconsumed_errors) > 0:
+                raise GQLResponseErrors(operation_name, unconsumed_errors)
+            return consumed_errors, operation_name, data or {}
         return errors or [], operation_name, data or {}
 
     def parse_video_player_stream_info_overlay_channel_data(self, response: Any):
@@ -714,7 +730,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return VideoPlayerStreamInfoOverlayChannelResponse(
                 user=parse_expected_value(data, "user", user_parser),
@@ -727,7 +743,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             user = parse_expected_value(data, "user", expect_dict)
             return GetIdFromLoginResponse(
@@ -741,7 +757,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             user = parse_expected_value(data, "user", expect_dict)
             with JsonParentContext("user"):
@@ -759,7 +775,7 @@ class Parser:
         :param response: The response to parse.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        self.parse_base_response(response, True)
+        self.parse_base_response(response)
 
     def parse_playback_access_token_response(self, response: Any):
         """
@@ -768,7 +784,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             # Ignore streamPlaybackAccessToken, it's the only value in data
             stream_playback_access_token = parse_expected_value(
@@ -790,7 +806,7 @@ class Parser:
                 )
 
     def parse_vod_playback_access_token_response(self, response):
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             # Ignore streamPlaybackAccessToken, it's the only value in data
             stream_playback_access_token = parse_expected_value(
@@ -813,7 +829,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return ChannelPointsContextResponse(
                 community=parse_expected_value(
@@ -828,7 +844,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             make_prediction = parse_expected_value(data, "makePrediction", expect_dict)
             with JsonParentContext("makePrediction"):
@@ -847,7 +863,7 @@ class Parser:
         :param response: The response to parse.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        self.parse_base_response(response, True)
+        self.parse_base_response(response)
 
     def parse_community_moment_callout_claim_response(self, response: Any):
         """
@@ -855,7 +871,7 @@ class Parser:
         :param response: The response to parse.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        self.parse_base_response(response, True)
+        self.parse_base_response(response)
 
     def parse_drops_highlight_service_available_drops(self, response: Any):
         """
@@ -864,7 +880,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         # We're only interested in the ids
         with JsonParentContext("data"):
             channel = parse_expected_value(data, "channel", expect_dict)
@@ -886,7 +902,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         # We're only interested in the campaigns
         with JsonParentContext("data"):
             return dig(
@@ -908,7 +924,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             current_user = parse_expected_value(data, "currentUser", expect_dict)
             with JsonParentContext("currentUser"):
@@ -927,7 +943,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         # We're only interested in the campaign
         with JsonParentContext("data"):
             user = parse_expected_value(data, "user", expect_dict)
@@ -945,7 +961,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         status = None
         with JsonParentContext("data"):
             claim_drop_rewards = parse_expected_value(
@@ -970,7 +986,7 @@ class Parser:
         :return: The parsed response.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return dig(
                 data,
@@ -993,7 +1009,7 @@ class Parser:
         :param response: The response to parse.
         :raises: GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             contribute = parse_expected_value(
                 data, "contributeCommunityPointsCommunityGoal", expect_dict
@@ -1014,7 +1030,7 @@ class Parser:
         :return: The parsed response.
         :raises GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return WithIsStreamLiveQueryResponse(
                 user=parse_expected_value(
@@ -1029,7 +1045,7 @@ class Parser:
         :return: The parsed response.
         :raises GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return RewardList.RewardListResponse(
                 channel=parse_expected_value(
@@ -1044,7 +1060,7 @@ class Parser:
         :return: The parsed response.
         :raises GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return ChatRoomBanStatusResponse(
                 status=parse_expected_value(
@@ -1061,7 +1077,7 @@ class Parser:
         :return: The parsed response.
         :raises GQLError: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             user = parse_expected_value(data, "currentUser", expect_dict)
             with JsonParentContext("currentUser"):
@@ -1080,7 +1096,22 @@ class Parser:
         :return: The parsed response.
         :raises GQLResponseErrors: If the response contains errors or there is an issue parsing the response.
         """
-        _, _, data = self.parse_base_response(response, True)
+        errors, _, data = self.parse_base_response(
+            response,
+            {
+                Error(
+                    recoverable=False,
+                    message='graphql: got nil for non-null "WeeklyVisitRewardTier"',
+                    path=["channel", "self", "weeklyVisitRewards", "currentReward"],
+                )
+            },
+        )
+        if len(errors) > 0:
+            # Twitch API bug:
+            # In the last week of the event, but we've already completed all required weeks,
+            # they attempt to get the next week which returns None and causes a GQL error.
+            # Return None (as in the no active event case) since we can't get the data any more.
+            return None
         with JsonParentContext("data"):
             return dig(
                 data,
@@ -1091,7 +1122,7 @@ class Parser:
     def parse_filterable_video_tower_videos(
         self, response
     ) -> FilterableVideoTower.Videos:
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return FilterableVideoTower.Videos(
                 videos=dig(
@@ -1102,7 +1133,7 @@ class Parser:
             )
 
     def parse_clips_cards_user(self, response) -> ClipsCardsUser.Response:
-        _, _, data = self.parse_base_response(response, True)
+        _, _, data = self.parse_base_response(response)
         with JsonParentContext("data"):
             return ClipsCardsUser.Response(
                 clips=dig(
