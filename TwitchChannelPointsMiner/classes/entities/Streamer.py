@@ -408,6 +408,7 @@ class Streamer(object):
     def missing_weekly_reward(self):
         return (
             self.settings.weekly_rewards is True
+            and self.channel_points_enabled is True
             and self.weekly_rewards is not None
             # We aren't missing a week if there are no more rewards to obtain
             and (
@@ -424,6 +425,7 @@ class Streamer(object):
     def needs_watch_streak_recovery(self):
         return (
             self.settings.watch_streak is True
+            and self.channel_points_enabled is True
             and not self.is_online
             and len(self.watch_streak_missed_streams) > 0
         )

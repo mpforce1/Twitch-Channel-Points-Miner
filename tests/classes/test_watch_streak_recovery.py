@@ -390,6 +390,7 @@ def test__run():
             "b",
             "b",
             settings=StreamerSettings(watch_streak=True),
+            channel_points_enabled=False,
             watch_streak_missed_streams={"broadcast-a"},
         ),
         Streamer(
@@ -415,6 +416,13 @@ def test__run():
             settings=StreamerSettings(watch_streak=True),
             watch_streak_missed_streams={"broadcast-e", "broadcast-f"},
         ),
+        Streamer(
+            "g",
+            "g",
+            settings=StreamerSettings(watch_streak=True),
+            channel_points_enabled=False,
+            watch_streak_missed_streams={"broadcast-g", "broadcast-h"}
+        )
     ]
 
     runner = MagicMock()

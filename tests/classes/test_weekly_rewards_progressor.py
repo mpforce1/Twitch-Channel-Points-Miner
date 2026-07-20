@@ -302,6 +302,42 @@ test_select_streamers_data = [
         {"a", "b", "d"},
         ["c", "e"],
     ),
+    # Rare case where a channel has progress but recently disabled channel points
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                channel_points_enabled=False,
+                settings=StreamerSettings(weekly_rewards=True),
+                weekly_rewards=weekly_rewards_unvisited,
+                clips=Clips(
+                    all_time=[
+                        Clip(
+                            _id="a",
+                            broadcast_id="broadcast-a",
+                            slug="example-clip-slug",
+                            url="clip url",
+                            title="clip title",
+                            duration_seconds=10,
+                        )
+                    ]
+                ),
+                vods=[
+                    Video(
+                        edge=VideoEdge(
+                            _id="b", broadcast_id="c", length_seconds=10 * 60
+                        ),
+                        token=VideoPlaybackAccessToken(
+                            value="token", signature="signature"
+                        ),
+                    )
+                ],
+            )
+        ],
+        {},
+        [],
+    ),
 ]
 
 
