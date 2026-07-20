@@ -1,19 +1,19 @@
 import logging
-import time
-from threading import Timer
 
 from dateutil import parser as dateparser
 
-from TwitchChannelPointsMiner.classes.Settings import Settings, Events
+from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
-from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
-from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPrediction
 from TwitchChannelPointsMiner.classes.entities.Message import Message
 from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 from TwitchChannelPointsMiner.classes.websocket.data import OnsiteNotification
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser
+from TwitchChannelPointsMiner.systems.Notifications import NotificationsSystem
+from TwitchChannelPointsMiner.systems.Predictions import PredictionSystem
+from TwitchChannelPointsMiner.systems.Streamers import StreamerSystem
+from TwitchChannelPointsMiner.systems.Streams import StreamSystem
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +26,19 @@ class PubSubHandler(MessageListener):
 
     def __init__(
         self,
+        streamer_system: StreamerSystem,
+        stream_system: StreamSystem,
+        prediction_system: PredictionSystem,
+        notification_system: NotificationsSystem,
         parser: Parser,
         twitch: Twitch,
         streamers: list[Streamer],
         events_predictions: dict,
     ):
+        self.streamer_system = streamer_system
+        self.stream_system = stream_system
+        self.prediction_system = prediction_system
+        self.notification_system = notification_system
         self.parser = parser
         self.twitch = twitch
         self.streamers = streamers
@@ -55,73 +63,56 @@ class PubSubHandler(MessageListener):
                 # these topics aren't channel specific
                 return
             if message.topic == "community-points-user-v1":
-                if message.type in ["points-earned", "points-spent"]:
-                    balance = message.data["balance"]["balance"]
-                    streamer.channel_points = balance
-                    # Analytics switch
-                    if Settings.enable_analytics is True:
-                        streamer.persistent_series(
-                            event_type=(
-                                message.data["point_gain"]["reason_code"]
-                                if message.type == "points-earned"
-                                else "Spent"
-                            )
-                        )
-
                 if message.type == "points-earned":
-                    earned = message.data["point_gain"]["total_points"]
-                    reason_code = message.data["point_gain"]["reason_code"]
-
-                    if reason_code == "WATCH":
-                        streamer.stream.watch_session_state = None
-
-                    logger.info(
-                        f"+{earned} → {streamer} - Reason: {reason_code}.",
-                        extra={
-                            "emoji": ":rocket:",
-                            "event": Events.get(f"GAIN_FOR_{reason_code}"),
-                        },
+                    self.streamer_system.points_earned(
+                        channel_id=message.channel_id,
+                        timestamp=dateparser.parse(message.timestamp),
+                        reason=message.data["point_gain"]["reason_code"],
+                        amount=message.data["point_gain"]["total_points"],
+                        balance=message.data["balance"]["balance"],
                     )
-                    streamer.update_history(reason_code, earned)
-                    # Analytics switch
-                    if Settings.enable_analytics is True:
-                        streamer.persistent_annotations(
-                            reason_code, f"+{earned} - {reason_code}"
-                        )
                 elif message.type == "claim-available":
-                    self.twitch.claim_bonus(
-                        streamer,
-                        message.data["claim"]["id"],
+                    self.streamer_system.claim_available(
+                        channel_id=message.channel_id,
+                        timestamp=dateparser.parse(message.timestamp),
+                        claim_id=message.data["claim"]["id"],
+                    )
+                elif message.type == "points-spent":
+                    self.streamer_system.points_spent(
+                        channel_id=message.channel_id,
+                        timestamp=dateparser.parse(message.timestamp),
+                        balance=message.data["balance"]["balance"],
                     )
 
             elif message.topic == "video-playback-by-id":
                 # There is stream-up message type, but it's sent earlier than the API updates
                 if message.type == "stream-up":
-                    streamer.stream_up = time.time()
+                    self.stream_system.bring_up(message.channel_id)
                 elif message.type == "stream-down":
-                    if streamer.is_online is True:
-                        streamer.set_offline()
+                    self.stream_system.bring_down(message.channel_id)
                 elif message.type == "viewcount":
-                    if streamer.stream_up_elapsed():
-                        self.twitch.check_streamer_online(streamer)
+                    self.stream_system.update_view_count(
+                        message.channel_id, message.data["viewcount"]
+                    )
 
             elif message.topic == "raid":
                 if message.type == "raid_update_v2":
-                    raid = Raid(
-                        message.message["raid"]["id"],
-                        message.message["raid"]["target_login"],
+                    self.streamer_system.raid_update(
+                        message.channel_id, raid=Raid(
+                            message.message["raid"]["id"],
+                            message.message["raid"]["target_login"],
+                        )
                     )
-                    self.twitch.update_raid(streamer, raid)
 
             elif message.topic == "community-moments-channel-v1":
                 if message.type == "active":
-                    self.twitch.claim_moment(streamer, message.data["moment_id"])
+                    self.streamer_system.moment(
+                        message.channel_id, message.data["moment_id"]
+                    )
 
             elif message.topic == "predictions-channel-v1":
-
                 event_dict = message.data["event"]
                 event_id = event_dict["id"]
-                event_status = event_dict["status"]
 
                 current_tmsp = dateparser.parse(message.timestamp)
 
@@ -129,72 +120,20 @@ class PubSubHandler(MessageListener):
                     message.type == "event-created"
                     and event_id not in self.events_predictions
                 ):
-                    if event_status == "ACTIVE":
-                        prediction_window_seconds = float(
-                            event_dict["prediction_window_seconds"]
-                        )
-                        # Reduce prediction window by 3/6s - Collect more accurate data for decision
-                        prediction_window_seconds = streamer.get_prediction_window(
-                            prediction_window_seconds
-                        )
-                        event = EventPrediction(
-                            streamer,
-                            event_id,
-                            event_dict["title"],
-                            dateparser.parse(event_dict["created_at"]),
-                            prediction_window_seconds,
-                            event_status,
-                            event_dict["outcomes"],
-                        )
-                        if (
-                            streamer.is_online
-                            and event.closing_bet_after(current_tmsp) > 0
-                        ):
-                            bet_settings = streamer.settings.bet
-                            if (
-                                bet_settings.minimum_points is None
-                                or streamer.channel_points > bet_settings.minimum_points
-                            ):
-                                self.events_predictions[event_id] = event
-                                start_after = event.closing_bet_after(current_tmsp)
-
-                                place_bet_thread = Timer(
-                                    start_after,
-                                    self.twitch.make_predictions,
-                                    (self.events_predictions[event_id],),
-                                )
-                                place_bet_thread.daemon = True
-                                place_bet_thread.start()
-
-                                logger.info(
-                                    f"Place the bet after: {start_after}s for: {self.events_predictions[event_id]}",
-                                    extra={
-                                        "emoji": ":alarm_clock:",
-                                        "event": Events.BET_START,
-                                    },
-                                )
-                            else:
-                                logger.info(
-                                    f"{streamer} have only {streamer.channel_points} channel points and the minimum for bet is: {bet_settings.minimum_points}",
-                                    extra={
-                                        "emoji": ":pushpin:",
-                                        "event": Events.BET_FILTERS,
-                                    },
-                                )
-
+                    self.prediction_system.event_created(
+                        timestamp=current_tmsp,
+                        channel_id=message.channel_id,
+                        event_dict=event_dict
+                    )
                 elif (
                     message.type == "event-updated"
                     and event_id in self.events_predictions
                 ):
-                    self.events_predictions[event_id].status = event_status
-                    # Game over we can't update anymore the values... The bet was placed!
-                    if (
-                        self.events_predictions[event_id].bet_placed is False
-                        and self.events_predictions[event_id].bet.decision == {}
-                    ):
-                        self.events_predictions[event_id].bet.update_outcomes(
-                            event_dict["outcomes"]
-                        )
+                    self.prediction_system.event_updated(
+                        timestamp=current_tmsp,
+                        channel_id=message.channel_id,
+                        event_dict=event_dict
+                    )
 
             elif message.topic == "predictions-user-v1":
                 event_id = message.data["prediction"]["event_id"]
@@ -204,76 +143,29 @@ class PubSubHandler(MessageListener):
                         message.type == "prediction-result"
                         and event_prediction.bet_confirmed
                     ):
-                        points = event_prediction.parse_result(
-                            message.data["prediction"]["result"]
+                        self.prediction_system.prediction_result(
+                            timestamp=dateparser.parse(message.timestamp),
+                            channel_id=message.channel_id,
+                            result_dict=message.data["prediction"]
                         )
-
-                        decision = event_prediction.bet.get_decision()
-                        choice = event_prediction.bet.decision["choice"]
-
-                        logger.info(
-                            (
-                                f"{event_prediction} - Decision: {choice}: {decision['title']} "
-                                f"({decision['color']}) - Result: {event_prediction.result['string']}"
-                            ),
-                            extra={
-                                "emoji": ":bar_chart:",
-                                "event": Events.get(
-                                    f"BET_{event_prediction.result['type']}"
-                                ),
-                            },
-                        )
-
-                        streamer.update_history("PREDICTION", points["gained"])
-
-                        # Remove duplicate history records from previous message sent in community-points-user-v1
-                        if event_prediction.result["type"] == "REFUND":
-                            streamer.update_history(
-                                "REFUND",
-                                -points["placed"],
-                                counter=-1,
-                            )
-                        elif event_prediction.result["type"] == "WIN":
-                            streamer.update_history(
-                                "PREDICTION",
-                                -points["won"],
-                                counter=-1,
-                            )
-
-                        if event_prediction.result["type"]:
-                            # Analytics switch
-                            if Settings.enable_analytics is True:
-                                streamer.persistent_annotations(
-                                    event_prediction.result["type"],
-                                    f"{self.events_predictions[event_id].title}",
-                                )
                     elif message.type == "prediction-made":
-                        event_prediction.bet_confirmed = True
-                        # Analytics switch
-                        if Settings.enable_analytics is True:
-                            streamer.persistent_annotations(
-                                "PREDICTION_MADE",
-                                f"Decision: {event_prediction.bet.decision['choice']} - {event_prediction.title}",
-                            )
+                        self.prediction_system.user_prediction_made(
+                            channel_id=message.channel_id,
+                            event_dict=message.data["prediction"]
+                        )
             elif message.topic == "community-points-channel-v1":
                 if message.type == "community-goal-created":
-                    # TODO Untested, hard to find this happening live
-                    streamer.update_community_goal(
-                        CommunityGoal.from_pubsub(message.data["community_goal"])
+                    self.streamer_system.community_goal_created(
+                        message.channel_id, message.data["community_goal"]
                     )
                 elif message.type == "community-goal-updated":
-                    streamer.update_community_goal(
-                        CommunityGoal.from_pubsub(message.data["community_goal"])
+                    self.streamer_system.community_goal_updated(
+                        message.channel_id, message.data["community_goal"]
                     )
                 elif message.type == "community-goal-deleted":
-                    # TODO Untested, not sure what the message format for this is,
-                    #      https://github.com/sammwyy/twitch-ps/blob/master/main.js#L417
-                    #      suggests that it should be just the entire, now deleted, goal model
-                    streamer.delete_community_goal(message.data["community_goal"]["id"])
-
-                if message.type in ["community-goal-updated", "community-goal-created"]:
-                    self.twitch.contribute_to_community_goals(streamer)
-
+                    self.streamer_system.community_goal_deleted(
+                        message.channel_id, message.data["community_goal"]
+                    )
             elif message.topic == "onsite-notifications":
                 logger.debug(f"Received onsite-notification: {message.type}")
                 notification = self.parser.parse_onsite_notification(message.message)
@@ -283,13 +175,12 @@ class PubSubHandler(MessageListener):
                             notification,
                             OnsiteNotification.UserDropRewardReminderNotification,
                         ):
-                            logger.info(f"Drop claimable: {notification.drop_name}")
-                            # TODO claim drop
+                            self.notification_system.user_drop_reminder(notification)
                         elif isinstance(
                             notification,
                             OnsiteNotification.UserEarnedQuestsRewardBadgeNotification,
                         ):
-                            logger.debug(f"Badge Earned: {notification.badge_name}")
+                            self.notification_system.user_earned_quests_reward_badge(notification)
                         else:
                             logger.error(
                                 f"Unhandled CreateNotification subtype: {type(notification).__name__}"
@@ -302,54 +193,17 @@ class PubSubHandler(MessageListener):
             elif message.topic == "user-subscribe-events-v1":
                 logger.debug(f"Received user-subscribe-events-v1")
                 notification = self.parser.parse_user_subscribe_events(message.message)
-                streamer = next(
-                    (
-                        streamer
-                        for streamer in self.streamers
-                        if streamer.channel_id == notification.channel_id
-                    ),
-                    None,
-                )
-                if streamer is not None:
-                    self.twitch.check_gift_sub(streamer)
-                else:
-                    logger.debug(
-                        f"Received subscription notification for non-miner channel: {Settings.logger.anonymiser.channel_id(notification.channel_id)}"
-                    )
+                self.streamer_system.subscription(notification)
 
             elif message.topic == "weekly-rewards":
                 logger.debug(f"Received weekly-rewards")
                 notification = self.parser.parse_weekly_rewards(message.message)
-                streamer = next(
-                    (
-                        streamer
-                        for streamer in self.streamers
-                        if streamer.channel_id == notification.channel_id
-                    ),
-                    None,
-                )
-                if streamer is not None:
-                    self.twitch.update_weekly_reward(streamer, notification)
-                else:
-                    logger.debug(
-                        f"Received weekly rewards notification for non-miner channel: {Settings.logger.anonymiser.channel_id(notification.channel_id)}"
-                    )
+                self.streamer_system.weekly_reward_update(notification)
             elif message.topic == "viewer-milestones":
                 logger.debug("Received viewer-milestones")
                 viewer_milestones = self.parser.parse_viewer_milestones(message.message)
                 if viewer_milestones is not None:
-                    # streak-recovered
-                    logger.info(
-                        f"Watch Streak recovered for {streamer}",
-                        extra={
-                            "emoji": ":ambulance:",
-                            "event": Events.get("WATCH_STREAK_RECOVERY"),
-                        },
-                    )
-                    for streamer in self.streamers:
-                        if streamer.channel_id == viewer_milestones.channel_id:
-                            streamer.watch_streak_missed_streams = set()
-                            break
+                    self.streamer_system.watch_streak_recovered(viewer_milestones)
 
         except Exception:
             message_loggable = (
