@@ -19,7 +19,7 @@ from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings, StreamerSource
-from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerThreadFactory
+from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerThread, SlottedTaskRunnerThreadFactory
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
     NestedSelector,
     StreamerSelector,
@@ -37,12 +37,18 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
     StreamerSettings,
 )
+from TwitchChannelPointsMiner.classes.events.MinerHandler import MinerHandler
+from TwitchChannelPointsMiner.classes.events.managers.Queue import QueueManager
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory, GQL
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 from TwitchChannelPointsMiner.classes.websocket.hermes import HermesWebSocketPool
 from TwitchChannelPointsMiner.classes.websocket.pubsub import PubSubWebSocketPool
 from TwitchChannelPointsMiner.constants import HERMES_WEBSOCKET, CLIENT_ID_WEB
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers
+from TwitchChannelPointsMiner.systems.Notifications import NotificationsSystem
+from TwitchChannelPointsMiner.systems.Predictions import PredictionSystem
+from TwitchChannelPointsMiner.systems.Streamers import StreamerSystem
+from TwitchChannelPointsMiner.systems.Streams import StreamSystem
 from TwitchChannelPointsMiner.utils import (
     millify,
     at_least_one_value_in_settings_is,
@@ -571,12 +577,67 @@ class TwitchChannelPointsMiner:
             sync_gift_subs_thread.start()
             self.background_tasks.append(sync_gift_subs_thread)
 
+            # Event Manager
+            # TODO factory setup
+            event_manager = QueueManager(
+                runner=SlottedTaskRunnerThread(
+                    twitch=self.twitch,
+                    name="Event Manager",
+                    max_concurrent=10,
+                    loop_interval_seconds=5,
+                ),
+                task_timeout_seconds=60,
+                loop_sleep_seconds=5,
+            )
+            event_manager.start()
+            self.background_tasks.append(event_manager)
+
+            event_manager.add_handler(
+                MinerHandler(
+                    twitch=self.twitch,
+                    streamers=self.streamers
+                )
+            )
+
+            # TODO add event hooks to event handler
+
+            # Miner Systems
+            streamer_system = StreamerSystem(
+                twitch=self.twitch,
+                streamers=self.streamers,
+                event_manager=event_manager,
+            )
+
+            stream_system = StreamSystem(
+                twitch=self.twitch,
+                streamers=self.streamers,
+                event_manager=event_manager,
+            )
+
+            prediction_system = PredictionSystem(
+                twitch=self.twitch,
+                streamers=self.streamers,
+                prediction_events=self.events_predictions,
+                event_manager=event_manager,
+            )
+
+            notification_system = NotificationsSystem(
+                twitch=self.twitch,
+                streamers=self.streamers,
+                event_manager=event_manager,
+            )
+
+            # WebSocket
             pubsub_handlers = [
                 PubSubHandler(
-                    WebSocketJsonParser(),
-                    self.twitch,
-                    self.streamers,
-                    self.events_predictions,
+                    streamer_system=streamer_system,
+                    stream_system=stream_system,
+                    prediction_system=prediction_system,
+                    notification_system=notification_system,
+                    parser=WebSocketJsonParser(),
+                    twitch=self.twitch,
+                    streamers=self.streamers,
+                    events_predictions=self.events_predictions,
                 )
             ]
             if Settings.use_hermes:

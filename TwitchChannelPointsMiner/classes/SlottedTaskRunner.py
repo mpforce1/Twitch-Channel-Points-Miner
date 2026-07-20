@@ -23,12 +23,13 @@ class Slot[Context, Result]:
     """The time the task was started."""
     timeout_seconds: float
     """The amount of seconds the task is allowed to run."""
-    on_complete: Callable[[Context, Result], None]
+    on_complete: Callable[[Context, Result], None] | None
     """A callback that will be called upon task completion."""
 
 
 class SlottedTaskRunner[Context, Result](abc.ABC):
     """Runs tasks in a given number of "Slots" that can only be occupied by 1 task at a time."""
+
     @abc.abstractmethod
     def has_free_slot(self) -> bool:
         """
@@ -52,7 +53,7 @@ class SlottedTaskRunner[Context, Result](abc.ABC):
         context: Context,
         task: Callable[[], Result],
         timeout_seconds: float,
-        on_complete: Callable[[Context, Result], None],
+        on_complete: Callable[[Context, Result], None] | None,
     ) -> bool:
         """
         Runs the given task if there's a free slot.
@@ -73,13 +74,13 @@ class SlottedTaskRunnerThread[Context, Result](
         self,
         twitch: Twitch,
         name: str,
-        max_concurrent: int = 2,
+        max_concurrent: int | None = 2,
         loop_interval_seconds: float = 20,
     ):
         super().__init__(name=f"{name} Runner", daemon=True)
         self.twitch = twitch
         """ The Twitch API instance. """
-        if max_concurrent <= 0:
+        if max_concurrent is not None and max_concurrent <= 0:
             raise ValueError(f"max_concurrent must be greater than 0: {max_concurrent}")
         self.max_concurrent = max_concurrent
         """ The maximum amount of tasks to run concurrently. """
@@ -89,9 +90,12 @@ class SlottedTaskRunnerThread[Context, Result](
             max_workers=self.max_concurrent,
             thread_name_prefix="weekly_reawrds_watcher",
         )
-        self._slots: list[Slot[Context, Result] | None] = [
-            None for _ in range(max_concurrent)
-        ]
+        if max_concurrent is None:
+            self._slots = list[Slot[Context, Result] | None]()
+        else:
+            self._slots: list[Slot[Context, Result] | None] = [
+                None for _ in range(max_concurrent)
+            ]
         self._lock = Lock()
 
     def has_free_slot(self) -> bool:
@@ -100,14 +104,16 @@ class SlottedTaskRunnerThread[Context, Result](
 
     def has_context(self, context: Context):
         with self._lock:
-            return any(slot.context == context for slot in self._slots if slot is not None)
+            return any(
+                slot.context == context for slot in self._slots if slot is not None
+            )
 
     def start_task(
         self,
         context: Context,
         task: Callable[[], Result],
         timeout_seconds: float,
-        on_complete: Callable[[Context, Result], None],
+        on_complete: Callable[[Context, Result], None] | None,
     ) -> bool:
         with self._lock:
             for index, slot in enumerate(self._slots):
@@ -157,7 +163,8 @@ class SlottedTaskRunnerThread[Context, Result](
                             result = next(
                                 futures.as_completed([slot.future], timeout=0)
                             ).result(timeout=0)
-                            slot.on_complete(slot.context, result)
+                            if slot.on_complete is not None:
+                                slot.on_complete(slot.context, result)
                         except TimeoutError:
                             pass
                         except Exception as e:
@@ -187,7 +194,9 @@ class SlottedTaskRunnerFactory(abc.ABC):
     @abc.abstractmethod
     def create[Context, Result](
         self, twitch: Twitch, name: str
-    ) -> SlottedTaskRunner[Context, Result]:  # pyright: ignore [reportInvalidTypeVarUse]
+    ) -> SlottedTaskRunner[
+        Context, Result
+    ]:  # pyright: ignore [reportInvalidTypeVarUse]
         pass
 
 
@@ -198,7 +207,9 @@ class SlottedTaskRunnerThreadFactory(SlottedTaskRunnerFactory):
 
     def create[Context, Result](
         self, twitch: Twitch, name: str
-    ) -> SlottedTaskRunner[Context, Result]:  # pyright: ignore [reportInvalidTypeVarUse]
+    ) -> SlottedTaskRunner[
+        Context, Result
+    ]:  # pyright: ignore [reportInvalidTypeVarUse]
         runner = SlottedTaskRunnerThread[Context, Result](
             twitch=twitch,
             name=name,

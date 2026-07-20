@@ -43,6 +43,8 @@ from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.events.Event import WatchStreakMissing, WatchStreakProgress, WatchStreakRecovery
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
@@ -64,6 +66,7 @@ from TwitchChannelPointsMiner.utils import (
     internet_connection_available,
     interruptible_sleep,
 )
+from TwitchChannelPointsMiner.utils.Entities import find_streamer
 from TwitchChannelPointsMiner.utils.Utils import create_random_alphanumeric_id, encode_payload
 
 logger = logging.getLogger(__name__)
@@ -74,6 +77,7 @@ CLIENT_WATCH_SECONDS = 20
 
 class Twitch(object):
     __slots__ = [
+        "event_manager",
         "cookies_file",
         "running",
         "client_session",
@@ -83,11 +87,13 @@ class Twitch(object):
 
     def __init__(
         self,
+        event_manager: EventManager,
         username,
         user_agent,
         password=None,
         gql_factory: GQLFactory | None = None,
     ):
+        self.event_manager = event_manager
         cookies_path = os.path.join(Path().absolute(), "cookies")
         Path(cookies_path).mkdir(parents=True, exist_ok=True)
         self.cookies_file = os.path.join(cookies_path, f"{username}.pkl")
@@ -150,12 +156,8 @@ class Twitch(object):
                     watch_streak_milestone=watch_streak_milestone,
                 )
                 if streak_was_missing and not streamer.stream.watch_streak_missing:
-                    logger.info(
-                        f"Detected WATCH_STREAK for {streamer}",
-                        extra={
-                            "emoji": ":rocket:",
-                            "event": Events.get("WATCH_STREAK_PROGRESS"),
-                        },
+                    self.event_manager.manage(
+                        WatchStreakProgress(channel_id=streamer.channel_id)
                     )
 
                 event_properties = {
@@ -281,17 +283,12 @@ class Twitch(object):
                 reward_list.channel.self.watch_streak_milestone.missed_streams
             )
             if had_missed_streams and len(streamer.watch_streak_missed_streams) <= 0:
-                logger.info(
-                    f"Watch Streak recovered for {streamer}",
-                    extra={
-                        "emoji": ":ambulance:",
-                        "event": Events.get("WATCH_STREAK_RECOVERY"),
-                    },
+                self.event_manager.manage(
+                    WatchStreakRecovery(channel_id=streamer.channel_id)
                 )
             if not had_missed_streams and len(streamer.watch_streak_missed_streams) > 0:
-                logger.info(
-                    f"Missing Watch Streak for {streamer}",
-                    extra={"emoji": ":red_question_mark:"},
+                self.event_manager.manage(
+                    WatchStreakMissing(channel_id=streamer.channel_id)
                 )
 
     def get_streamer_info(self, streamer: Streamer):
@@ -732,14 +729,6 @@ class Twitch(object):
         streamer_selector: StreamerSelector,
         chunk_size=3,
     ):
-        def find_streamer(channel_id: str) -> Streamer:
-            for streamer in streamers:
-                if streamer.channel_id == channel_id:
-                    return streamer
-            raise KeyError(
-                f"Streamer with channel_id ({channel_id}) not found in streamer list."
-            )
-
         watched_previous_iteration = set()
         watched_this_iteration = set()
 
@@ -761,18 +750,18 @@ class Twitch(object):
 
                 selected_streamer_ids = streamer_selector.select(online_streamers, 2)
                 streamers_watching = [
-                    find_streamer(streamer_id) for streamer_id in selected_streamer_ids
+                    find_streamer(streamers, streamer_id) for streamer_id in selected_streamer_ids
                 ]
 
                 # Log the difference, if any
                 selected_set = set(selected_streamer_ids)
                 if watched_previous_iteration != selected_set:
                     dropping = list(
-                        str(find_streamer(channel_id))
+                        str(find_streamer(streamers, channel_id))
                         for channel_id in watched_previous_iteration - selected_set
                     )
                     adding = list(
-                        str(find_streamer(channel_id))
+                        str(find_streamer(streamers, channel_id))
                         for channel_id in selected_set - watched_previous_iteration
                     )
                     logger.debug(
@@ -1320,21 +1309,6 @@ class Twitch(object):
         except RetryError as e:
             logger.error(
                 f"Error while trying to claim bonus for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
-            )
-
-    # === MOMENTS === #
-    def claim_moment(self, streamer: Streamer, moment_id: str):
-        if Settings.logger.less is False:
-            logger.info(
-                f"Claiming the moment for {streamer}!",
-                extra={"emoji": ":video_camera:", "event": Events.MOMENT_CLAIM},
-            )
-
-        try:
-            self.gql.claim_moment(moment_id)
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to claim moment with id {moment_id} for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}",
             )
 
     # === CAMPAIGNS / DROPS / INVENTORY === #

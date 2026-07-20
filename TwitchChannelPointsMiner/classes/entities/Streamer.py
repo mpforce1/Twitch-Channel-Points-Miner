@@ -168,7 +168,7 @@ class Streamer(object):
         self.settings = settings
         self.source = source
         self.is_online = is_online if is_online is not None else False
-        self.stream_up = 0
+        self.stream_up: float = 0
         self.online_at = online_at if online_at is not None else 0.0
         self.offline_at = offline_at if offline_at is not None else 0.0
         self.channel_points_enabled = channel_points_enabled
@@ -191,7 +191,7 @@ class Streamer(object):
 
         self.stream = stream if stream is not None else Stream()
 
-        self.raid = None
+        self.raid: Raid | None = None
         self.history = {}
 
         self.streamer_url = f"{URL}/{self.username}"
