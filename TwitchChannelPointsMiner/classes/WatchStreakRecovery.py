@@ -98,6 +98,23 @@ class BasicWatchStreakRecovery(WatchStreakRecovery):
                     return vod
         return None
 
+    def select_streamers(self):
+        return (
+            streamer
+            for streamer in self.streamers
+            # Only streamers that need recovery
+            if streamer.needs_watch_streak_recovery()
+            # Only streamers that have a valid Clip/VOD
+            and (
+                self.get_clip(streamer) is not None
+                or self.get_vod(streamer) is not None
+            )
+            # Only streamers not being watched
+            and not self.runner.has_context(streamer)
+            # Only streamers not queued to watch
+            and streamer.channel_id not in self._queued
+        )
+
     def recover_clip(self, streamer: Streamer):
         """
         Attempts to recover the Watch Streak of the given Streamer by playing back a Clip.
@@ -189,9 +206,8 @@ class BasicWatchStreakRecovery(WatchStreakRecovery):
         logger.debug(f"Streak Recovery for {streamer}: {result}")
 
     def _run(self):
-        for streamer in self.streamers:
-            if streamer.needs_watch_streak_recovery():
-                self.enqueue(streamer)
+        for streamer in self.select_streamers():
+            self.enqueue(streamer)
         while self.runner.has_free_slot():
             streamer = self.dequeue()
             if streamer is not None:

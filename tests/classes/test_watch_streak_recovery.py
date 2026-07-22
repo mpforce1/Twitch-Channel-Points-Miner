@@ -236,6 +236,251 @@ test_recover_clip_data = [
 ]
 
 
+test_select_streamers_data = [
+    # None
+    ([], set(), []),
+    ([], {"a", "b"}, []),
+    # Single streamer, never selected
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=False),
+                clips=Clips(),
+                vods=[],
+            )
+        ],
+        set(),
+        [],
+    ),
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=False,
+                clips=Clips(),
+                vods=[],
+            )
+        ],
+        set(),
+        [],
+    ),
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=True,
+                clips=Clips(),
+                vods=[],
+            )
+        ],
+        set(),
+        [],
+    ),
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams=set(),
+                clips=Clips(),
+                vods=[],
+            )
+        ],
+        set(),
+        [],
+    ),
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams=set("broadcast-a"),
+                clips=Clips(),
+                vods=[],
+            )
+        ],
+        set(),
+        [],
+    ),
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams=set("broadcast-a"),
+                clips=Clips(last_day=[clip_a]),
+                vods=[vod_a],
+            )
+        ],
+        {"a"},
+        [],
+    ),
+    # Single selected
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams=set("broadcast-a"),
+                clips=Clips(last_day=[clip_a]),
+                vods=[vod_a],
+            )
+        ],
+        set(),
+        [],
+    ),
+    # Multiple watchable
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams={"broadcast-a"},
+                clips=Clips(last_day=[clip_a]),
+                vods=[vod_a],
+            ),
+            Streamer(
+                "b",
+                "b",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams={"broadcast-b"},
+                clips=Clips(last_day=[clip_b]),
+                vods=[],
+            ),
+            Streamer(
+                "c",
+                "c",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams={"broadcast-c"},
+                clips=Clips(),
+                vods=[vod_c],
+            ),
+        ],
+        set("d"),
+        ["a", "b", "c"],
+    ),
+    # Multiple mixed
+    (
+        [
+            Streamer(
+                "a",
+                "a",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams=set(),
+                clips=Clips(last_day=[clip_a]),
+                vods=[vod_a],
+            ),
+            Streamer(
+                "b",
+                "b",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams={"broadcast-b"},
+                clips=Clips(last_day=[clip_b]),
+                vods=[vod_b],
+            ),
+            Streamer(
+                "c",
+                "c",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams={"broadcast-c"},
+                clips=Clips(last_week=[clip_c]),
+                vods=[],
+            ),
+            Streamer(
+                "d",
+                "d",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=True,
+                watch_streak_missed_streams={"broadcast-d"},
+                clips=Clips(last_day=[clip("d")]),
+                vods=[vod_d],
+            ),
+            Streamer(
+                "e",
+                "e",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams={"broadcast-e"},
+                clips=Clips(last_day=[clip("e")]),
+                vods=[vod("e")],
+            ),
+            Streamer(
+                "f",
+                "f",
+                settings=StreamerSettings(watch_streak=True),
+                channel_points_enabled=True,
+                is_online=False,
+                watch_streak_missed_streams={"broadcast-f"},
+                clips=Clips(last_day=[clip("f")]),
+                vods=[],
+            ),
+        ],
+        {"d", "e"},
+        ["b", "c", "f"],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "streamers,currently_watching,expected", test_select_streamers_data
+)
+def test_select_streamers(
+    streamers: list[Streamer], currently_watching: set[str], expected: list[str]
+):
+    twitch = MagicMock()
+    twitch.vod_viewable = lambda s, v: True
+
+    runner = MagicMock()
+    runner.has_context = lambda s: s.channel_id in currently_watching
+
+    recovery = BasicWatchStreakRecovery(
+        twitch=twitch, streamers=streamers, runner=runner, config=BasicConfiguration()
+    )
+    # Setup watching
+    for _id in currently_watching:
+        recovery._queue.put_nowait(Streamer(_id, _id))
+        recovery._queued.add(_id)
+
+    selected = list(recovery.select_streamers())
+    assert len(selected) == len(expected)
+    for streamer, expected_streamer in zip(selected, expected):
+        assert streamer.channel_id == expected_streamer
+
+
 @pytest.mark.parametrize("streamer,clip,clip_result,expected", test_recover_clip_data)
 def test_recover_clip(streamer: Streamer, clip, clip_result, expected):
     twitch = MagicMock()
@@ -379,70 +624,45 @@ def test_process_result():
     pass
 
 
-def test__run():
-    streamers = [
-        Streamer(
-            "a",
-            "a",
-            settings=StreamerSettings(watch_streak=True),
-        ),
-        Streamer(
-            "b",
-            "b",
-            settings=StreamerSettings(watch_streak=True),
-            channel_points_enabled=False,
-            watch_streak_missed_streams={"broadcast-a"},
-        ),
-        Streamer(
-            "c",
-            "c",
-            settings=StreamerSettings(watch_streak=True),
-            watch_streak_missed_streams={"broadcast-b", "broadcast-c"},
-        ),
-        Streamer(
-            "d",
-            "d",
-            settings=StreamerSettings(watch_streak=False),
-            watch_streak_missed_streams={"broadcast-d"},
-        ),
-        Streamer(
-            "e",
-            "e",
-            settings=StreamerSettings(watch_streak=True),
-        ),
-        Streamer(
-            "f",
-            "f",
-            settings=StreamerSettings(watch_streak=True),
-            watch_streak_missed_streams={"broadcast-e", "broadcast-f"},
-        ),
-        Streamer(
-            "g",
-            "g",
-            settings=StreamerSettings(watch_streak=True),
-            channel_points_enabled=False,
-            watch_streak_missed_streams={"broadcast-g", "broadcast-h"}
-        )
-    ]
+test__run_data = [
+    ([], [], 0, 1, 0, 0),
+    ([Streamer("a", "a")], [], 0, 1, 0, 0),
+    ([Streamer("a", "a")], [0], 0, 1, 0, 0),
+    ([Streamer("a", "a")], [0], 1, 2, 1, 1),
+    ([Streamer("a", "a"), Streamer("b", "b")], [1], 2, 2, 2, 1),
+    ([Streamer("a", "a"), Streamer("b", "b")], [0, 1], 1, 2, 1, 1),
+]
 
+
+@pytest.mark.parametrize(
+    "selected,queued,free_slots,expected_has_free_slot_calls,expected_dequeue_calls,expected_start_task_calls",
+    test__run_data,
+)
+def test__run(
+    selected: list[Streamer],
+    queued: list[int],
+    free_slots: int,
+    expected_has_free_slot_calls: int,
+    expected_dequeue_calls: int,
+    expected_start_task_calls: int,
+):
     runner = MagicMock()
-    # space for 2 streamers
-    runner.has_free_slot.side_effect = [True, True, False]
+    runner.has_free_slot.side_effect = [True for _ in range(free_slots)] + [False]
+    runner.start_task.side_effect = [True for _ in range(free_slots)] + [False]
 
-    recovery = BasicWatchStreakRecovery(
-        twitch=MagicMock(),
-        streamers=streamers,
-        config=BasicConfiguration(
-            max_clip_watch_seconds=1,
-            max_vod_watch_seconds=1,
-        ),
-        runner=runner,
-    )
+    recovery = BasicWatchStreakRecovery(twitch=MagicMock(), streamers=[], runner=runner)
+    recovery.select_streamers = MagicMock()
+    recovery.select_streamers.return_value = (s for s in selected)
+    recovery.enqueue = MagicMock()
+    recovery.dequeue = MagicMock()
+    recovery.dequeue.side_effect = [selected[index] for index in queued] + [None]
 
     recovery._run()
 
-    assert runner.has_free_slot.call_count == 3
-    assert runner.start_task.call_count == 2
+    assert recovery.enqueue.call_count == len(selected)
+    assert runner.has_free_slot.call_count == expected_has_free_slot_calls
+    assert recovery.dequeue.call_count == expected_dequeue_calls
+    assert runner.start_task.call_count == expected_start_task_calls
 
 
 class MockTwitch:
