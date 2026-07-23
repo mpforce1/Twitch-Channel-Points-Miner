@@ -1,6 +1,5 @@
 import datetime
 import time
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,7 +7,6 @@ import pytest
 from TwitchChannelPointsMiner.classes import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
-    SlottedTaskRunner,
     SlottedTaskRunnerThread,
 )
 from TwitchChannelPointsMiner.classes.WeeklyRewardsProgressor import (
@@ -142,269 +140,191 @@ def streamer_setting_disabled(username: str, channel_id: str):
     )
 
 
-test_select_streamers_data = [
-    # Test no streamers selects nothing
-    ([], set(), []),
-    ([], set(), []),
-    # Test all unwatchable selects nothing
-    ([streamer_unwatchable("streamer1", "123456789")], set(), []),
-    ([streamer_unwatchable("streamer1", "123456789")], set(), []),
-    # Test watchable gets selected up to limit
+test_can_watch_data = [
+    # Online
+    (Streamer("a", "a", is_online=True), False),
+    # Offline, not missing reward
     (
-        [streamer_watchable("streamer1", "123456789")],
-        set(),
-        ["123456789"],
+        Streamer(
+            "a", "a", is_online=False, settings=StreamerSettings(weekly_rewards=False)
+        ),
+        False,
     ),
     (
-        [
-            streamer_watchable("streamer1", channel_id="123456789"),
-            streamer_watchable("streamer2", channel_id="987654321"),
-        ],
-        set(),
-        ["123456789", "987654321"],
+        Streamer(
+            "a",
+            "a",
+            is_online=False,
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=False,
+        ),
+        False,
     ),
     (
-        [
-            streamer_watchable("streamer1", channel_id="123456789"),
-            streamer_watchable("streamer2", channel_id="987654321"),
-            streamer_watchable("streamer3", channel_id="963258741"),
-        ],
-        set(),
-        ["123456789", "987654321", "963258741"],
+        Streamer(
+            "a",
+            "a",
+            is_online=False,
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=weekly_rewards_visited,
+        ),
+        False,
     ),
-    # Test mix of watchable and unwatchable
+    # Can progress
     (
-        [
-            streamer_watchable("streamer1", channel_id="123456789"),
-            streamer_unwatchable("streamer2", channel_id="987654321"),
-        ],
-        set(),
-        ["123456789"],
-    ),
-    (
-        [
-            streamer_unwatchable("streamer1", channel_id="123456789"),
-            streamer_watchable("streamer2", channel_id="987654321"),
-        ],
-        set(),
-        ["987654321"],
-    ),
-    # Tests streamers without clips and/or vods
-    (
-        [
-            # Streamer with no clips but 1 vod of the right length
-            Streamer(
-                "a",
-                channel_id="1",
-                settings=StreamerSettings(weekly_rewards=True),
-                weekly_rewards=weekly_rewards_unvisited,
-                clips=Clips(),
-                vods=[
-                    Video(
-                        edge=VideoEdge(
-                            _id="a", broadcast_id="a", length_seconds=10 * 60
-                        )
-                    )
-                ],
-            ),
-            # Streamer with no clips and 1 vod of the wrong length
-            Streamer(
-                "b",
-                channel_id="2",
-                settings=StreamerSettings(weekly_rewards=True),
-                weekly_rewards=weekly_rewards_unvisited,
-                clips=Clips(),
-                vods=[
-                    Video(edge=VideoEdge(_id="b", broadcast_id="b", length_seconds=10))
-                ],
-            ),
-        ],
-        set(),
-        ["1"],
-    ),
-    (
-        [
-            # Streamer with 1 clip but no vods
-            Streamer(
-                "a",
-                channel_id="1",
-                settings=StreamerSettings(weekly_rewards=True),
-                weekly_rewards=weekly_rewards_unvisited,
-                clips=Clips(
-                    all_time=[
-                        Clip(
-                            _id="a",
-                            broadcast_id="broadcast-a",
-                            slug="slug",
-                            url="url",
-                            title="title",
-                            duration_seconds=10,
-                        )
-                    ]
-                ),
-                vods=[],
-            ),
-            # Streamer with 1 clip that's too short and no vods
-            Streamer(
-                "b",
-                channel_id="2",
-                settings=StreamerSettings(weekly_rewards=True),
-                weekly_rewards=weekly_rewards_unvisited,
-                clips=Clips(
-                    all_time=[
-                        Clip(
-                            _id="b",
-                            broadcast_id="broadcast-b",
-                            slug="slug",
-                            url="url",
-                            title="title",
-                            duration_seconds=4,
-                        )
-                    ]
-                ),
-                vods=[],
-            ),
-        ],
-        set(),
-        ["1"],
-    ),
-    # Test currently watching
-    (
-        [
-            streamer_watchable("a", "a"),
-            streamer_watchable("b", "b"),
-            streamer_watchable("c", "c"),
-            streamer_watchable("d", "d"),
-            streamer_watchable("e", "e"),
-        ],
-        {"a"},
-        ["b", "c", "d", "e"],
-    ),
-    (
-        [
-            streamer_watchable("a", "a"),
-            streamer_watchable("b", "b"),
-            streamer_watchable("c", "c"),
-            streamer_watchable("d", "d"),
-            streamer_watchable("e", "e"),
-        ],
-        {"a", "d"},
-        ["b", "c", "e"],
-    ),
-    (
-        [
-            streamer_watchable("a", "a"),
-            streamer_watchable("b", "b"),
-            streamer_watchable("c", "c"),
-            streamer_watchable("d", "d"),
-            streamer_watchable("e", "e"),
-        ],
-        {"a", "b", "d"},
-        ["c", "e"],
-    ),
-    # Rare case where a channel has progress but recently disabled channel points
-    (
-        [
-            Streamer(
-                "a",
-                "a",
-                channel_points_enabled=False,
-                settings=StreamerSettings(weekly_rewards=True),
-                weekly_rewards=weekly_rewards_unvisited,
-                clips=Clips(
-                    all_time=[
-                        Clip(
-                            _id="a",
-                            broadcast_id="broadcast-a",
-                            slug="example-clip-slug",
-                            url="clip url",
-                            title="clip title",
-                            duration_seconds=10,
-                        )
-                    ]
-                ),
-                vods=[
-                    Video(
-                        edge=VideoEdge(
-                            _id="b", broadcast_id="c", length_seconds=10 * 60
-                        ),
-                        token=VideoPlaybackAccessToken(
-                            value="token", signature="signature"
-                        ),
-                    )
-                ],
-            )
-        ],
-        {},
-        [],
+        Streamer(
+            "a",
+            "a",
+            is_online=False,
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=weekly_rewards_unvisited,
+        ),
+        True,
     ),
 ]
 
 
 @pytest.mark.parametrize(
-    "streamers,currently_watching,expected",
-    test_select_streamers_data,
+    "streamer,expected",
+    test_can_watch_data,
 )
-def test_select_streamers(twitch, streamers, currently_watching: set[str], expected):
-    max_seconds_clips = 30
-    max_minutes_vod = 8
-
-    runner = MagicMock()
-    runner.has_context = lambda s: s.channel_id in currently_watching
-
+def test_can_watch(streamer: Streamer, expected):
     progressor = BasicWeeklyRewardsProgressor(
-        twitch=twitch,
-        streamers=streamers,
-        runner=runner,
-        config=BasicConfiguration(
-            max_seconds_clips=max_seconds_clips,
-            max_seconds_vods=max_minutes_vod,
-        ),
+        twitch=MagicMock(),
+        streamers=[],
+        runner=MagicMock(),
     )
 
-    assert [
-        streamer.channel_id for streamer in progressor.select_streamers()
-    ] == expected
+    assert progressor.can_watch(streamer) == expected
 
 
-test_select_streamers_cooldown_data = [
-    ([], {}, []),
-    ([streamer_watchable("a", "a")], {}, ["a"]),
-    ([streamer_watchable("a", "a")], {"a": 0}, []),
-    ([streamer_watchable("a", "a"), streamer_watchable("b", "b")], {"a": 0}, ["b"]),
+test_done_watching_data = [
+    # Done
+    (
+        Streamer(
+            "a",
+            "a",
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=weekly_rewards_visited,
+        ),
+        True,
+    ),
+    # Fully unvisited
+    (
+        Streamer(
+            "a",
+            "a",
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=weekly_rewards_unvisited,
+        ),
+        False,
+    ),
+    # Not visited today nor has this week
+    (
+        Streamer(
+            "a",
+            "a",
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=WeeklyRewards(
+                days_visited_this_week=1,
+                accumulated_weeks=1,
+                has_earned_weekly_reward_this_week=False,
+                has_visited_today=False,
+                current_reward=event_config.reward_tiers[0],
+                event_config=event_config,
+            ),
+        ),
+        False,
+    ),
+    # Not visited today but has this week
+    (
+        Streamer(
+            "a",
+            "a",
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=WeeklyRewards(
+                days_visited_this_week=1,
+                accumulated_weeks=1,
+                has_earned_weekly_reward_this_week=True,
+                has_visited_today=False,
+                current_reward=event_config.reward_tiers[0],
+                event_config=event_config,
+            ),
+        ),
+        True,
+    ),
+    # Not visited this day or has this week but has all rewards
+    (
+        Streamer(
+            "a",
+            "a",
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=WeeklyRewards(
+                days_visited_this_week=1,
+                accumulated_weeks=4,
+                has_earned_weekly_reward_this_week=False,
+                has_visited_today=False,
+                current_reward=event_config.reward_tiers[3],
+                event_config=event_config,
+            ),
+        ),
+        True,
+    ),
+    # Visited today but doesn't yet have this week
+    (
+        Streamer(
+            "a",
+            "a",
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=True,
+            weekly_rewards=WeeklyRewards(
+                days_visited_this_week=1,
+                accumulated_weeks=1,
+                has_earned_weekly_reward_this_week=False,
+                has_visited_today=True,
+                current_reward=event_config.reward_tiers[0],
+                event_config=event_config,
+            ),
+        ),
+        True,
+    ),
+    # Channel points have been disabled mid-event
+    (
+        Streamer(
+            "a",
+            "a",
+            settings=StreamerSettings(weekly_rewards=True),
+            channel_points_enabled=False,
+            weekly_rewards=WeeklyRewards(
+                days_visited_this_week=1,
+                accumulated_weeks=1,
+                has_earned_weekly_reward_this_week=False,
+                has_visited_today=False,
+                current_reward=event_config.reward_tiers[0],
+                event_config=event_config,
+            ),
+        ),
+        True,
+    ),
 ]
 
 
-@pytest.mark.parametrize(
-    "streamers,cooldowns,expected",
-    test_select_streamers_cooldown_data,
-)
-def test_select_streamers_cooldown(
-    twitch,
-    streamers: list[Streamer],
-    cooldowns: dict[str, float],
-    expected: list[str],
-):
-    max_seconds_clips = 30
-    max_minutes_vod = 8
-
-    runner = MagicMock()
-    runner.has_context = lambda _: False
-
+@pytest.mark.parametrize("streamer,expected", test_done_watching_data)
+def test_done_watching(streamer: Streamer, expected):
     progressor = BasicWeeklyRewardsProgressor(
-        twitch=twitch,
-        streamers=streamers,
-        runner=runner,
-        config=BasicConfiguration(
-            max_seconds_clips=max_seconds_clips,
-            max_seconds_vods=max_minutes_vod,
-        ),
+        twitch=MagicMock(),
+        streamers=[],
+        runner=MagicMock(),
     )
-    progressor._cooldowns = cooldowns
 
-    assert [
-        streamer.channel_id for streamer in progressor.select_streamers()
-    ] == expected
+    assert progressor.done_watching(streamer) == expected
 
 
 clip_watchable_a = Clip(
@@ -457,7 +377,7 @@ clip_unwatchable_f = Clip(
     duration_seconds=1,
 )
 
-test_get_clips_data = [
+test_get_clip_data = [
     (Clips(), None),
     (Clips(all_time=[clip_watchable_a]), clip_watchable_a),
     (
@@ -473,7 +393,7 @@ test_get_clips_data = [
 ]
 
 
-@pytest.mark.parametrize("clips,expected", test_get_clips_data)
+@pytest.mark.parametrize("clips,expected", test_get_clip_data)
 def test_get_clip(clips: Clips, expected: Clip | None):
     twitch = MagicMock()
 
@@ -481,11 +401,6 @@ def test_get_clip(clips: Clips, expected: Clip | None):
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
-        config=BasicConfiguration(
-            max_seconds_clips=30,
-            max_seconds_vods=10,
-            loop_interval_seconds=20,
-        ),
     )
 
     streamer = MagicMock()
@@ -532,7 +447,7 @@ vod_unwatchable_f = Video(
     viewable=True,
 )
 
-test_get_vods_data = [
+test_get_vod_data = [
     ([], None),
     ([vod_watchable_a], vod_watchable_a),
     ([vod_watchable_a, vod_watchable_b, vod_watchable_c], vod_watchable_a),
@@ -543,7 +458,7 @@ test_get_vods_data = [
 ]
 
 
-@pytest.mark.parametrize("vods,expected", test_get_vods_data)
+@pytest.mark.parametrize("vods,expected", test_get_vod_data)
 def test_get_vod(vods: list[Video], expected: Video | None):
     twitch = MagicMock()
     twitch.vod_viewable = lambda _, vod: vod.viewable
@@ -552,176 +467,12 @@ def test_get_vod(vods: list[Video], expected: Video | None):
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
-        config=BasicConfiguration(
-            max_seconds_clips=30,
-            max_seconds_vods=10,
-            loop_interval_seconds=20,
-        ),
     )
 
     streamer = MagicMock()
     streamer.vods = vods
 
-    assert progressor.get_vod(streamer) == (
-        expected.edge if expected is not None else None
-    )
-
-
-test_do_watch_data = [
-    # All attempts fail
-    (
-        clip_watchable_a,
-        vod_watchable_a,
-        False,
-        True,
-        False,
-        True,
-        Result(success=False, reason="clip and vod both timed out"),
-    ),
-    # Clip timeout and no vods
-    (
-        clip_watchable_a,
-        None,
-        False,
-        True,
-        False,
-        True,
-        Result(
-            success=False, reason="clip timed out and streamer has no viewable vods"
-        ),
-    ),
-    # Vod timeout
-    (
-        None,
-        vod_watchable_a,
-        False,
-        True,
-        False,
-        True,
-        Result(success=False, reason="vod timed out"),
-    ),
-    # No clips or vods
-    (
-        None,
-        None,
-        False,
-        True,
-        False,
-        True,
-        Result(success=False, reason="streamer has no clips or vods"),
-    ),
-    # Fails by miner stopped 2nd time
-    (
-        None,
-        vod_watchable_a,
-        False,
-        True,
-        False,
-        False,
-        Result(success=False, reason="miner not running"),
-    ),
-    # Succeeds by VOD
-    (
-        None,
-        vod_watchable_a,
-        False,
-        True,
-        True,
-        False,
-        Result(success=True, reason="vod"),
-    ),
-    # Fails by miner stopped 1st time
-    (
-        clip_watchable_a,
-        None,
-        False,
-        False,
-        False,
-        False,
-        Result(success=False, reason="miner not running"),
-    ),
-    # Succeeds by clip
-    (
-        clip_watchable_a,
-        None,
-        True,
-        False,
-        False,
-        False,
-        Result(success=True, reason="clip"),
-    ),
-]
-
-
-# MagicMock.fn.side_effect doesn't work for properties, work around by with a manual mock using @property
-class MockTwitch:
-    def __init__(self, clip: bool, running: bool, vod: bool, running_2: bool):
-        self.clip = clip
-        self._running = [running, running_2]
-        self._running_index = 0
-        self.vod = vod
-        self.running_2 = running_2
-
-    @property
-    def running(self):
-        if self._running_index >= len(self._running):
-            return False
-        value = self._running[self._running_index]
-        self._running_index += 1
-        return value
-
-    def simulate_clip_playback(
-        self, streamer, clip: Clip, max_watch_seconds: float, done  # pyright: ignore
-    ):
-        return self.clip
-
-    def simulate_vod_playback(
-        self,
-        streamer,
-        vod: VideoEdge,
-        max_watch_seconds: float,
-        done,  # pyright: ignore
-    ):
-        return self.vod
-
-
-@pytest.mark.parametrize(
-    "clip,vod,clip_success,running,vod_success,running_2,expected", test_do_watch_data
-)
-def test_do_watch(
-    clip: Clip | None,
-    vod: VideoEdge | None,
-    clip_success: bool,
-    running: bool,
-    vod_success: bool,
-    running_2: bool,
-    expected: Result,
-):
-    twitch: Any = MockTwitch(clip_success, running, vod_success, running_2)
-
-    streamers = []
-    max_seconds_clips = 30
-    max_seconds_vods = 8
-
-    progressor = BasicWeeklyRewardsProgressor(
-        twitch=twitch,
-        streamers=streamers,
-        runner=MagicMock(),
-        config=BasicConfiguration(
-            max_seconds_clips=max_seconds_clips,
-            max_seconds_vods=max_seconds_vods,
-        ),
-    )
-
-    progressor.get_clip = MagicMock()
-    progressor.get_clip.return_value = clip
-
-    progressor.get_vod = MagicMock()
-    progressor.get_vod.return_value = vod
-
-    streamer = MagicMock()
-
-    assert progressor.attempt_progress(streamer) == expected
+    assert progressor.get_vod(streamer) == expected
 
 
 test_update_failures_data = [
@@ -810,153 +561,6 @@ def test_process_result(
         progressor._failures.pop.assert_called_once_with(streamer.channel_id, None)
     if expect_pop_cooldowns:
         progressor._cooldowns.pop.assert_called_once_with(streamer.channel_id, None)
-
-
-class SlotConfig:
-    def __init__(
-        self, streamer: Streamer, done, result, start_time, expect_timeout: bool = False
-    ) -> None:
-        self.streamer = streamer
-        self.done = done
-        self.result = result
-        self.start_time = start_time
-        self.expect_timeout = expect_timeout
-
-    def as_magic_mock(self):
-        mock = MagicMock()
-        mock.future = MagicMock()
-        mock.future.done.return_value = self.done
-        mock.future.result.return_value = self.result
-        mock.start_time = self.start_time
-        mock.streamer = self.streamer
-        return mock
-
-
-test_manage_cooldowns_data = [
-    # Empty cooldowns
-    ({}, 0, 1, {}),
-    ({}, 1000, 10, {}),
-    # Single cooldown
-    ({"a": 0}, 0, 10, {"a": 0}),
-    ({"a": 10}, 19, 10, {"a": 10}),
-    ({"a": 10}, 20, 10, {"a": 10}),
-    ({"a": 10}, 21, 10, {}),
-    # Multiple cooldowns
-    ({"a": 0, "b": 1}, 10, 10, {"a": 0, "b": 1}),
-    ({"a": 0, "b": 1}, 11, 10, {"b": 1}),
-    ({"a": 0, "b": 1}, 12, 10, {}),
-]
-
-
-@pytest.mark.parametrize(
-    "cooldowns,current_time,failure_cooldown_seconds,expected_cooldowns",
-    test_manage_cooldowns_data,
-)
-def test_manage_cooldowns(
-    twitch,
-    cooldowns: dict[str, float],
-    current_time: float,
-    failure_cooldown_seconds: float,
-    expected_cooldowns: dict[str, float],
-):
-    progressor = BasicWeeklyRewardsProgressor(
-        twitch,
-        streamers=[],
-        runner=MagicMock(),
-        config=BasicConfiguration(failure_cooldown_seconds=failure_cooldown_seconds),
-    )
-    progressor._cooldowns = cooldowns
-
-    with pytest.MonkeyPatch.context() as patcher:
-        patcher.setattr(time, "monotonic", lambda: current_time)
-        progressor.manage_cooldowns()
-
-    assert progressor._cooldowns == expected_cooldowns
-
-
-class MockRunner(SlottedTaskRunner):
-    def __init__(self, slots: int):
-        self.slots = slots
-        self.tasks = []
-
-    def has_context(self, context):
-        return context.channel_id in self.tasks
-
-    def has_free_slot(self):
-        return len(self.tasks) < self.slots
-
-    def start_task(self, context, task, timeout_seconds, on_complete):
-        if self.has_free_slot():
-            self.tasks.append(context.channel_id)
-            return True
-        return False
-
-
-test_submit_streamers_data = [
-    # No streamers
-    ([], 10, []),
-    # Single watchable streamer
-    ([streamer_watchable("a", "a")], 1, ["a"]),
-    ([streamer_watchable("a", "a")], 2, ["a"]),
-    ([streamer_watchable("a", "a")], 3, ["a"]),
-    # Multiple watchable streamers
-    ([streamer_watchable("a", "a"), streamer_watchable("b", "b")], 1, ["a"]),
-    ([streamer_watchable("a", "a"), streamer_watchable("b", "b")], 2, ["a", "b"]),
-    ([streamer_watchable("a", "a"), streamer_watchable("b", "b")], 3, ["a", "b"]),
-    # Unwatchable streamers
-    ([streamer_unwatchable("a", "a")], 1, []),
-    (
-        [
-            streamer_unwatchable("a", "a"),
-            streamer_unwatchable("b", "b"),
-        ],
-        2,
-        [],
-    ),
-    (
-        [
-            streamer_unwatchable("a", "a"),
-            streamer_unwatchable("b", "b"),
-            streamer_unwatchable("b", "b"),
-        ],
-        3,
-        [],
-    ),
-    # Mix
-    ([streamer_watchable("a", "a"), streamer_unwatchable("b", "b")], 1, ["a"]),
-    (
-        [
-            streamer_unwatchable("a", "a"),
-            streamer_watchable("b", "b"),
-            streamer_watchable("c", "c"),
-        ],
-        1,
-        ["b"],
-    ),
-    (
-        [
-            streamer_unwatchable("a", "a"),
-            streamer_watchable("b", "b"),
-            streamer_watchable("c", "c"),
-        ],
-        2,
-        ["b", "c"],
-    ),
-]
-
-
-@pytest.mark.parametrize("streamers,slots,expected", test_submit_streamers_data)
-def test_submit_streamers(streamers, slots, expected):
-    runner: Any = MockRunner(slots)
-    progressor = BasicWeeklyRewardsProgressor(
-        twitch=MagicMock(),
-        streamers=streamers,
-        runner=runner,
-    )
-
-    progressor.submit_streamers()
-
-    assert runner.tasks == expected
 
 
 def test_full():
@@ -1124,9 +728,9 @@ def test_full():
             twitch=twitch, name="Test", max_concurrent=3, loop_interval_seconds=1
         ),
         config=BasicConfiguration(
-            max_seconds_clips=4,
-            max_seconds_vods=5,
-            loop_interval_seconds=1,
+            max_clip_watch_seconds=4,
+            max_vod_watch_seconds=5,
+            interval_seconds=1,
         ),
     )
 

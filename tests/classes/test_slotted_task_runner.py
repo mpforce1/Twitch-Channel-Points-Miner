@@ -5,9 +5,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from TwitchChannelPointsMiner.classes.SlottedTaskRunner import Slot, SlottedTaskRunnerThread
+from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
+    Slot,
+    SlottedTaskRunnerThread,
+)
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from tests.classes.test_weekly_rewards_progressor import MockTwitch
+from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
+from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import (
+    VideoEdge,
+)
 
 test_has_free_slot_data = [
     # All unfilled
@@ -19,7 +25,7 @@ test_has_free_slot_data = [
     ([None, None, "a"], True),
     ([None, None, None, "a"], True),
     (["a", "b", None], True),
-    (["a",None, "B"], True),
+    (["a", None, "B"], True),
     # All filled
     (["a"], False),
     (["a", "b"], False),
@@ -27,14 +33,19 @@ test_has_free_slot_data = [
     (["a", "b", "c", "d"], False),
 ]
 
-@pytest.mark.parametrize("slots,expected",test_has_free_slot_data)
+
+@pytest.mark.parametrize("slots,expected", test_has_free_slot_data)
 def test_has_free_slot(slots, expected):
     runner = SlottedTaskRunnerThread(
-        twitch=MagicMock(), max_concurrent=len(slots), loop_interval_seconds=1, name="Test"
+        twitch=MagicMock(),
+        max_concurrent=len(slots),
+        loop_interval_seconds=1,
+        name="Test",
     )
     runner._slots = slots
 
     assert runner.has_free_slot() == expected
+
 
 streamer_a = Streamer("a", "a")
 streamer_b = Streamer("b", "b")
@@ -106,6 +117,38 @@ class SlotConfig:
         return mock
 
 
+# MagicMock.fn.side_effect doesn't work for properties, work around by with a manual mock using @property
+class MockTwitch:
+    def __init__(self, clip: bool, running: bool, vod: bool, running_2: bool):
+        self.clip = clip
+        self._running = [running, running_2]
+        self._running_index = 0
+        self.vod = vod
+        self.running_2 = running_2
+
+    @property
+    def running(self):
+        if self._running_index >= len(self._running):
+            return False
+        value = self._running[self._running_index]
+        self._running_index += 1
+        return value
+
+    def simulate_clip_playback(
+        self, streamer, clip: Clip, max_watch_seconds: float, done  # pyright: ignore
+    ):
+        return self.clip
+
+    def simulate_vod_playback(
+        self,
+        streamer,
+        vod: VideoEdge,
+        max_watch_seconds: float,
+        done,  # pyright: ignore
+    ):
+        return self.vod
+
+
 test_manage_slots_data = [
     # Minimum empty slots
     ([None, None], 0),
@@ -167,10 +210,7 @@ test_manage_slots_data = [
 def test_manage_slots(slots: list[SlotConfig | None], current_time):
     twitch: Any = MockTwitch(clip=False, running=True, vod=False, running_2=False)
     runner = SlottedTaskRunnerThread(
-        twitch=twitch,
-        max_concurrent=len(slots),
-        loop_interval_seconds=0,
-        name="Test"
+        twitch=twitch, max_concurrent=len(slots), loop_interval_seconds=0, name="Test"
     )
 
     mock_slots = [slot.as_magic_mock() if slot is not None else None for slot in slots]
@@ -180,7 +220,7 @@ def test_manage_slots(slots: list[SlotConfig | None], current_time):
 
     with pytest.MonkeyPatch.context() as patcher:
         patcher.setattr(time, "monotonic", lambda: current_time)
-        patcher.setattr(futures, "as_completed" , as_completed)
+        patcher.setattr(futures, "as_completed", as_completed)
         runner.manage_slots()
 
     for index in range(len(slots)):
@@ -195,7 +235,10 @@ def test_manage_slots(slots: list[SlotConfig | None], current_time):
             if slot.expect_timeout:
                 call_found = False
                 for call in as_completed.call_args_list:
-                    if call.args[0][0] == mock_slot.future and call.kwargs["timeout"] == 0:
+                    if (
+                        call.args[0][0] == mock_slot.future
+                        and call.kwargs["timeout"] == 0
+                    ):
                         call_found = True
                         break
                 assert call_found

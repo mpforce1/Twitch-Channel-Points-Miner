@@ -210,8 +210,8 @@ class TwitchChannelPointsMiner:
         elif isinstance(weekly_rewards, WeeklyRewardsProgressor.BasicConfiguration):
             # Default factory with custom config
             runner_factory = SlottedTaskRunnerThreadFactory(
-                max_concurrent=weekly_rewards.max_concurrent_watch,
-                loop_interval_seconds=weekly_rewards.loop_interval_seconds,
+                max_concurrent=weekly_rewards.max_concurrent,
+                loop_interval_seconds=weekly_rewards.interval_seconds,
             )
             self.weekly_rewards_factory = (
                 WeeklyRewardsProgressor.BasicWeeklyRewardsProgressorFactory(
