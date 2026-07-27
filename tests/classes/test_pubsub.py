@@ -12,11 +12,13 @@ from TwitchChannelPointsMiner.classes.websocket.data.UserSubscribeEvents import 
 def test_on_message_user_subscribe():
     # Mocks
     parser = MagicMock()
-    parser.parse_user_subscribe_events.side_effect = [UserSubscribed("987654321")]
+    parsed = UserSubscribed("987654321")
+    parser.parse_user_subscribe_events.side_effect = [parsed]
     twitch = MagicMock()
     streamer = Streamer(username="test_user", channel_id="987654321")
     streamers = [streamer]
     events_predictions = dict()
+    streamer_system = MagicMock()
 
     # Args
     message = Message(
@@ -28,6 +30,10 @@ def test_on_message_user_subscribe():
 
     # Object under test
     handler = PubSubHandler(
+        streamer_system=streamer_system,
+        stream_system=MagicMock(),
+        prediction_system=MagicMock(),
+        notification_system=MagicMock(),
         parser=parser,
         twitch=twitch,
         streamers=streamers,
@@ -36,4 +42,4 @@ def test_on_message_user_subscribe():
 
     # Call object method
     handler.on_message(message)
-    twitch.check_gift_sub.assert_called_once_with(streamer)
+    streamer_system.subscription.assert_called_once_with(parsed)

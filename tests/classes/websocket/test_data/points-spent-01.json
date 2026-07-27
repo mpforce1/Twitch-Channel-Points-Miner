@@ -1,0 +1,11 @@
+{
+  "type": "points-spent",
+  "data": {
+    "timestamp": "2026-07-24T14:35:10.456461684Z",
+    "balance": {
+      "user_id": "64786546",
+      "channel_id": "48564615",
+      "balance": 651614
+    }
+  }
+}

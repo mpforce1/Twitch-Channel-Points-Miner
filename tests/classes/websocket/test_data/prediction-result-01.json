@@ -1,0 +1,22 @@
+{
+  "type": "prediction-result",
+  "data": {
+    "timestamp": "2026-07-24T15:25:00.845731694Z",
+    "prediction": {
+      "id": "210d75a0a9bce2e5f1ea792f9e4822b4d80c1709749c5aaf15fc9c751c03bbbe",
+      "event_id": "019f99e2-36bd-76bc-9bd4-25f8e1e9fe4b",
+      "outcome_id": "019f99e2-4d3d-75ca-a331-82e3ee7df213",
+      "channel_id": "74513684",
+      "points": 200,
+      "predicted_at": "2026-07-24T14:34:00.145712546Z",
+      "updated_at": "2026-07-24T14:34:00.145712546Z",
+      "user_id": "584645315",
+      "result": {
+        "type": "LOSE",
+        "points_won": null,
+        "is_acknowledged": false
+      },
+      "user_display_name": null
+    }
+  }
+}

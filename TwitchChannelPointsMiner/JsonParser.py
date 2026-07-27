@@ -83,7 +83,7 @@ def expect_any(value: Any) -> Any:
 def expect_dict(value: Any) -> dict:
     """
     Parser that checks that the value is a dict then returns it.
-    :raises InvalidJsonShapeException: if the value is not a dict
+    :raises InvalidJsonShapeError: if the value is not a dict
     """
     return expect_is_type(value, dict)
 
@@ -91,7 +91,7 @@ def expect_dict(value: Any) -> dict:
 def expect_list(value: Any) -> list:
     """
     Parser that checks that the value is a list then returns it.
-    :raises InvalidJsonShapeException: if the value is not a list.
+    :raises InvalidJsonShapeError: if the value is not a list.
     """
     return expect_is_type(value, list)
 
@@ -99,7 +99,7 @@ def expect_list(value: Any) -> list:
 def expect_str(value: Any) -> str:
     """
     Parser that checks that the value is a string then returns it.
-    :raises InvalidJsonShapeException: if the value is not a string.
+    :raises InvalidJsonShapeError: if the value is not a string.
     """
     return expect_is_type(value, str)
 
@@ -107,15 +107,37 @@ def expect_str(value: Any) -> str:
 def expect_int(value: Any) -> int:
     """
     Parser that checks that the value is an int then returns it.
-    :raises InvalidJsonShapeException: if the value is not an int.
+    :raises InvalidJsonShapeError: if the value is not an int.
     """
     return expect_is_type(value, int)
 
 
+def expect_float(value: Any) -> float:
+    """
+    Parser that checks that the value is a float then returns it.
+    :raises InvalidJsonShapeError: if the value is not a float.
+    """
+    return expect_is_type(value, float)
+
+def expect_numeric(value: Any) -> float | int:
+    """
+    Parser that checks that the value is numeric (float or int) and returns it.
+    :raises InvalidJsonShapeError: if the value is not numeric.
+    """
+    try:
+        return expect_is_type(value, int)
+    except InvalidJsonShapeError:
+        try:
+            return expect_is_type(value, float)
+        except InvalidJsonShapeError:
+            raise InvalidJsonShapeError(
+                [], f"int or float expected, got {describe_value(value)}"
+            )
+
 def expect_bool(value: Any) -> bool:
     """
     Parser that checks that the value is a bool then returns it.
-    :raises InvalidJsonShapeException: if the value is not a bool.
+    :raises InvalidJsonShapeError: if the value is not a bool.
     """
     return expect_is_type(value, bool)
 
@@ -123,7 +145,7 @@ def expect_bool(value: Any) -> bool:
 def expect_iso_8601(value: Any) -> datetime.datetime:
     """
     Parser that checks that the value is a valid ISO8601 string and returns it as a datetime.
-    :raises InvalidJsonShapeException: if the value is not a valid ISO8601 string.
+    :raises InvalidJsonShapeError: if the value is not a valid ISO8601 string.
     """
     value = expect_str(value)
 
@@ -132,6 +154,21 @@ def expect_iso_8601(value: Any) -> datetime.datetime:
     except ValueError:
         pass
     raise InvalidJsonShapeError([], f"time data '{value}' does not match format")
+
+
+def expect_server_time(value) -> datetime.datetime:
+    """
+    Parser that expects an int that represents a posix timestamp.
+    :raises
+    """
+    value = expect_numeric(value)
+    try:
+        return datetime.datetime.fromtimestamp(value, tz=datetime.timezone.utc)
+    except ValueError:
+        pass
+    raise InvalidJsonShapeError(
+        [], f"time data '{value}' is not a valid POSIX timestamp"
+    )
 
 
 def parse_expected_value[T](
@@ -143,7 +180,7 @@ def parse_expected_value[T](
     :param property_name: The property name of the value to parse.
     :param type_parser: A parser for the type of the value.
     :return: The parsed value.
-    :raises InvalidJsonShapeException: if the property is not in the dict or the value cannot be parsed.
+    :raises InvalidJsonShapeError: if the property is not in the dict or the value cannot be parsed.
     """
     if property_name not in source:
         raise InvalidJsonShapeError([property_name], "value is not present")
@@ -227,6 +264,8 @@ def dig[T](value, path: list[str | int], and_then: Callable[[Any], T]) -> T:
         if index < len(value):
             next_value = value[index]
         else:
-            raise InvalidJsonShapeError([index], f"Index {index} is out of list range (length {len(value)})")
+            raise InvalidJsonShapeError(
+                [index], f"Index {index} is out of list range (length {len(value)})"
+            )
     with JsonParentContext(index):
         return dig(next_value, path[1:], and_then)
