@@ -1,0 +1,18 @@
+{
+  "type": "prediction-made",
+  "data": {
+    "timestamp": "2026-07-24T18:36:21.746521389Z",
+    "prediction": {
+      "id": "fe7bb40ca32435e021cbacc9682c7f8a809c77c28eaccadc6637c7fdcba75b8b",
+      "event_id": "019f99df-c065-75f4-ae26-78a508ee47e0",
+      "outcome_id": "019f99df-f9a5-71bf-bc4d-54180ec16772",
+      "channel_id": "3461572836",
+      "points": 100,
+      "predicted_at": "2026-07-24T18:36:18.475125874Z",
+      "updated_at": "2026-07-24T18:36:21.124537412Z",
+      "user_id": "978645136",
+      "result": null,
+      "user_display_name": null
+    }
+  }
+}

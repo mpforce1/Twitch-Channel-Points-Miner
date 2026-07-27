@@ -1,0 +1,16 @@
+{
+  "type": "raid_update_v2",
+  "raid": {
+    "id": "019f99eb-20cd-72e0-b7b1-52b781e6c0d0",
+    "creator_id": "475712531",
+    "source_id": "6841536543",
+    "target_id": "541678464",
+    "target_login": "targetusername",
+    "target_display_name": "TargetDisplayName",
+    "target_profile_image": "https://example.com/image.jpg",
+    "transition_jitter_seconds": 0,
+    "force_raid_now_seconds": 90,
+    "viewer_count": 1,
+    "raid_created_at": 1784412365
+  }
+}

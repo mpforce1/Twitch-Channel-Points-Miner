@@ -20,7 +20,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower imp
 )
 
 
-class TestingClipVodWatcher(BasicClipVodWatcher):
+class MockClipVodWatcher(BasicClipVodWatcher):
     def __init__(
         self,
         twitch: Twitch,
@@ -171,7 +171,7 @@ def test_select_streamers(
     twitch = MagicMock()
     twitch.vod_viewable = lambda s, v: True
 
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=streamers,
         runner=runner,
@@ -210,7 +210,7 @@ def test_watch_clip(
     twitch = MagicMock()
     twitch.simulate_clip_playback.return_value = watch_result
 
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
@@ -236,7 +236,7 @@ def test_watch_vod(
     twitch = MagicMock()
     twitch.simulate_vod_playback.return_value = watch_result
 
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
@@ -307,7 +307,7 @@ def test_watch(
     expected: Result,
 ):
     twitch: Any = MockTwitch(first_running + second_running)
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
@@ -349,7 +349,7 @@ def test_update_failures(
     expected_failures: dict[str, int],
     expected_cooldowns: dict[str, float],
 ):
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
@@ -385,7 +385,7 @@ def test_process_result(
     expect_pop_failures: bool,
     expect_pop_cooldowns: bool,
 ):
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
@@ -450,7 +450,7 @@ def test_manage_cooldowns(
     failure_cooldown_seconds: float,
     expected_cooldowns: dict[str, float],
 ):
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
@@ -473,7 +473,7 @@ test_enqueue_data = [
 
 @pytest.mark.parametrize("in_queue,streamer,expect_queued", test_enqueue_data)
 def test_enqueue(in_queue, streamer, expect_queued):
-    recovery = TestingClipVodWatcher(
+    recovery = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         config=BasicConfiguration(
@@ -512,7 +512,7 @@ test_dequeue_data = [
 
 @pytest.mark.parametrize("streamers,expected", test_dequeue_data)
 def test_dequeue(streamers: list[Streamer], expected):
-    recovery = TestingClipVodWatcher(
+    recovery = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         config=BasicConfiguration(
@@ -553,7 +553,7 @@ def test__run(
     runner.has_free_slot.side_effect = [True for _ in range(free_slots)] + [False]
     runner.start_task.side_effect = [True for _ in range(free_slots)] + [False]
 
-    recovery = TestingClipVodWatcher(twitch=MagicMock(), streamers=[], runner=runner)
+    recovery = MockClipVodWatcher(twitch=MagicMock(), streamers=[], runner=runner)
     recovery.select_streamers = MagicMock()
     recovery.select_streamers.return_value = (s for s in selected)
     recovery.enqueue = MagicMock()
@@ -570,7 +570,7 @@ def test__run(
 
 def test_run():
     twitch: Any = MockTwitch(4)
-    recovery = TestingClipVodWatcher(
+    recovery = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         config=BasicConfiguration(

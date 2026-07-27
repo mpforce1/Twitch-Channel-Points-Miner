@@ -1,0 +1,77 @@
+{
+  "type": "event-updated",
+  "data": {
+    "timestamp": "2026-07-24T01:36:58.463527948Z",
+    "event": {
+      "id": "019f99e5-2d1e-727b-8278-b6ff40c648bd",
+      "channel_id": "789465324",
+      "created_at": "2026-07-24T01:04:12.465321975Z",
+      "created_by": {
+        "type": "USER",
+        "user_id": "4687218616",
+        "user_display_name": "testuser",
+        "extension_client_id": null
+      },
+      "ended_at": null,
+      "ended_by": null,
+      "locked_at": null,
+      "locked_by": null,
+      "outcomes": [
+        {
+          "id": "019f99e6-2c65-7708-8d89-0dfd86fa482d",
+          "color": "BLUE",
+          "title": "outcome 1 title",
+          "total_points": 1000,
+          "total_users": 1,
+          "top_predictors": [
+            {
+              "id": "8b3d78aa0ea3d87ddf63373290c0fef211bbaac09cdf26af2e37203a35eb30b9",
+              "event_id": "019f99e5-2d1e-727b-8278-b6ff40c648bd",
+              "outcome_id": "019f99e6-2c65-7708-8d89-0dfd86fa482d",
+              "channel_id": "789465324",
+              "points": 1000,
+              "predicted_at": "2026-07-24T01:36:58.463527948Z",
+              "updated_at": "2026-07-24T01:36:58.463527948Z",
+              "user_id": "32658741",
+              "result": null,
+              "user_display_name": "testuser2"
+            }
+          ],
+          "badge": {
+            "version": "blue-1",
+            "set_id": "predictions"
+          }
+        },
+        {
+          "id": "019f99e7-81ad-7556-aea6-9b3a10ef04e5",
+          "color": "BLUE",
+          "title": "outcome 2 title",
+          "total_points": 4000,
+          "total_users": 1,
+          "top_predictors": [
+            {
+              "id": "ee416fe1c7d07ac9393e0582d3a4b508ec627f048d733806cbab366f367d6f49",
+              "event_id": "019f99e5-2d1e-727b-8278-b6ff40c648bd",
+              "outcome_id": "019f99e7-81ad-7556-aea6-9b3a10ef04e5",
+              "channel_id": "789465324",
+              "points": 4000,
+              "predicted_at": "2026-07-24T01:35:10.574236512Z",
+              "updated_at": "2026-07-24T01:35:10.574236512Z",
+              "user_id": "321568971",
+              "result": null,
+              "user_display_name": "testuser3"
+            }
+          ],
+          "badge": {
+            "version": "blue-2",
+            "set_id": "predictions"
+          }
+        }
+      ],
+      "prediction_window_seconds": 60,
+      "status": "ACTIVE",
+      "title": "test event title",
+      "winning_outcome_id": null
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "type": "claim-available",
+  "data": {
+    "timestamp": "2026-07-14T05:42:18.541236541Z",
+    "claim": {
+      "id": "019f99ee-4709-7193-8956-ead4a2efcb9f",
+      "user_id": "56453616",
+      "channel_id": "51564153",
+      "point_gain": {
+        "user_id": "56453616",
+        "channel_id": "51564153",
+        "total_points": 50,
+        "baseline_points": 50,
+        "reason_code": "CLAIM",
+        "multipliers": [
+        ]
+      },
+      "created_at": "2026-07-14T05:42:18Z"
+    }
+  }
+}
