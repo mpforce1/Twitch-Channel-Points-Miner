@@ -1,6 +1,6 @@
-import datetime
 import logging
 
+from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
@@ -17,9 +17,12 @@ from TwitchChannelPointsMiner.classes.events.Event import (
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.websocket.data import (
+    CommunityPointsChannel,
+    CommunityPointsUser,
     ViewerMilestones,
     WeeklyRewards,
 )
+from TwitchChannelPointsMiner.classes.websocket.data.Raid import RaidUpdate
 from TwitchChannelPointsMiner.classes.websocket.data.UserSubscribeEvents import (
     UserSubscribed,
 )
@@ -42,59 +45,52 @@ class StreamerSystem:
         if Settings.enable_analytics is True:
             streamer.persistent_series(event_type=reason)
 
-    def points_earned(
-        self,
-        channel_id: str,
-        timestamp: datetime.datetime,
-        amount: int,
-        balance: int,
-        reason: str,
-    ):
-        streamer = find_streamer(self.streamers, channel_id)
-        self._update_points_change(streamer, balance, reason)
+    def points_earned(self, data: CommunityPointsUser.PointsEarned):
+        streamer = find_streamer(self.streamers, data.channel_id)
+        self._update_points_change(streamer, data.balance, data.reason)
         self.event_manager.manage(
             gain_for(
-                timestamp=timestamp,
-                reason=reason,
-                channel_id=channel_id,
-                amount=amount,
-                balance=balance,
+                timestamp=data.timestamp,
+                reason=data.reason,
+                channel_id=data.channel_id,
+                amount=data.amount,
+                balance=data.balance,
             )
         )
 
-    def points_spent(self, channel_id: str, timestamp: datetime.datetime, balance: int):
-        streamer = find_streamer(self.streamers, channel_id)
+    def points_spent(self, data: CommunityPointsUser.PointsSpent):
+        streamer = find_streamer(self.streamers, data.channel_id)
         # We have to estimate this as Twitch doesn't give us the amount in the WS message
-        spent_estimate = streamer.channel_points - balance
-        self._update_points_change(streamer, balance, "Spent")
+        spent_estimate = streamer.channel_points - data.balance
+        self._update_points_change(streamer, data.balance, "Spent")
         self.event_manager.manage(
             PointsSpent(
-                timestamp=timestamp,
-                channel_id=channel_id,
+                timestamp=data.timestamp,
+                channel_id=data.channel_id,
                 amount=spent_estimate,
-                balance=balance,
+                balance=data.balance,
             )
         )
 
-    def claim_available(
-        self, channel_id: str, timestamp: datetime.datetime, claim_id: str
-    ):
+    def claim_available(self, data: CommunityPointsUser.ClaimAvailable):
         self.event_manager.manage(
             BonusPointsAvailable(
-                timestamp=timestamp,
-                channel_id=channel_id,
-                claim_id=claim_id,
+                timestamp=data.timestamp,
+                channel_id=data.channel_id,
+                claim_id=data.claim_id,
+                amount=data.amount,
             )
         )
 
     # Raids
-    def raid_update(self, channel_id: str, raid: Raid):
+    def raid_update(self, channel_id: str, data: RaidUpdate):
         """
         Attempts to join the given Raid if not already joined.
         :param channel_id: The id of the raiding Streamer.
-        :param raid: The Raid data.
+        :param data: The update.
         """
         streamer = find_streamer(self.streamers, channel_id)
+        raid = Raid(raid_id=data.id, target_login=data.target_username)
         if streamer.raid != raid:
             streamer.raid = raid
             target = Settings.logger.anonymiser.username(raid.target_login)
@@ -131,23 +127,29 @@ class StreamerSystem:
         )
 
     # Community Goals
-    def community_goal_created(self, channel_id: str, data: dict):
+    def community_goal_created(
+        self, channel_id: str, data: CommunityPointsChannel.CommunityGoalCreated
+    ):
         streamer = find_streamer(self.streamers, channel_id)
         # TODO Untested, hard to find this happening live
-        streamer.update_community_goal(CommunityGoal.from_pubsub(data))
+        streamer.update_community_goal(CommunityGoal.from_pubsub(data.goal))
         self.twitch.contribute_to_community_goals(streamer)
 
-    def community_goal_updated(self, channel_id: str, data: dict):
+    def community_goal_updated(
+        self, channel_id: str, data: CommunityPointsChannel.CommunityGoalUpdated
+    ):
         streamer = find_streamer(self.streamers, channel_id)
-        streamer.update_community_goal(CommunityGoal.from_pubsub(data))
+        streamer.update_community_goal(CommunityGoal.from_pubsub(data.goal))
         self.twitch.contribute_to_community_goals(streamer)
 
-    def community_goal_deleted(self, channel_id: str, data: dict):
+    def community_goal_deleted(
+        self, channel_id: str, data: CommunityPointsChannel.CommunityGoalDeleted
+    ):
         streamer = find_streamer(self.streamers, channel_id)
         # TODO Untested, not sure what the message format for this is,
         #      https://github.com/sammwyy/twitch-ps/blob/master/main.js#L417
         #      suggests that it should be just the entire, now deleted, goal model
-        streamer.delete_community_goal(data["id"])
+        streamer.delete_community_goal(data.goal.id)
 
     # Subscriptions
     def subscription(self, notification: UserSubscribed):
@@ -171,11 +173,14 @@ class StreamerSystem:
 
     # Watch Streak Milestones
     def watch_streak_recovered(self, recovery: ViewerMilestones.StreakRecovered):
-        for streamer in self.streamers:
-            if streamer.channel_id == recovery.channel_id:
-                logger.info(f"Watch Streak recovered for {streamer}")
-                streamer.watch_streak_missed_streams = set()
-                self.event_manager.manage(
-                    WatchStreakRecovery(channel_id=recovery.channel_id)
-                )
-                break
+        try:
+            streamer = find_streamer(self.streamers, recovery.channel_id)
+            logger.info(f"Watch Streak recovered for {streamer}")
+            streamer.watch_streak_missed_streams = set()
+            self.event_manager.manage(
+                WatchStreakRecovery(channel_id=recovery.channel_id)
+            )
+        except KeyError:
+            logger.debug(
+                f"Watch Streak Recovery for non-miner channel: {Settings.logger.anonymiser.channel_id(recovery.channel_id)}"
+            )

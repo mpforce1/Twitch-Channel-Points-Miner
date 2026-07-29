@@ -1,4 +1,5 @@
 from TwitchChannelPointsMiner.classes.gql.data.response import ChannelPointsContext
+from TwitchChannelPointsMiner.classes.websocket.data.CommunityPointsChannel import Goal
 
 
 class CommunityGoal(object):
@@ -55,13 +56,13 @@ class CommunityGoal(object):
         )
 
     @classmethod
-    def from_pubsub(cls, pubsub_goal):
+    def from_pubsub(cls, pubsub_goal: Goal):
         return cls(
-            pubsub_goal["id"],
-            pubsub_goal["title"],
-            pubsub_goal["is_in_stock"],
-            pubsub_goal["points_contributed"],
-            pubsub_goal["goal_amount"],
-            pubsub_goal["per_stream_maximum_user_contribution"],
-            pubsub_goal["status"],
+            pubsub_goal.id,
+            pubsub_goal.title,
+            pubsub_goal.is_in_stock,
+            pubsub_goal.points_contributed,
+            pubsub_goal.goal_amount,
+            pubsub_goal.per_stream_maximum_user_contribution,
+            pubsub_goal.status,
         )
