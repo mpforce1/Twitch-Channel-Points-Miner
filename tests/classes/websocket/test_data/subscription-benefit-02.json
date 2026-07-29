@@ -1,0 +1,63 @@
+{
+  "id": "01KYPKHE3WX1R2M9E15F8P5CZQ",
+  "originID": "some.origin.order.af83c9d1-d423-4b7c-83c9-d1d4233b7ce0",
+  "endsAt": "2026-08-15T10:11:12Z",
+  "isRefundable": false,
+  "isWithdrawable": false,
+  "platform": "WEB",
+  "isTurboFreeTrial": false,
+  "gift": {
+    "gifter": {
+      "id": "654321987",
+      "login": "testgifteruser",
+      "displayName": "TestGifterUser",
+      "__typename": "User"
+    },
+    "isGift": true,
+    "__typename": "SubscriptionGift"
+  },
+  "pendingSubscription": null,
+  "product": {
+    "id": "148726847",
+    "tier": "1000",
+    "name": "testchanneluser",
+    "displayName": "Subscription (testchanneluser)",
+    "url": "https://www.twitch.tv/products/testchanneluser",
+    "hasAdFree": true,
+    "hasFastChat": false,
+    "hasSubonlyVideoArchive": false,
+    "interval": {
+      "unit": "MONTH",
+      "__typename": "SubscriptionInterval"
+    },
+    "emotes": [],
+    "emoteModifiers": [],
+    "__typename": "SubscriptionProduct"
+  },
+  "purchasedWithPrime": false,
+  "renewsAt": null,
+  "tier": "1000",
+  "isExtended": false,
+  "states": null,
+  "user": {
+    "id": "123456789",
+    "displayName": "TestChannelUser",
+    "login": "testchanneluser",
+    "stream": null,
+    "primaryColorHex": "000000",
+    "bannerImageURL": "https://example.com/image1.png",
+    "profileImageURL": "https://example.com/image2.png",
+    "broadcastBadges": [],
+    "channel": {
+      "id": "123456789"
+    },
+    "self": {},
+    "subscriptionProducts": [],
+    "roles": {
+      "isPartner": false,
+      "__typename": "UserRoles"
+    },
+    "__typename": "User"
+  },
+  "__typename": "SubscriptionBenefit"
+}

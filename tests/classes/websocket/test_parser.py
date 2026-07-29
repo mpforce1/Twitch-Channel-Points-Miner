@@ -1,9 +1,12 @@
+import datetime
 import json
 import os
 import pathlib
 
 import pytest
 
+from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub, Gifter, Target
+from TwitchChannelPointsMiner.classes.gql.data.Parser import subscription_benefit_parser
 from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.classes.websocket.data.OnsiteNotification import (
     UserDropRewardReminderNotification,
@@ -74,6 +77,7 @@ def test_parse_onsite_notification(parser: Parser, file: str, expected):
     data = read_data(file)
     assert parser.parse_onsite_notification(data) == expected
 
+
 test_parse_weekly_rewards_data = [
     (
         "tests/classes/websocket/test_data/weekly-rewards-01.json",
@@ -90,9 +94,7 @@ test_parse_weekly_rewards_data = [
                 badge_set_id="event-badge",
                 badge_version="2",
             ),
-            event_config=WeeklyRewards.Config(
-                days_required_per_week=3
-            )
+            event_config=WeeklyRewards.Config(days_required_per_week=3),
         ),
     )
 ]
@@ -102,3 +104,47 @@ test_parse_weekly_rewards_data = [
 def test_parse_weekly_rewards(parser: Parser, file: str, expected):
     data = read_data(file)
     assert parser.parse_weekly_rewards(data) == expected
+
+
+test_parse_subscription_benefit_data = [
+    (
+        "tests/classes/websocket/test_data/subscription-benefit-01.json",
+        GiftSub(
+            _id="UEJOJOayCKcWGCBXdzmP0",
+            target=None,
+            gifter=Gifter(
+                _id="123456789",
+                username="testuser",
+                display_name="TestUser",
+            ),
+            tier="Custom",
+            display_name="Twitch Turbo",
+            ends_at=datetime.datetime.fromisoformat("2026-07-15T14:13:12Z"),
+        ),
+    ),
+    (
+        "tests/classes/websocket/test_data/subscription-benefit-02.json",
+        GiftSub(
+            _id="01KYPKHE3WX1R2M9E15F8P5CZQ",
+            target=Target(
+                _id="123456789",
+                username="testchanneluser",
+                display_name="TestChannelUser",
+            ),
+            gifter=Gifter(
+                _id="654321987",
+                username="testgifteruser",
+                display_name="TestGifterUser",
+            ),
+            tier=1,
+            display_name="Subscription (testchanneluser)",
+            ends_at=datetime.datetime.fromisoformat("2026-08-15T10:11:12Z"),
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize("file,expected", test_parse_subscription_benefit_data)
+def test_parse_subscription_benefit(file: str, expected):
+    data = read_data(file)
+    assert subscription_benefit_parser(data) == expected

@@ -1,0 +1,44 @@
+{
+  "id": "UEJOJOayCKcWGCBXdzmP0",
+  "originID": "some.origin.order.K3lU_eCSZxdFV7Ex42myA",
+  "endsAt": "2026-07-15T14:13:12Z",
+  "isRefundable": false,
+  "isWithdrawable": false,
+  "platform": "WEB",
+  "isTurboFreeTrial": false,
+  "gift": {
+    "gifter": {
+      "id": "123456789",
+      "login": "testuser",
+      "displayName": "TestUser",
+      "__typename": "User"
+    },
+    "isGift": true,
+    "__typename": "SubscriptionGift"
+  },
+  "pendingSubscription": null,
+  "product": {
+    "id": "987654321",
+    "tier": "Custom",
+    "name": "turbo",
+    "displayName": "Twitch Turbo",
+    "url": "https://www.twitch.tv/products/turbo",
+    "hasAdFree": true,
+    "hasFastChat": false,
+    "hasSubonlyVideoArchive": false,
+    "interval": {
+      "unit": "MONTH",
+      "__typename": "SubscriptionInterval"
+    },
+    "emotes": [],
+    "emoteModifiers": [],
+    "__typename": "SubscriptionProduct"
+  },
+  "purchasedWithPrime": false,
+  "renewsAt": null,
+  "tier": "Custom",
+  "isExtended": false,
+  "states": null,
+  "user": null,
+  "__typename": "SubscriptionBenefit"
+}

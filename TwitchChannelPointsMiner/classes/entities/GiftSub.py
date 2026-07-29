@@ -1,4 +1,5 @@
 import datetime
+
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
@@ -27,15 +28,17 @@ class GiftSub:
     def __init__(
         self,
         _id: str,
-        target: Target,
+        target: Target | None,
         gifter: Gifter | None,
-        tier: int,
+        tier: int | str,
+        display_name: str,
         ends_at: datetime.datetime,
     ):
         self.id = _id
         self.target = target
         self.gifter = gifter
         self.tier = tier
+        self.display_name = display_name
         self.ends_at = ends_at
 
     def __repr__(self):
@@ -50,10 +53,13 @@ class GiftSub:
             if self.gifter is not None
             else "Anonymous"
         )
-        target = Settings.logger.anonymiser.username(self.target.display_name)
-        return f"Tier-{self.tier} Gift Sub from {gifter} for {target}, ends at {ends_at} (in {days} {days_plural})"
+        if self.target is None:
+            return f"{self.display_name} Gift Sub from {gifter}, ends at {ends_at} (in {days}) {days_plural}"
+        else:
+            target = Settings.logger.anonymiser.username(self.target.display_name)
+            return f"Tier-{self.tier} Gift Sub from {gifter} for {target}, ends at {ends_at} (in {days} {days_plural})"
 
-    def __eq__(self, other):
-        if not isinstance(other, GiftSub):
+    def __eq__(self, value: object):
+        if not isinstance(value, GiftSub):
             return False
-        return other.id == self.id
+        return value.id == self.id

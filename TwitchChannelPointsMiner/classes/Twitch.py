@@ -1618,7 +1618,7 @@ class Twitch(object):
             return
 
         for gift_sub in gift_subs:
-            if gift_sub.target.id == streamer.channel_id:
+            if gift_sub.target is not None and gift_sub.target.id == streamer.channel_id:
                 found_gift_sub = gift_sub
                 break
         self.update_gift_sub(streamer, found_gift_sub, send_event)
@@ -1636,18 +1636,21 @@ class Twitch(object):
             return
 
         for gift_sub in gift_subs:
-            streamer = next(
-                (
-                    streamer
-                    for streamer in streamers
-                    if streamer.channel_id == gift_sub.target.id
-                ),
-                None,
-            )
-            if streamer is not None:
-                self.update_gift_sub(streamer, gift_sub, send_event)
+            if gift_sub.target is not None:
+                streamer = next(
+                    (
+                        streamer
+                        for streamer in streamers
+                        if streamer.channel_id == gift_sub.target.id
+                    ),
+                    None,
+                )
+                if streamer is not None:
+                    self.update_gift_sub(streamer, gift_sub, send_event)
+                else:
+                    logger.debug(f"No Streamer found for Gift Sub {gift_sub.target}")
             else:
-                logger.debug(f"No Streamer found for Gift Sub {gift_sub.target}")
+                logger.debug(f"Non-Channel Gift Sub: {gift_sub.describe()}")
 
     def sync_gift_subs(
         self, streamers: list[Streamer], period_seconds: int, step: float = 1.0

@@ -563,17 +563,26 @@ def subscription_benefit_parser(value) -> GiftSub:
                     ),
                 )
 
-    user = parse_expected_value(value, "user", expect_dict)
-    with JsonParentContext("user"):
-        target = Target(
-            _id=parse_expected_value(user, "id", expect_str),
-            username=parse_expected_value(user, "login", expect_str),
-            display_name=parse_expected_value(user, "displayName", expect_str),
-        )
+    user = parse_expected_value(value, "user", optional_parser(expect_dict))
+    target = None
+    if user is not None:
+        with JsonParentContext("user"):
+            target = Target(
+                _id=parse_expected_value(user, "id", expect_str),
+                username=parse_expected_value(user, "login", expect_str),
+                display_name=parse_expected_value(user, "displayName", expect_str),
+            )
 
-    # Tier = "1000"/"2000"/"3000"
+    # Tier = "1000"/"2000"/"3000"/"Custom"
     tier = parse_expected_value(value, "tier", expect_str)
-    tier = int(tier[0])
+    try:
+        tier = int(tier[0])
+    except ValueError:
+        pass
+
+    product = parse_expected_value(value, "product", expect_dict)
+    with JsonParentContext("product"):
+        display_name = parse_expected_value(product, "displayName", expect_str)
 
     # TODO I don't have an example of a multi-month gift sub
     ends_at = parse_expected_value(value, "endsAt", expect_iso_8601)
@@ -583,6 +592,7 @@ def subscription_benefit_parser(value) -> GiftSub:
         target=target,
         gifter=gifter,
         tier=tier,
+        display_name=display_name,
         ends_at=ends_at,
     )
 
