@@ -82,7 +82,7 @@ test_parse_onsite_notification_data = [
 @pytest.mark.parametrize("file,expected", test_parse_onsite_notification_data)
 def test_parse_onsite_notification(parser: Parser, file: str, expected):
     data = read_data(file)
-    assert parser.parse_onsite_notification(data) == expected
+    assert parser.onsite_notification_parser(data) == expected
 
 
 test_parse_weekly_rewards_data = [
@@ -110,7 +110,7 @@ test_parse_weekly_rewards_data = [
 @pytest.mark.parametrize("file,expected", test_parse_weekly_rewards_data)
 def test_parse_weekly_rewards(parser: Parser, file: str, expected):
     data = read_data(file)
-    assert parser.parse_weekly_rewards(data) == expected
+    assert parser.weekly_rewards_parser(data) == expected
 
 
 test_parse_subscription_benefit_data = [

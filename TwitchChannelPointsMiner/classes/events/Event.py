@@ -3,6 +3,7 @@ import datetime
 from dataclasses import dataclass
 
 from TwitchChannelPointsMiner.classes.events.Events import Events
+from TwitchChannelPointsMiner.classes.websocket.data.Predictions import PredictionEvent
 
 
 @dataclass(kw_only=True)
@@ -38,6 +39,7 @@ class StreamViewCount(ChannelEvent):
 @dataclass(kw_only=True)
 class BonusPointsAvailable(ChannelEvent):
     claim_id: str
+    amount: int
     type: Events = Events.BONUS_POINTS_AVAILABLE
 
 

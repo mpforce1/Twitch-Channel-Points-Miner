@@ -105,12 +105,25 @@ class Parser:
         }
 
         self.onsite_notification_parsers = {
-            "create-notification": self.parse_create_notification
+            "create-notification": self.create_notification_parser
         }
         self.ignorable_onsite_notification_types = ["update-summary"]
         self.create_notification_parsers = {
             "user_drop_reward_reminder_notification": self.user_drop_reward_reminder_notification_parser,
             "quests_viewer_reward_campaign_earned_badge": self.quests_viewer_reward_campaign_earned_badge_parser,
+        }
+        self.parsers = {
+            "community-points-user-v1": self.community_points_user_parser,
+            "video-playback-by-id": self.video_playback_by_id_parser,
+            "raid": self.raid_parser,
+            "community-moments-channel-v1": self.community_moments_channel_parser,
+            "predictions-channel-v1": self.predictions_channel_parser,
+            "predictions-user-v1": self.predictions_user_parser,
+            "community-points-channel-v1": self.community_points_channel_parser,
+            "onsite-notifications": self.onsite_notification_parser,
+            "user-subscribe-events-v1": self.user_subscribe_events_parser,
+            "weekly-rewards": self.weekly_rewards_parser,
+            "viewer-milestones": self.viewer_milestones_parser,
         }
 
     def _sub_type_parser[Result](
@@ -451,7 +464,7 @@ class Parser:
             image_url=image_url,
         )
 
-    def parse_create_notification(self, data) -> CreateNotification | None:
+    def create_notification_parser(self, data) -> CreateNotification | None:
         data = expect_dict(data)
         notification = parse_expected_value(data, "notification", expect_dict)
         with JsonParentContext("notification"):
@@ -462,7 +475,7 @@ class Parser:
                 logger.debug(f"Unknown create-notification type: {_type}")
                 return None
 
-    def parse_onsite_notification(self, value) -> OnsiteNotification | None:
+    def onsite_notification_parser(self, value) -> OnsiteNotification | None:
         value = expect_dict(value)
         _type = parse_expected_value(value, "type", expect_str)
         if _type in self.onsite_notification_parsers:
@@ -476,7 +489,7 @@ class Parser:
 
     # user-subscribe-events-v1
 
-    def parse_user_subscribe_events(self, value) -> UserSubscribeEvents.UserSubscribed:
+    def user_subscribe_events_parser(self, value) -> UserSubscribeEvents.UserSubscribed:
         value = expect_dict(value)
         return UserSubscribeEvents.UserSubscribed(
             channel_id=parse_expected_value(value, "channel_id", expect_str)
@@ -484,7 +497,7 @@ class Parser:
 
     # weekly-rewards
 
-    def parse_weekly_rewards_reward(self, value) -> WeeklyRewards.Reward:
+    def weekly_rewards_reward_parser(self, value) -> WeeklyRewards.Reward:
         value = expect_dict(value)
         return WeeklyRewards.Reward(
             tier=parse_expected_value(value, "tier", expect_int),
@@ -493,7 +506,7 @@ class Parser:
             badge_version=parse_expected_value(value, "badgeVersion", expect_str),
         )
 
-    def parse_weekly_rewards_config(self, value) -> WeeklyRewards.Config:
+    def weekly_rewards_config_parser(self, value) -> WeeklyRewards.Config:
         value = expect_dict(value)
         return WeeklyRewards.Config(
             days_required_per_week=parse_expected_value(
@@ -501,7 +514,7 @@ class Parser:
             )
         )
 
-    def parse_weekly_rewards(self, value) -> WeeklyRewards.Notification:
+    def weekly_rewards_parser(self, value) -> WeeklyRewards.Notification:
         value = expect_dict(value)
         return WeeklyRewards.Notification(
             viewer_id=parse_expected_value(value, "viewerId", expect_str),
@@ -515,28 +528,36 @@ class Parser:
                 value, "notificationType", expect_str
             ),
             current_reward=parse_expected_value(
-                value, "currentReward", self.parse_weekly_rewards_reward
+                value, "currentReward", self.weekly_rewards_reward_parser
             ),
             event_config=parse_expected_value(
-                value, "eventConfig", self.parse_weekly_rewards_config
+                value, "eventConfig", self.weekly_rewards_config_parser
             ),
         )
 
     # viewer-milestones
-    def parse_streak_recovered(self, value) -> ViewerMilestones.StreakRecovered:
+    def streak_recovered_parser(self, value) -> ViewerMilestones.StreakRecovered:
         return ViewerMilestones.StreakRecovered(
             channel_id=parse_expected_value(value, "channel_id", expect_str)
         )
 
-    def parse_viewer_milestones(
+    def viewer_milestones_parser(
         self, value
     ) -> ViewerMilestones.ViewerMilestones | None:
         value = expect_dict(value)
         type = parse_expected_value(value, "type", expect_str)
         if type == "streak-recovered":
-            return self.parse_streak_recovered(
+            return self.streak_recovered_parser(
                 parse_expected_value(value, "data", expect_dict)
             )
         else:
             logger.debug(f"Unknown viewer-milestones type: {type}")
             return None
+
+    # All
+    def message_parser(self, data, topic: str):
+        parser = self.parsers.get(topic, None)
+        if parser is None:
+            return None
+        else:
+            return parser(data)
