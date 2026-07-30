@@ -43,7 +43,7 @@ from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
-from TwitchChannelPointsMiner.classes.events.Event import WatchStreakMissing, WatchStreakProgress, WatchStreakRecovery
+from TwitchChannelPointsMiner.classes.events.Event import ChangingWatchSlots, WatchStreakMissing, WatchStreakProgress, WatchStreakRecovery
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
@@ -156,6 +156,7 @@ class Twitch(object):
                     watch_streak_milestone=watch_streak_milestone,
                 )
                 if streak_was_missing and not streamer.stream.watch_streak_missing:
+                    logger.info(f"Detected Watch Streak for {streamer}")
                     self.event_manager.manage(
                         WatchStreakProgress(channel_id=streamer.channel_id)
                     )
@@ -764,8 +765,14 @@ class Twitch(object):
                         str(find_streamer(streamers, channel_id))
                         for channel_id in selected_set - watched_previous_iteration
                     )
-                    logger.debug(
+                    logger.info(
                         f"Changing watch slots: Adding {adding}, Dropping {dropping}"
+                    )
+                    self.event_manager.manage(
+                        ChangingWatchSlots(
+                            adding=adding,
+                            dropping=dropping,
+                        )
                     )
 
                 # Update the watch session state before starting the watch loop
@@ -1296,19 +1303,6 @@ class Twitch(object):
                     "emoji": ":disappointed_relieved:",
                     "event": Events.BET_FAILED,
                 },
-            )
-
-    def claim_bonus(self, streamer: Streamer, claim_id: str):
-        if Settings.logger.less is False:
-            logger.info(
-                f"Claiming the bonus for {streamer}!",
-                extra={"emoji": ":gift:", "event": Events.BONUS_CLAIM},
-            )
-        try:
-            self.gql.claim_community_points(streamer.channel_id, claim_id)
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to claim bonus for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
             )
 
     # === CAMPAIGNS / DROPS / INVENTORY === #

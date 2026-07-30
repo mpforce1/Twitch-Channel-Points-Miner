@@ -45,6 +45,7 @@ class Events(Flag):
     DROP_CLAIM = auto()
     PREDICTION_MADE = auto()
     PREDICTION_FILTERS = auto()
+    CHANGING_WATCH_SLOTS = auto()
     """Predictions being skipped"""
 
     # Other

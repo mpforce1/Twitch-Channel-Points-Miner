@@ -57,3 +57,4 @@ class QueueManager(EventManager):
             except Empty:
                 pass
             interruptible_sleep(lambda: self.running, self.loop_sleep_seconds)
+        self.runner.stop()

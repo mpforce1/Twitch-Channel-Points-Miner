@@ -295,3 +295,4 @@ class BasicClipVodWatcher(ClipVodWatcher, abc.ABC):
             interruptible_sleep(
                 lambda: self.twitch.running, duration=self.interval_seconds
             )
+        self.runner.stop()

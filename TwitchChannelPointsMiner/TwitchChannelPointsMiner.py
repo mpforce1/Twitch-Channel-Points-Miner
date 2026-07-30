@@ -31,7 +31,7 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     weekly_rewards as weekly_rewards_selector,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
-from TwitchChannelPointsMiner.classes.entities.EventPrediction import EventPrediction
+from TwitchChannelPointsMiner.classes.entities.predictions.EventPrediction import EventPrediction
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
@@ -82,6 +82,7 @@ logger = logging.getLogger(__name__)
 class TwitchChannelPointsMiner:
     __slots__ = [
         "username",
+        "event_manager",
         "twitch",
         "claim_drops_startup",
         "enable_analytics",
@@ -197,7 +198,24 @@ class TwitchChannelPointsMiner:
             # Invalid argument type
             raise ValueError(f"gql must be an instance of be one of None, AttemptStrategy, or GQLFactory")
 
-        self.twitch = Twitch(self.username, user_agent, password, gql_factory=gql)
+        # TODO config
+        self.event_manager = QueueManager(
+            runner=SlottedTaskRunnerThread(
+                name="Event Manager Runner",
+                max_concurrent=10,
+                loop_interval_seconds=5,
+            ),
+            task_timeout_seconds=60,
+            loop_sleep_seconds=5
+        )
+
+        self.twitch = Twitch(
+            event_manager=self.event_manager,
+            username=self.username,
+            user_agent=user_agent,
+            password=password,
+            gql_factory=gql
+        )
 
         self.weekly_rewards_factory: (
             WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory | None
@@ -578,21 +596,10 @@ class TwitchChannelPointsMiner:
             self.background_tasks.append(sync_gift_subs_thread)
 
             # Event Manager
-            # TODO factory setup
-            event_manager = QueueManager(
-                runner=SlottedTaskRunnerThread(
-                    twitch=self.twitch,
-                    name="Event Manager",
-                    max_concurrent=10,
-                    loop_interval_seconds=5,
-                ),
-                task_timeout_seconds=60,
-                loop_sleep_seconds=5,
-            )
-            event_manager.start()
-            self.background_tasks.append(event_manager)
+            self.event_manager.start()
+            self.background_tasks.append(self.event_manager)
 
-            event_manager.add_handler(
+            self.event_manager.add_handler(
                 MinerHandler(
                     twitch=self.twitch,
                     streamers=self.streamers
@@ -605,26 +612,26 @@ class TwitchChannelPointsMiner:
             streamer_system = StreamerSystem(
                 twitch=self.twitch,
                 streamers=self.streamers,
-                event_manager=event_manager,
+                event_manager=self.event_manager,
             )
 
             stream_system = StreamSystem(
                 twitch=self.twitch,
                 streamers=self.streamers,
-                event_manager=event_manager,
+                event_manager=self.event_manager,
             )
 
             prediction_system = PredictionSystem(
                 twitch=self.twitch,
                 streamers=self.streamers,
                 prediction_events=self.events_predictions,
-                event_manager=event_manager,
+                event_manager=self.event_manager,
             )
 
             notification_system = NotificationsSystem(
                 twitch=self.twitch,
                 streamers=self.streamers,
-                event_manager=event_manager,
+                event_manager=self.event_manager,
             )
 
             # WebSocket
@@ -635,9 +642,6 @@ class TwitchChannelPointsMiner:
                     prediction_system=prediction_system,
                     notification_system=notification_system,
                     parser=WebSocketJsonParser(),
-                    twitch=self.twitch,
-                    streamers=self.streamers,
-                    events_predictions=self.events_predictions,
                 )
             ]
             if Settings.use_hermes:

@@ -725,7 +725,7 @@ def test_full():
         twitch=twitch,
         streamers=streamers,
         runner=SlottedTaskRunnerThread(
-            twitch=twitch, name="Test", max_concurrent=3, loop_interval_seconds=1
+            name="Test", max_concurrent=3, loop_interval_seconds=1
         ),
         config=BasicConfiguration(
             max_clip_watch_seconds=4,

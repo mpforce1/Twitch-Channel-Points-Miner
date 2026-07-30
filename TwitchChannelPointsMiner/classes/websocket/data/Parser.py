@@ -28,13 +28,9 @@ from TwitchChannelPointsMiner.classes.websocket.data import (
     PredictionsChannel,
     PredictionsUser,
     CommunityPointsChannel,
-)
-from TwitchChannelPointsMiner.classes.websocket.data.OnsiteNotification import (
-    CreateNotification,
     OnsiteNotification,
-    UserDropRewardReminderNotification,
-    UserEarnedQuestsRewardBadgeNotification,
 )
+from TwitchChannelPointsMiner.classes.websocket.data.Model import Model
 from TwitchChannelPointsMiner.utils import ordinal
 
 logger = logging.getLogger(__name__)
@@ -210,7 +206,7 @@ class Parser:
             viewers=parse_expected_value(message, "viewers", expect_int),
         )
 
-    def video_playback_by_id_parser(self, message):
+    def video_playback_by_id_parser(self, message) -> VideoPlaybackById.Model | None:
         return self._sub_type_parser(
             message, self.video_playback_by_id_parsers, data_field=None
         )
@@ -228,7 +224,7 @@ class Parser:
             ),
         )
 
-    def raid_parser(self, message):
+    def raid_parser(self, message) -> Raid.Model | None:
         return self._sub_type_parser(message, self.raid_parsers, data_field="raid")
 
     # community-moments-channel-v1
@@ -239,7 +235,9 @@ class Parser:
             id=parse_expected_value(message, "moment_id", expect_str)
         )
 
-    def community_moments_channel_parser(self, message):
+    def community_moments_channel_parser(
+        self, message
+    ) -> CommunityMomentsChannel.Model | None:
         return self._sub_type_parser(
             message, self.community_moments_channel_parsers, data_field=None
         )
@@ -351,7 +349,7 @@ class Parser:
             event=parse_expected_value(data, "event", self.prediction_event_parser),
         )
 
-    def predictions_channel_parser(self, message):
+    def predictions_channel_parser(self, message) -> PredictionsChannel.Model | None:
         return self._sub_type_parser(message, self.predictions_channel_parsers)
 
     # predictions-user-v1
@@ -373,7 +371,7 @@ class Parser:
             ),
         )
 
-    def predictions_user_parser(self, message):
+    def predictions_user_parser(self, message) -> PredictionsUser.Model | None:
         return self._sub_type_parser(message, self.predictions_user_parsers)
 
     # community-points-channel-v1
@@ -420,14 +418,16 @@ class Parser:
             ),
         )
 
-    def community_points_channel_parser(self, message):
+    def community_points_channel_parser(
+        self, message
+    ) -> CommunityPointsChannel.Model | None:
         return self._sub_type_parser(message, self.community_points_channel_parsers)
 
     # onsite-notifications
 
     def user_drop_reward_reminder_notification_parser(
         self, notification
-    ) -> UserDropRewardReminderNotification | None:
+    ) -> OnsiteNotification.UserDropRewardReminderNotification | None:
         notification = expect_dict(notification)
         body = parse_expected_value(notification, "body_md", expect_str)
         with JsonParentContext("body_md"):
@@ -443,7 +443,7 @@ class Parser:
             ["data_blocks", 1, "content", "image_block", "url"],
             expect_str,
         )
-        return UserDropRewardReminderNotification(
+        return OnsiteNotification.UserDropRewardReminderNotification(
             drop_name=drop_name,
             image_url=image_url,
         )
@@ -459,12 +459,14 @@ class Parser:
             ["data_blocks", 0, "content", "image_block", "url"],
             expect_str,
         )
-        return UserEarnedQuestsRewardBadgeNotification(
+        return OnsiteNotification.UserEarnedQuestsRewardBadgeNotification(
             badge_name=badge_name,
             image_url=image_url,
         )
 
-    def create_notification_parser(self, data) -> CreateNotification | None:
+    def create_notification_parser(
+        self, data
+    ) -> OnsiteNotification.CreateNotification | None:
         data = expect_dict(data)
         notification = parse_expected_value(data, "notification", expect_dict)
         with JsonParentContext("notification"):
@@ -475,7 +477,7 @@ class Parser:
                 logger.debug(f"Unknown create-notification type: {_type}")
                 return None
 
-    def onsite_notification_parser(self, value) -> OnsiteNotification | None:
+    def onsite_notification_parser(self, value) -> OnsiteNotification.Model | None:
         value = expect_dict(value)
         _type = parse_expected_value(value, "type", expect_str)
         if _type in self.onsite_notification_parsers:
@@ -489,7 +491,7 @@ class Parser:
 
     # user-subscribe-events-v1
 
-    def user_subscribe_events_parser(self, value) -> UserSubscribeEvents.UserSubscribed:
+    def user_subscribe_events_parser(self, value) -> UserSubscribeEvents.Model:
         value = expect_dict(value)
         return UserSubscribeEvents.UserSubscribed(
             channel_id=parse_expected_value(value, "channel_id", expect_str)
@@ -514,7 +516,7 @@ class Parser:
             )
         )
 
-    def weekly_rewards_parser(self, value) -> WeeklyRewards.Notification:
+    def weekly_rewards_parser(self, value) -> WeeklyRewards.Model:
         value = expect_dict(value)
         return WeeklyRewards.Notification(
             viewer_id=parse_expected_value(value, "viewerId", expect_str),
@@ -541,9 +543,7 @@ class Parser:
             channel_id=parse_expected_value(value, "channel_id", expect_str)
         )
 
-    def viewer_milestones_parser(
-        self, value
-    ) -> ViewerMilestones.ViewerMilestones | None:
+    def viewer_milestones_parser(self, value) -> ViewerMilestones.Model | None:
         value = expect_dict(value)
         type = parse_expected_value(value, "type", expect_str)
         if type == "streak-recovered":
@@ -555,7 +555,7 @@ class Parser:
             return None
 
     # All
-    def message_parser(self, data, topic: str):
+    def message_parser(self, data, topic: str) -> Model | None:
         parser = self.parsers.get(topic, None)
         if parser is None:
             return None

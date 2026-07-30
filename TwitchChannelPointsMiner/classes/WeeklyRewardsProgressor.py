@@ -125,7 +125,7 @@ class BasicWeeklyRewardsProgressorFactory(WeeklyRewardsProgressorFactory):
         twitch: Twitch,
         streamers: list[Streamer],
     ):
-        runner = self.runner_factory.create(twitch, "Weekly Rewards Progressor")
+        runner = self.runner_factory.create("Weekly Rewards Progressor")
         return BasicWeeklyRewardsProgressor(
             twitch, streamers, runner, config=self.config
         )

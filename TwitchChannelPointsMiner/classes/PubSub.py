@@ -1,9 +1,7 @@
 import logging
 
 from TwitchChannelPointsMiner.classes.Settings import Settings
-from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Message import Message
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 from TwitchChannelPointsMiner.classes.websocket.data import (
     CommunityMomentsChannel,
@@ -40,22 +38,16 @@ class PubSubHandler(MessageListener):
         prediction_system: PredictionSystem,
         notification_system: NotificationsSystem,
         parser: Parser,
-        twitch: Twitch,
-        streamers: list[Streamer],
-        events_predictions: dict,
     ):
         self.streamer_system = streamer_system
         self.stream_system = stream_system
         self.prediction_system = prediction_system
         self.notification_system = notification_system
         self.parser = parser
-        self.twitch = twitch
-        self.streamers = streamers
-        self.events_predictions = events_predictions
 
     def on_message(self, message: Message):
         try:
-            data = self.parser.message_parser(message.data, message.topic)
+            data = self.parser.message_parser(message.message, message.topic)
             # Dispatch data by type to the relevant system method
             match data:
                 case CommunityPointsUser.PointsEarned():
@@ -96,6 +88,9 @@ class PubSubHandler(MessageListener):
                     self.streamer_system.community_goal_deleted(
                         message.channel_id, data
                     )
+                case OnsiteNotification.UpdateSummary():
+                    # We don't actually need this one, consider removing
+                    logger.debug(f"Ignoring UpdateSummary")
                 case OnsiteNotification.UserDropRewardReminderNotification():
                     self.notification_system.user_drop_reminder(data)
                 case OnsiteNotification.UserEarnedQuestsRewardBadgeNotification():
@@ -106,6 +101,10 @@ class PubSubHandler(MessageListener):
                     self.streamer_system.weekly_reward_update(data)
                 case ViewerMilestones.StreakRecovered():
                     self.streamer_system.watch_streak_recovered(data)
+                case None:
+                    # Do nothing, it's a type we don't handle
+                    logger.debug(f"Ignoring: {message}")
+                    pass
                 case _:
                     raise ValueError(f"Unhandled WebSocket Message: {data}")
         except Exception:

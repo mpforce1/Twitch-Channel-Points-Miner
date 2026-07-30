@@ -101,4 +101,4 @@ CreateNotification = (
     UserDropRewardReminderNotification | UserEarnedQuestsRewardBadgeNotification
 )
 
-OnsiteNotification = UpdateSummary | CreateNotification
+Model = UpdateSummary | CreateNotification

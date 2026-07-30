@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from threading import Lock, Thread
 from typing import Callable
 
-from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.utils import interruptible_sleep
 
 logger = logging.getLogger(__name__)
@@ -65,6 +64,13 @@ class SlottedTaskRunner[Context, Result](abc.ABC):
         """
         pass
 
+    def stop(self):
+        """
+        Stops this runner and any remaining tasks.
+        :return:
+        """
+        pass
+
 
 class SlottedTaskRunnerThread[Context, Result](
     SlottedTaskRunner[Context, Result], Thread
@@ -72,14 +78,11 @@ class SlottedTaskRunnerThread[Context, Result](
 
     def __init__(
         self,
-        twitch: Twitch,
         name: str,
         max_concurrent: int | None = 2,
         loop_interval_seconds: float = 20,
     ):
         super().__init__(name=f"{name} Runner", daemon=True)
-        self.twitch = twitch
-        """ The Twitch API instance. """
         if max_concurrent is not None and max_concurrent <= 0:
             raise ValueError(f"max_concurrent must be greater than 0: {max_concurrent}")
         self.max_concurrent = max_concurrent
@@ -96,6 +99,7 @@ class SlottedTaskRunnerThread[Context, Result](
             self._slots: list[Slot[Context, Result] | None] = [
                 None for _ in range(max_concurrent)
             ]
+        self.running = False
         self._lock = Lock()
 
     def has_free_slot(self) -> bool:
@@ -175,11 +179,12 @@ class SlottedTaskRunnerThread[Context, Result](
         Periodically checks all Streamers weekly reward status and attempts to watch Clips/VODs for those that haven't
         yet advanced theirs today/this week.
         """
+        self.running = True
         try:
-            while self.twitch.running:
+            while self.running:
                 self.manage_slots()
                 interruptible_sleep(
-                    running_flag=lambda: self.twitch.running,
+                    running_flag=lambda: self.running,
                     duration=self.loop_interval_seconds,
                 )
         finally:
@@ -189,11 +194,14 @@ class SlottedTaskRunnerThread[Context, Result](
             self._executor.shutdown(wait=True, cancel_futures=True)
             logger.debug("SlottedTaskRunner Stopped")
 
+    def stop(self):
+        self.running = False
+
 
 class SlottedTaskRunnerFactory(abc.ABC):
     @abc.abstractmethod
     def create[Context, Result](
-        self, twitch: Twitch, name: str
+        self, name: str
     ) -> SlottedTaskRunner[
         Context, Result
     ]:  # pyright: ignore [reportInvalidTypeVarUse]
@@ -206,12 +214,11 @@ class SlottedTaskRunnerThreadFactory(SlottedTaskRunnerFactory):
         self.loop_interval_seconds = loop_interval_seconds
 
     def create[Context, Result](
-        self, twitch: Twitch, name: str
+        self, name: str
     ) -> SlottedTaskRunner[
         Context, Result
     ]:  # pyright: ignore [reportInvalidTypeVarUse]
         runner = SlottedTaskRunnerThread[Context, Result](
-            twitch=twitch,
             name=name,
             max_concurrent=self.max_concurrent,
             loop_interval_seconds=self.loop_interval_seconds,
