@@ -87,7 +87,7 @@ class BasicWatchStreakRecoveryFactory(WatchStreakRecoveryFactory):
         self.runner_factory = runner_factory
 
     def create(self, twitch: Twitch, streamers: list[Streamer]) -> WatchStreakRecovery:
-        runner = self.runner_factory.create(twitch, "Watch Streak Recovery")
+        runner = self.runner_factory.create(name="Watch Streak Recovery")
         return BasicWatchStreakRecovery(
             twitch=twitch, streamers=streamers, runner=runner, config=self.config
         )

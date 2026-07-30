@@ -243,6 +243,12 @@ class PredictionFilters(ChannelEvent):
     type: Events = Events.PREDICTION_FILTERS
 
 
+@dataclass(kw_only=True)
+class ChangingWatchSlots(Event):
+    adding: list[str]
+    dropping: list[str]
+    type: Events = Events.CHANGING_WATCH_SLOTS
+
 # Other
 
 

@@ -20,7 +20,7 @@ class NotificationsSystem:
         self, notification: OnsiteNotification.UserDropRewardReminderNotification
     ):
         logger.info(f"Drop claimable: {notification.drop_name}")
-        # TODO claim drop
+        self.twitch.claim_all_drops_from_inventory()
 
     def user_earned_quests_reward_badge(
         self, notification: OnsiteNotification.UserEarnedQuestsRewardBadgeNotification

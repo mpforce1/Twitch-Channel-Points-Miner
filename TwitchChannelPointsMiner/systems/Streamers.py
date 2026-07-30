@@ -1,6 +1,5 @@
 import logging
 
-from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
@@ -8,6 +7,7 @@ from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.events.Event import (
     BonusPointsAvailable,
+    BonusPointsClaim,
     JoinRaid,
     MomentClaim,
     PointsSpent,
@@ -48,6 +48,14 @@ class StreamerSystem:
     def points_earned(self, data: CommunityPointsUser.PointsEarned):
         streamer = find_streamer(self.streamers, data.channel_id)
         self._update_points_change(streamer, data.balance, data.reason)
+        logger.info(
+            f"+{data.amount} → {streamer} - Reason: {data.reason}.",
+        )
+        streamer.update_history(data.reason, data.amount)
+        if Settings.enable_analytics is True:
+            streamer.persistent_annotations(
+                data.reason, f"+{data.amount} - {data.reason}"
+            )
         self.event_manager.manage(
             gain_for(
                 timestamp=data.timestamp,
@@ -63,6 +71,7 @@ class StreamerSystem:
         # We have to estimate this as Twitch doesn't give us the amount in the WS message
         spent_estimate = streamer.channel_points - data.balance
         self._update_points_change(streamer, data.balance, "Spent")
+        logger.info(f"-{spent_estimate} -> {streamer}")
         self.event_manager.manage(
             PointsSpent(
                 timestamp=data.timestamp,
@@ -72,7 +81,26 @@ class StreamerSystem:
             )
         )
 
+    def claim_bonus(self, streamer: Streamer, claim_id: str):
+        """
+        Claims the given bonus points claim for the given streamer.
+        :param streamer: The Streamer that has the claim.
+        :param claim_id: The id of the claim.
+        """
+        if Settings.logger.less is False:
+            logger.info(f"Claiming the bonus for {streamer}!")
+        try:
+            self.twitch.gql.claim_community_points(streamer.channel_id, claim_id)
+            # Only send the event if the request returns successfully
+            self.event_manager.manage(BonusPointsClaim(channel_id=streamer.channel_id))
+        except RetryError as e:
+            logger.error(
+                f"Error while trying to claim bonus for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
+            )
+
     def claim_available(self, data: CommunityPointsUser.ClaimAvailable):
+        streamer = find_streamer(self.streamers, data.channel_id)
+        # Send the Available event before claiming
         self.event_manager.manage(
             BonusPointsAvailable(
                 timestamp=data.timestamp,
@@ -81,6 +109,7 @@ class StreamerSystem:
                 amount=data.amount,
             )
         )
+        self.claim_bonus(streamer, data.claim_id)
 
     # Raids
     def raid_update(self, channel_id: str, data: RaidUpdate):

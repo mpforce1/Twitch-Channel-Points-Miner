@@ -6,4 +6,4 @@ class StreakRecovered:
     channel_id: str
 
 
-ViewerMilestones = StreakRecovered
+Model = StreakRecovered
