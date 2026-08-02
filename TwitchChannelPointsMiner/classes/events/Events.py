@@ -28,6 +28,7 @@ class Events(Flag):
     PREDICTION_WIN = auto()
     PREDICTION_LOSE = auto()
     PREDICTION_REFUND = auto()
+    PREDICTION_FAILED = auto()
     #  Moments
     MOMENT_CLAIM_AVAILABLE = auto()
     #  Drops

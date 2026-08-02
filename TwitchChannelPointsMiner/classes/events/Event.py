@@ -1,15 +1,19 @@
 import abc
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from TwitchChannelPointsMiner.classes.entities.Bet import FilterCondition
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.websocket.data.Predictions import PredictionEvent
+from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
 
 @dataclass(kw_only=True)
 class Event(abc.ABC):
     type: Events
-    timestamp: datetime.datetime = datetime.datetime.now(tz=datetime.timezone.utc)
+    timestamp: datetime.datetime = field(
+        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
+    )
 
 
 @dataclass(kw_only=True)
@@ -143,13 +147,22 @@ class PredictionResult(ChannelEvent, abc.ABC):
 class PredictionWin(PredictionResult):
     type: Events = Events.PREDICTION_WIN
 
+
 @dataclass(kw_only=True)
 class PredictionLose(PredictionResult):
     type: Events = Events.PREDICTION_LOSE
 
+
 @dataclass(kw_only=True)
 class PredictionRefund(PredictionResult):
     type: Events = Events.PREDICTION_REFUND
+
+
+@dataclass(kw_only=True)
+class PredictionFailed(ChannelEvent):
+    event_id: str
+    error_code: str
+    type: Events = Events.PREDICTION_FAILED
 
 
 #  Moments
@@ -228,13 +241,54 @@ class PredictionMade(ChannelEvent):
 
 
 class FilterReason(abc.ABC):
-    pass
+    def __repr__(self) -> str:
+        return simple_repr(self)
+
+
+@dataclass(kw_only=True)
+class EventTooShort(FilterReason):
+    """The event was too short for the user's"""
+
+    prediction_time: datetime.datetime
+
 
 @dataclass(kw_only=True)
 class NotEnoughPoints(FilterReason):
-    channel_id: str
+    """The user doesn't have enough channel points"""
+
     channel_points: int
-    minimum_points: int
+    minimum_points: int | None
+
+
+@dataclass(kw_only=True)
+class PredictionAlreadyMade(FilterReason):
+    """A prediction has already been made on this event"""
+
+    pass
+
+
+@dataclass(kw_only=True)
+class EventNotActive(FilterReason):
+    """The event is no longer active"""
+
+    status: str
+
+
+@dataclass(kw_only=True)
+class PredictionPointsBelowMinimum(FilterReason):
+    """The desired amount of points for the bet is below the minimum (0)"""
+
+    outcome_id: str
+    points: int
+
+
+@dataclass(kw_only=True)
+class SettingsFiltered(FilterReason):
+    """The bet was filtered by the streamer's settings"""
+
+    condition: FilterCondition
+    compared_value: int | float
+
 
 @dataclass(kw_only=True)
 class PredictionFilters(ChannelEvent):
@@ -248,6 +302,7 @@ class ChangingWatchSlots(Event):
     adding: list[str]
     dropping: list[str]
     type: Events = Events.CHANGING_WATCH_SLOTS
+
 
 # Other
 
@@ -323,6 +378,7 @@ def gain_for(
                 reason=reason,
             )
 
+
 def prediction_result_for(
     _type: str,
     channel_id: str,
@@ -331,7 +387,7 @@ def prediction_result_for(
     decision_id: str,
     decision_color: str,
     stake: int,
-    gain:int,
+    gain: int,
 ) -> PredictionResult | None:
     match _type:
         case "WIN":
@@ -342,7 +398,7 @@ def prediction_result_for(
                 decision_id=decision_id,
                 decision_color=decision_color,
                 stake=stake,
-                gain=gain
+                gain=gain,
             )
         case "LOSE":
             return PredictionLose(
@@ -352,7 +408,7 @@ def prediction_result_for(
                 decision_id=decision_id,
                 decision_color=decision_color,
                 stake=stake,
-                gain=gain
+                gain=gain,
             )
         case "REFUND":
             return PredictionRefund(
@@ -362,7 +418,7 @@ def prediction_result_for(
                 decision_id=decision_id,
                 decision_color=decision_color,
                 stake=stake,
-                gain=gain
+                gain=gain,
             )
         case _:
             return None

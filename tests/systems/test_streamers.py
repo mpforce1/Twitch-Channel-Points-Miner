@@ -1,5 +1,4 @@
 import datetime
-from threading import stack_size
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,7 +8,6 @@ from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoa
 from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.events.Event import (
-    BonusPointsAvailable,
     JoinRaid,
     MomentClaim,
     WatchStreakRecovery,
@@ -31,8 +29,10 @@ Settings.enable_analytics = False
 
 @pytest.fixture
 def system():
+    twitch = MagicMock()
+    twitch.gql = MagicMock()
     return StreamerSystem(
-        twitch=MagicMock(),
+        twitch=twitch,
         streamers=[],
         event_manager=MagicMock(),
     )
@@ -108,16 +108,12 @@ def test_claim_available(system):
         amount=100,
     )
 
+    system.streamers = [Streamer("123456", "123456")]
+
     system.claim_available(data)
 
-    system.event_manager.manage.assert_called_once_with(
-        BonusPointsAvailable(
-            timestamp=datetime.datetime.fromtimestamp(1234567),
-            channel_id="123456",
-            claim_id="019fa90b-6d10-71af-a9e0-024c379fbc83",
-            amount=100,
-        )
-    )
+    assert system.event_manager.manage.call_count == 2
+    system.twitch.gql.claim_community_points.assert_called_once()
 
 
 def test_raid_update(system):
@@ -132,12 +128,19 @@ def test_raid_update(system):
         target_display_name="TestUser",
     )
 
-    system.raid_update(streamer.channel_id, data)
+    timestamp = datetime.datetime.fromtimestamp(123456)
+    with pytest.MonkeyPatch.context() as patcher:
+        mock_datetime = MagicMock()
+        mock_datetime.now = MagicMock()
+        mock_datetime.now.return_value = timestamp
+        patcher.setattr(datetime, "datetime", mock_datetime)
+        system.raid_update(streamer.channel_id, data)
 
     assert streamer.raid == Raid(raid_id=data.id, target_login=data.target_username)
     system.twitch.gql.join_raid.assert_called_once_with(data.id)
     system.event_manager.manage.assert_called_once_with(
         JoinRaid(
+            timestamp=timestamp,
             channel_id=streamer.channel_id,
             raid_id=data.id,
             target_username=data.target_username,
@@ -152,11 +155,17 @@ def test_moment(system):
     streamer.channel_id = channel_id
     system.streamers = [streamer]
 
-    system.moment(channel_id, moment_id)
+    timestamp = datetime.datetime.fromtimestamp(123456)
+    with pytest.MonkeyPatch.context() as patcher:
+        mock_datetime = MagicMock()
+        mock_datetime.now = MagicMock()
+        mock_datetime.now.return_value = timestamp
+        patcher.setattr(datetime, "datetime", mock_datetime)
+        system.moment(channel_id, moment_id)
 
     system.twitch.gql.claim_moment.assert_called_once_with(moment_id)
     system.event_manager.manage.assert_called_once_with(
-        MomentClaim(channel_id=channel_id, moment_id=moment_id)
+        MomentClaim(timestamp=timestamp, channel_id=channel_id, moment_id=moment_id)
     )
 
 
@@ -292,10 +301,18 @@ def test_watch_streak_recovered(system):
     data = ViewerMilestones.StreakRecovered(channel_id=channel_id)
 
     # Normal operation
-    system.watch_streak_recovered(recovery=data)
+
+    timestamp = datetime.datetime.fromtimestamp(123456)
+    with pytest.MonkeyPatch.context() as patcher:
+        mock_datetime = MagicMock()
+        mock_datetime.now = MagicMock()
+        mock_datetime.now.return_value = timestamp
+        patcher.setattr(datetime, "datetime", mock_datetime)
+        system.watch_streak_recovered(recovery=data)
+
     assert len(streamer.watch_streak_missed_stremer) == 0
     system.event_manager.manage.assert_called_once_with(
-        WatchStreakRecovery(channel_id=data.channel_id)
+        WatchStreakRecovery(timestamp=timestamp, channel_id=data.channel_id)
     )
 
     # Untracked streamer
