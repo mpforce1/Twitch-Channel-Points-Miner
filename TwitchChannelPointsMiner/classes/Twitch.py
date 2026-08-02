@@ -34,6 +34,7 @@ from TwitchChannelPointsMiner.classes.Settings import (
 )
 from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
 from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
+from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
@@ -43,7 +44,11 @@ from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
-from TwitchChannelPointsMiner.classes.events.Event import ChangingWatchSlots, WatchStreakMissing, WatchStreakProgress, WatchStreakRecovery
+from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
+from TwitchChannelPointsMiner.classes.events.Event import (
+    ChangingWatchSlots, PredictionFailed, WatchStreakMissing,
+    WatchStreakProgress, WatchStreakRecovery
+)
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
@@ -62,7 +67,6 @@ from TwitchChannelPointsMiner.constants import (
     URL,
 )
 from TwitchChannelPointsMiner.utils import (
-    millify,
     internet_connection_available,
     interruptible_sleep,
 )
@@ -1232,77 +1236,36 @@ class Twitch(object):
                 if not self.running:
                     return
 
-    def make_predictions(self, event):
-        decision = event.bet.calculate(event.streamer.channel_points)
-        # selector_index = 0 if decision["choice"] == "A" else 1
+    def make_prediction(self, event: PredictionEvent, bet: Bet):
+        """
+        Places a prediction on a prediction event.
+        :param event: The event.
+        :param bet: The prediction.
+        """
+        logger.info(f"Going to complete bet for {event}")
+        try:
+            response = self.gql.make_prediction(
+                event.event_id, bet.outcome_id, bet.points
+            )
+        except RetryError as e:
+            logger.error(f"Error while trying to make prediction: {e}")
+            return
 
-        logger.info(
-            f"Going to complete bet for {event}",
-            extra={
-                "emoji": ":four_leaf_clover:",
-                "event": Events.BET_GENERAL,
-            },
-        )
-        if event.status == "ACTIVE":
-            skip, compared_value = event.bet.skip()
-            if skip is True:
-                logger.info(
-                    f"Skip betting for the event {event}",
-                    extra={
-                        "emoji": ":pushpin:",
-                        "event": Events.BET_FILTERS,
-                    },
-                )
-                logger.info(
-                    f"Skip settings {event.bet.settings.filter_condition}, current value is: {compared_value}",
-                    extra={
-                        "emoji": ":pushpin:",
-                        "event": Events.BET_FILTERS,
-                    },
-                )
-            else:
-                if decision["amount"] >= 10:
-                    logger.info(
-                        # f"Place {millify(decision['amount'])} channel points on: {event.bet.get_outcome(selector_index)}",
-                        f"Place {millify(decision['amount'])} channel points on: {event.bet.get_outcome(decision['choice'])}",
-                        extra={
-                            "emoji": ":four_leaf_clover:",
-                            "event": Events.BET_GENERAL,
-                        },
-                    )
-
-                    try:
-                        response = self.gql.make_prediction(
-                            event.event_id, decision["id"], decision["amount"]
-                        )
-                    except RetryError as e:
-                        logger.error(f"Error while trying to make prediction: {e}")
-                        return
-
-                    if response.error is not None:
-                        error_code = response.error.code
-                        logger.error(
-                            f"Failed to place bet, error: {error_code}",
-                            extra={
-                                "emoji": ":four_leaf_clover:",
-                                "event": Events.BET_FAILED,
-                            },
-                        )
-                else:
-                    logger.info(
-                        f"Bet won't be placed as the amount {millify(decision['amount'])} is less than the minimum required 10",
-                        extra={
-                            "emoji": ":four_leaf_clover:",
-                            "event": Events.BET_GENERAL,
-                        },
-                    )
-        else:
-            logger.info(
-                f"Oh no! The event is not active anymore! Current status: {event.status}",
+        if response.error is not None:
+            error_code = response.error.code
+            logger.error(
+                f"Failed to place bet, error: {error_code}",
                 extra={
-                    "emoji": ":disappointed_relieved:",
+                    "emoji": ":four_leaf_clover:",
                     "event": Events.BET_FAILED,
                 },
+            )
+            self.event_manager.manage(
+                PredictionFailed(
+                    channel_id=event.channel_id,
+                    event_id=event.event_id,
+                    error_code=error_code
+                )
             )
 
     # === CAMPAIGNS / DROPS / INVENTORY === #

@@ -31,12 +31,12 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     weekly_rewards as weekly_rewards_selector,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
-from TwitchChannelPointsMiner.classes.entities.predictions.EventPrediction import EventPrediction
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
     StreamerSettings,
 )
+from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.MinerHandler import MinerHandler
 from TwitchChannelPointsMiner.classes.events.managers.Queue import QueueManager
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory, GQL
@@ -46,9 +46,10 @@ from TwitchChannelPointsMiner.classes.websocket.pubsub import PubSubWebSocketPoo
 from TwitchChannelPointsMiner.constants import HERMES_WEBSOCKET, CLIENT_ID_WEB
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers
 from TwitchChannelPointsMiner.systems.Notifications import NotificationsSystem
-from TwitchChannelPointsMiner.systems.Predictions import PredictionSystem
 from TwitchChannelPointsMiner.systems.Streamers import StreamerSystem
 from TwitchChannelPointsMiner.systems.Streams import StreamSystem
+from TwitchChannelPointsMiner.systems.predictions.Predictor import BasicPredictorFactory
+from TwitchChannelPointsMiner.systems.predictions.Tracker import PredictionTrackingSystemFactory
 from TwitchChannelPointsMiner.utils import (
     millify,
     at_least_one_value_in_settings_is,
@@ -90,7 +91,7 @@ class TwitchChannelPointsMiner:
         "disable_at_in_nickname",
         "streamer_selector",
         "streamers",
-        "events_predictions",
+        "prediction_events",
         "background_tasks",
         "ws_pool",
         "session_id",
@@ -332,7 +333,7 @@ class TwitchChannelPointsMiner:
             )  # pyright: ignore
 
         self.streamers: list[Streamer] = []
-        self.events_predictions: dict[str, EventPrediction] = {}
+        self.prediction_events: dict[str, PredictionEvent] = {}
         self.background_tasks: list[threading.Thread] = []
         self.ws_pool = None
 
@@ -609,6 +610,7 @@ class TwitchChannelPointsMiner:
             # TODO add event hooks to event handler
 
             # Miner Systems
+            # TODO system config options
             streamer_system = StreamerSystem(
                 twitch=self.twitch,
                 streamers=self.streamers,
@@ -621,11 +623,18 @@ class TwitchChannelPointsMiner:
                 event_manager=self.event_manager,
             )
 
-            prediction_system = PredictionSystem(
-                twitch=self.twitch,
+            prediction_system_factory = PredictionTrackingSystemFactory()
+            predictor_factory = BasicPredictorFactory(create_timer=threading.Timer)
+            prediction_system = prediction_system_factory.create(
                 streamers=self.streamers,
-                prediction_events=self.events_predictions,
+                prediction_events=self.prediction_events,
                 event_manager=self.event_manager,
+                predictor=predictor_factory.create(
+                    twitch=self.twitch,
+                    streamers=self.streamers,
+                    prediction_events=self.prediction_events,
+                    event_manager=self.event_manager
+                )
             )
 
             notification_system = NotificationsSystem(
@@ -876,10 +885,10 @@ class TwitchChannelPointsMiner:
             extra={"emoji": ":hourglass:"},
         )
 
-        if not Settings.logger.less and self.events_predictions != {}:
+        if not Settings.logger.less and self.prediction_events != {}:
             print("")
-            for event_id in self.events_predictions:
-                event = self.events_predictions[event_id]
+            for event_id in self.prediction_events:
+                event = self.prediction_events[event_id]
                 if (
                         event.bet_confirmed is True
                         and event.streamer.settings.make_predictions is True
