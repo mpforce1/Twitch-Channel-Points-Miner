@@ -7,7 +7,9 @@ from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent impor
     PredictionEvent,
 )
 from TwitchChannelPointsMiner.classes.events.Event import (
+    Error,
     PredictionEventCreated,
+    PredictionEventUpdated,
     prediction_result_for,
 )
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
@@ -49,7 +51,7 @@ class PredictionTrackingSystem(PredictionSystem):
                 PredictionEventCreated(
                     timestamp=event.created_at,
                     channel_id=event.channel_id,
-                    event=data.event,
+                    event_id=data.event.id,
                 )
             )
             self.predictor.event_created(event)
@@ -63,6 +65,13 @@ class PredictionTrackingSystem(PredictionSystem):
             )
             return
         event.update(data.event)
+        self.event_manager.manage(
+            PredictionEventUpdated(
+                timestamp=data.timestamp,
+                channel_id=event.channel_id,
+                event_id=event.event_id,
+            )
+        )
         self.predictor.event_updated(event)
 
     def user_prediction_made(self, data: PredictionsUser.PredictionMade):
@@ -90,9 +99,23 @@ class PredictionTrackingSystem(PredictionSystem):
             return
         if event.prediction is None:
             logger.error(f"Result given for Prediction Event without a User Prediction")
+            self.event_manager.manage(
+                Error(
+                    context="Prediction Tracking System",
+                    message=f"Result given for Prediction Event without a User Prediction",
+                    error=None,
+                )
+            )
             return
         if data.prediction.result is None:
             logger.error(f"Result given for Prediction Event containing no Result data")
+            self.event_manager.manage(
+                Error(
+                    context="Prediction Tracking System",
+                    message="Result given for Prediction Event containing no Result data",
+                    error=None,
+                )
+            )
             return
         event.prediction = Prediction.from_ws(data.prediction)
         if event.prediction.result is None:
@@ -106,8 +129,6 @@ class PredictionTrackingSystem(PredictionSystem):
             else 0
         )
 
-        decision = event.outcome(event.prediction.outcome_id)
-
         logger.info(
             event.describe_result(
                 Settings.logger.anonymiser.username(streamer.username)
@@ -120,14 +141,16 @@ class PredictionTrackingSystem(PredictionSystem):
             _type=result_type,
             channel_id=channel_id,
             event_id=event_id,
-            decision_title=decision.title,
-            decision_id=decision.id,
-            decision_color=decision.color,
-            stake=stake,
-            gain=gain,
         )
         if prediction_result_event is None:
             logger.error(f"Unknown prediction result type: {result_type}")
+            self.event_manager.manage(
+                Error(
+                    context="Prediction Tracking System",
+                    message=f"Unknown prediction result type: {result_type}",
+                    error=None,
+                )
+            )
         else:
             self.event_manager.manage(prediction_result_event)
 

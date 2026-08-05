@@ -10,6 +10,7 @@ from typing import Literal
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings
+from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
@@ -175,7 +176,7 @@ class Streamer(object):
         self.channel_points_enabled = channel_points_enabled
         self.chat_banned = chat_banned
         self.channel_points = channel_points if channel_points is not None else 0
-        self.community_goals = {}
+        self.community_goals: dict[str, CommunityGoal] = {}
         self.minute_watched_requests = None
         self.viewer_is_mod = False
         self.active_multipliers = active_multipliers

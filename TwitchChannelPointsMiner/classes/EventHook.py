@@ -1,6 +1,6 @@
 import abc
 
-from TwitchChannelPointsMiner.classes.Settings import Events
+from TwitchChannelPointsMiner.classes.events.Events import Events
 
 
 class EventHook(abc.ABC):
@@ -22,6 +22,10 @@ class EventHook(abc.ABC):
     In this example `ExampleEventHook` sends the message to some remote webhook that exists at `webhook_api`, all
     messages get sent because all log records return `True` from `validate_record`.
     """
+
+    def __init__(self, events: list[Events] | Events):
+        # Union all events if a list is given
+        self.events = Events.union(events) if isinstance(events, list) else events
 
     @abc.abstractmethod
     def send(self, message: str, event: Events) -> None:
@@ -74,10 +78,11 @@ class LogAttributeValidatingEventHook(EventHook, abc.ABC):
     called the record passed contains an attribute with that name and so returns `False`.
     """
 
-    def __init__(self, skip_attr_name: str):
+    def __init__(self, events: list[Events] | Events, skip_attr_name: str):
         """
         :param skip_attr_name: The name of the attribute to check for on log records.
         """
+        super().__init__(events)
         self.skip_attr_name = skip_attr_name
 
     def validate_record(self, record):

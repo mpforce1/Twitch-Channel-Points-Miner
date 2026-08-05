@@ -216,11 +216,6 @@ def test_full(monkeypatch):
                     timestamp=now,
                     channel_id=base_event.channel_id,
                     event_id=base_event.id,
-                    decision_title=outcome_5.title,
-                    decision_id=outcome_5.id,
-                    decision_color=outcome_5.color,
-                    stake=prediction_made.prediction.points,
-                    gain=500,
                 )
             )
         ],

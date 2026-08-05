@@ -13,13 +13,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from TwitchChannelPointsMiner.classes.events.Events import Events
+from TwitchChannelPointsMiner.classes.events.handlers.Console import ConsoleConfiguration
+from TwitchChannelPointsMiner.classes.events.managers.Ignore import IgnoreEventManager
 import TwitchChannelPointsMiner.classes.websocket.hermes.data as hermes_data
 from TwitchChannelPointsMiner.classes import WatchStreakRecovery, WeeklyRewardsProgressor
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings, StreamerSource
-from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerThread, SlottedTaskRunnerThreadFactory
+from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerThreadFactory
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
     NestedSelector,
     StreamerSelector,
@@ -37,8 +40,13 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
-from TwitchChannelPointsMiner.classes.events.MinerHandler import MinerHandler
-from TwitchChannelPointsMiner.classes.events.managers.Queue import QueueManager
+from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Handler import EventHandler, EventHandlerFactory
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager, EventManagerFactory
+from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer, EventTransformerFactory
+from TwitchChannelPointsMiner.classes.events.handlers.Hook import EventHookAdapter
+from TwitchChannelPointsMiner.classes.events.managers import DefaultEventManagerFactory
+from TwitchChannelPointsMiner.classes.events.transformers import DefaultTransformerFactory
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory, GQL
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 from TwitchChannelPointsMiner.classes.websocket.hermes import HermesWebSocketPool
@@ -70,6 +78,11 @@ from TwitchChannelPointsMiner.utils.Utils import interruptible_repeating_task, n
 #   - irc.client - [process_data]
 #   - irc.client - [_dispatcher]
 #   - irc.client - [_handle_message]
+
+# Configure console logging for startup
+logging.basicConfig(
+    handlers=[logging.StreamHandler(stream=sys.stdout)], level=logging.DEBUG
+)
 logging.getLogger("chardet.charsetprober").setLevel(logging.ERROR)
 logging.getLogger("requests").setLevel(logging.ERROR)
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
@@ -114,7 +127,7 @@ class TwitchChannelPointsMiner:
         disable_at_in_nickname: bool = False,
         # Settings for logging and selenium as you can see.
         priority: StreamerSelector | list[StreamerSelector] | list[Priority] | Priority | None = None,
-        # This settings will be global shared trought Settings class
+        # This settings will be global shared throughout Settings class
         logger_settings: LoggerSettings = LoggerSettings(),
         # Default values for all streamers
         streamer_settings: StreamerSettings = StreamerSettings(),
@@ -126,9 +139,16 @@ class TwitchChannelPointsMiner:
         weekly_rewards: (
             WeeklyRewardsProgressor.BasicConfiguration | WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory | Literal[False] | None
         ) = None,
+        # Watch Streak Recovery
         watch_streak_recovery: (
             WatchStreakRecovery.BasicConfiguration | WatchStreakRecovery.WatchStreakRecoveryFactory | Literal[False] | None
         ) = None,
+        # Event Management
+        event_manager: EventManagerFactory | EventManager | Literal[False] | None = False,
+        # Default event to string transformer for event handlers
+        default_event_transformer: EventTransformerFactory[str] | EventTransformer[str] | None = None,
+        # Event Handlers
+        handlers: list[EventHandler | EventHandlerFactory] | None = None,
     ):
         # Validate the user has changed default username and password
         startup_error = None
@@ -199,17 +219,69 @@ class TwitchChannelPointsMiner:
             # Invalid argument type
             raise ValueError(f"gql must be an instance of be one of None, AttemptStrategy, or GQLFactory")
 
-        # TODO config
-        self.event_manager = QueueManager(
-            runner=SlottedTaskRunnerThread(
-                name="Event Manager Runner",
-                max_concurrent=10,
-                loop_interval_seconds=5,
-            ),
-            task_timeout_seconds=60,
-            loop_sleep_seconds=5
-        )
+        # Create these here as they're needed now
+        self.streamers: list[Streamer] = []
+        self.prediction_events: dict[str, PredictionEvent] = dict()
+        self.background_tasks: list[threading.Thread] = []
 
+        # Default event transformer
+        if not isinstance(default_event_transformer, EventTransformer):
+            if default_event_transformer is None:
+                default_event_transformer = DefaultTransformerFactory(
+                    logger_settings.color_palette,
+                    logger_settings.less,
+                    logger_settings.time_zone,
+                )
+            default_event_transformer = default_event_transformer.create(
+                self.streamers, self.prediction_events
+            )
+
+        # Set up event manager
+        self.event_manager: EventManager
+        if event_manager is False:
+            # Disable event management
+            self.event_manager = IgnoreEventManager()
+        elif isinstance(event_manager, EventManager):
+            # Use provided manager
+            self.event_manager = event_manager
+        else:
+            # Factory setup
+            if event_manager is None:
+                # Use default values + values from logger settings
+                event_manager_factory = DefaultEventManagerFactory(
+                    console_configuration=ConsoleConfiguration(
+                        events=Events.default(),
+                        transformer=DefaultTransformerFactory(
+                            color_palette=logger_settings.color_palette,
+                            less=logger_settings.less,
+                            timezone=logger_settings.time_zone,
+                        ),
+                    )
+                )
+            else:
+                # Use provider factory
+                event_manager_factory = event_manager
+            self.event_manager = event_manager_factory.create(
+                self.background_tasks, self.streamers, self.prediction_events
+            )
+
+        # Add handlers to event manager
+        if handlers is not None:
+            for handler in handlers:
+                if isinstance(handler, EventHandlerFactory):
+                    handler = handler.create(self.streamers, self.prediction_events)
+                self.event_manager.add_handler(handler)
+
+        # Add hooks to event manager
+        for hook in logger_settings.hooks:
+            self.event_manager.add_handler(
+                EventHookAdapter(
+                    hook=hook,
+                    transformer=default_event_transformer,
+                )
+            )
+
+        # Set up Twitch API
         self.twitch = Twitch(
             event_manager=self.event_manager,
             username=self.username,
@@ -332,9 +404,6 @@ class TwitchChannelPointsMiner:
                 f"priority must be an instance of one of None, Priority, StreamerSelector, list[Priority], or list[StreamerSelector]"
             )  # pyright: ignore
 
-        self.streamers: list[Streamer] = []
-        self.prediction_events: dict[str, PredictionEvent] = {}
-        self.background_tasks: list[threading.Thread] = []
         self.ws_pool = None
 
         self.session_id = str(uuid.uuid4())
@@ -342,6 +411,8 @@ class TwitchChannelPointsMiner:
         self.start_datetime = None
         self.original_streamers = []
 
+        # Reset logging
+        logging.basicConfig(handlers=[], force=True)
         self.logs_file, self.queue_listener = configure_loggers(
             self.username, logger_settings
         )
@@ -350,17 +421,28 @@ class TwitchChannelPointsMiner:
         current_version, github_version = check_versions()
 
         logger.info(
-            f"Twitch Channel Points Miner-{current_version} (fork by mpforce1)"
+            f"Twitch Channel Points Miner-{current_version} (fork by mpforce1)",
+            extra={"force_console": True}
         )
-        logger.info("https://github.com/mpforce1/Twitch-Channel-Points-Miner")
+        logger.info(
+            "https://github.com/mpforce1/Twitch-Channel-Points-Miner",
+            extra={"force_console": True},
+        )
 
         if github_version == "0.0.0":
             logger.error(
-                "Unable to detect if you have the latest version of this script"
+                "Unable to detect if you have the latest version of this script",
+                extra={"force_console": True},
             )
         elif current_version != github_version:
-            logger.info(f"You are running version {current_version} of this script")
-            logger.info(f"The latest version on GitHub is {github_version}")
+            logger.info(
+                f"You are running version {current_version} of this script",
+                extra={"force_console": True},
+            )
+            logger.info(
+                f"The latest version on GitHub is {github_version}",
+                extra={"force_console": True},
+            )
 
         for sign in [signal.SIGINT, signal.SIGSEGV, signal.SIGTERM]:
             signal.signal(sign, self.end_signal)
@@ -388,7 +470,10 @@ class TwitchChannelPointsMiner:
             http_server.name = "Analytics Thread"
             http_server.start()
         else:
-            logger.error("Can't start analytics(), please set enable_analytics=True")
+            logger.error(
+                "Can't start analytics(), please set enable_analytics=True",
+                extra={"force_console": True},
+            )
 
     def mine(
         self,
@@ -412,13 +497,19 @@ class TwitchChannelPointsMiner:
         followers_order: FollowersOrder = FollowersOrder.ASC,
     ):
         if self.running:
-            logger.error("You can't start multiple sessions of this instance!")
+            logger.error(
+                "You can't start multiple sessions of this instance!",
+                extra={"force_console": True},
+            )
             return
 
         streamers_input = list(streamers) if streamers is not None else []
         blacklist_input = list(blacklist) if blacklist is not None else []
 
-        logger.info(f"Start session: '{self.session_id}'", extra={"emoji": ":bomb:"})
+        logger.info(
+            f"Start session: '{self.session_id}'",
+            extra={"emoji": ":bomb:", "force_console": True},
+        )
         self.running = True
         self.start_datetime = datetime.now()
 
@@ -440,7 +531,8 @@ class TwitchChannelPointsMiner:
                 username = normalise_username(raw_username)
                 if username in streamers_dict:
                     logger.warning(
-                        f"Duplicate found in streamers list, ignoring duplicate. Please remove one of '{raw_username}'."
+                        f"Duplicate found in streamers list, ignoring duplicate. Please remove one of '{raw_username}'.",
+                        extra={"force_console": True},
                     )
                 if username not in blacklist_input:
                     streamers_pre_loaded.append((username, StreamerSource.Streamers))
@@ -450,7 +542,7 @@ class TwitchChannelPointsMiner:
                 followers_array = self.twitch.get_followers(order=followers_order)
                 logger.info(
                     f"Load {len(followers_array)} followers from your profile!",
-                    extra={"emoji": ":clipboard:"},
+                    extra={"emoji": ":clipboard:", "force_console": True},
                 )
                 for username in followers_array:
                     if (
@@ -463,7 +555,7 @@ class TwitchChannelPointsMiner:
 
             logger.info(
                 f"Loading data for {len(streamers_pre_loaded)} streamers. Please wait...",
-                extra={"emoji": ":nerd_face:"},
+                extra={"emoji": ":nerd_face:", "force_console": True},
             )
             load_workers = max(1, min(10, len(streamers_pre_loaded))) if streamers_pre_loaded else 0
 
@@ -505,17 +597,18 @@ class TwitchChannelPointsMiner:
                         except StreamerDoesNotExistException:
                             logger.info(
                                 f"Streamer {Settings.logger.anonymiser.username(username)} does not exist",
-                                extra={"emoji": ":cry:"},
+                                extra={"emoji": ":cry:", "force_console": True},
                             )
                         except Exception:
                             logger.error(
                                 f"Failed to load streamer {Settings.logger.anonymiser.username(username)}",
-                                exc_info=True
+                                extra={"force_console": True},
+                                exc_info=True,
                             )
 
-            self.streamers = [
+            self.streamers.extend([
                 streamer for streamer in streamers_loaded if streamer is not None
-            ]
+            ])
 
             # Populate the streamers with default values.
             # 1. Load channel points and auto-claim bonus
@@ -523,13 +616,13 @@ class TwitchChannelPointsMiner:
             # 3. DEACTIVATED: Check if the user is a moderator. (was used before the 5th of April 2021 to deactivate predictions)
             invalid_streamers = self.twitch.initialize_streamers_context(self.streamers)
             if invalid_streamers:
-                self.streamers = [
-                    streamer
-                    for streamer in self.streamers
-                    if streamer.username not in invalid_streamers
-                ]
-                if not self.streamers:
-                    logger.error("No valid streamers available after initialization.")
+                # Keep original list
+                self.streamers[:] = [streamer for streamer in self.streamers if streamer.username not in invalid_streamers]
+                if len(self.streamers) == 0:
+                    logger.error(
+                        "No valid streamers available after initialization.",
+                        extra={"force_console": True},
+                    )
                     self.end()
                     return
 
@@ -596,19 +689,6 @@ class TwitchChannelPointsMiner:
             sync_gift_subs_thread.start()
             self.background_tasks.append(sync_gift_subs_thread)
 
-            # Event Manager
-            self.event_manager.start()
-            self.background_tasks.append(self.event_manager)
-
-            self.event_manager.add_handler(
-                MinerHandler(
-                    twitch=self.twitch,
-                    streamers=self.streamers
-                )
-            )
-
-            # TODO add event hooks to event handler
-
             # Miner Systems
             # TODO system config options
             streamer_system = StreamerSystem(
@@ -672,7 +752,10 @@ class TwitchChannelPointsMiner:
 
             # Fixes 'ERR_BADAUTH'
             if not user_id:
-                logger.error("No user_id, exiting...")
+                logger.error(
+                    "No user_id, exiting...",
+                    extra={"force_console": True},
+                )
                 self.end()
 
             self.ws_pool.submit(
@@ -754,6 +837,13 @@ class TwitchChannelPointsMiner:
                     except Exception as e:
                         # Report the error but allow the task to continue
                         logger.error(f"Error when checking stale websocket connections: {e}")
+                        self.event_manager.manage(
+                            Error(
+                                context="WebSocket",
+                                message="Error when checking stale websocket connections: ",
+                                error=e,
+                            )
+                        )
 
             ws_thread = threading.Thread(target=websocket_task)
             ws_thread.name = "WebSocket check stale connections"
@@ -783,6 +873,7 @@ class TwitchChannelPointsMiner:
                         self.weekly_rewards_factory.create(
                             self.twitch,
                             self.streamers,
+                            self.event_manager
                         )
                     )
                     weekly_rewards_progressor_thread.name = "Weekly Rewards Progressor"
@@ -796,7 +887,7 @@ class TwitchChannelPointsMiner:
             ):
                 watch_streak_recovery_thread = (
                     self.watch_streak_recovery_factory.create(
-                        self.twitch, self.streamers
+                        self.twitch, self.streamers, self.event_manager
                     )
                 )
                 watch_streak_recovery_thread.name = "Watch Streak Recovery"
@@ -822,20 +913,47 @@ class TwitchChannelPointsMiner:
             while self.running:
                 interruptible_sleep(lambda: self.running, main_loop_period, 5)
                 if any(map(not_is_alive, self.background_tasks)):
+                    stopped = list(map(lambda task: task.name, filter(not_is_alive, self.background_tasks)))
                     logger.error(
-                        f"Background task(s) {list(map(lambda task: task.name, filter(not_is_alive, self.background_tasks)))} have stopped working. Stopping application."
+                        f"Background task(s) {stopped} have stopped working. Stopping application.",
+                        extra={"force_console": True},
+                    )
+                    self.event_manager.manage(
+                        Error(
+                            context="Background tasks",
+                            message=f"{stopped} have stopped working. Stopping application.",
+                            error=None,
+                        )
                     )
                     break
         except Exception as e:
-            logger.exception(f"Error in main miner loop", exc_info=e)
+            logger.exception(
+                f"Error in main miner loop",
+                exc_info=e,
+                extra={"force_console": True},
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Main Miner Loop",
+                    message="Error in main miner loop",
+                    error=e
+                )
+            )
         finally:
+            logger.info(
+                f"Shutting down",
+                extra={"force_console": True},
+            )
             self.end()
 
     def end_signal(self, signum, frame):
         if not self.running:
             return
 
-        logger.info("CTRL+C Detected! Please wait just a moment!")
+        logger.info(
+            "CTRL+C Detected! Please wait just a moment!",
+            extra={"force_console": True},
+        )
         self.end()
 
     def end(self):

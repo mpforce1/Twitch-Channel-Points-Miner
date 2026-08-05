@@ -47,25 +47,48 @@ class Events(Flag):
     PREDICTION_MADE = auto()
     PREDICTION_FILTERS = auto()
     CHANGING_WATCH_SLOTS = auto()
+    COMMUNITY_GOAL_CONTRIBUTION = auto()
     """Predictions being skipped"""
 
     # Other
     ERROR = auto()
 
     # Unions
-GAIN_POINTS = (
-    Events.GAIN_FOR_RAID | Events.GAIN_FOR_CLAIM | Events.GAIN_FOR_WATCH | Events.GAIN_FOR_WATCH_STREAK
-)
-"""Gaining channel points."""
-PREDICTIONS = (
-    Events.PREDICTION_EVENT_START
-    | Events.PREDICTION_EVENT_UPDATE
-    | Events.PREDICTION_EVENT_CLOSED
-    | Events.PREDICTION_WIN
-    | Events.PREDICTION_LOSE
-    | Events.PREDICTION_REFUND
-    | Events.PREDICTION_MADE
-    | Events.PREDICTION_FILTERS
-)
-"""All prediction related events."""
-ALL = reduce(lambda e1, e2: e1 | e2, Events, Events.ERROR)
+    GAIN_POINTS = (
+        GAIN_FOR_RAID | GAIN_FOR_CLAIM | GAIN_FOR_WATCH | GAIN_FOR_WATCH_STREAK
+    )
+    """Gaining channel points."""
+    PREDICTIONS = (
+        PREDICTION_EVENT_START
+        | PREDICTION_EVENT_UPDATE
+        | PREDICTION_EVENT_CLOSED
+        | PREDICTION_WIN
+        | PREDICTION_LOSE
+        | PREDICTION_REFUND
+        | PREDICTION_MADE
+        | PREDICTION_FILTERS
+    )
+
+    @staticmethod
+    def union(events: list["Events"]) -> "Events":
+        if len(events) == 0:
+            raise ValueError("At least 1 Events type must be provided")
+        return reduce(lambda l, r: l | r, events[1:], events[0])
+
+    @staticmethod
+    def all():
+        return Events.union([e for e in Events])
+
+    @staticmethod
+    def default():
+        """
+        Gets a union of Events that's all Events except a few less useful events.
+        """
+        return (
+            Events.all()
+            & ~Events.STREAM_VIEW_COUNT
+            & ~Events.BONUS_POINTS_AVAILABLE
+            & ~Events.MOMENT_CLAIM_AVAILABLE
+            & ~Events.PREDICTION_EVENT_UPDATE
+            & ~Events.DROP_CLAIM_AVAILABLE
+        )
