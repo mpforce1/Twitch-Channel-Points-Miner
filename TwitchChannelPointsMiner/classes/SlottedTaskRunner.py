@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from threading import Lock, Thread
 from typing import Callable
 
+from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.utils import interruptible_sleep
 
 logger = logging.getLogger(__name__)
@@ -79,10 +81,12 @@ class SlottedTaskRunnerThread[Context, Result](
     def __init__(
         self,
         name: str,
+        event_manager: EventManager,
         max_concurrent: int | None = 2,
         loop_interval_seconds: float = 20,
     ):
         super().__init__(name=f"{name} Runner", daemon=True)
+        self.event_manager = event_manager
         if max_concurrent is not None and max_concurrent <= 0:
             raise ValueError(f"max_concurrent must be greater than 0: {max_concurrent}")
         self.max_concurrent = max_concurrent
@@ -154,11 +158,25 @@ class SlottedTaskRunnerThread[Context, Result](
                             logger.debug(
                                 f"{self.name}: Slot {slot_index} timed out: {slot.context}"
                             )
+                            self.event_manager.manage(
+                                Error(
+                                    context=self.name,
+                                    message=f"Slot {slot_index} timed out for {slot.context}",
+                                    error=None,
+                                )
+                            )
                             self._slots[slot_index] = None
                             done = True
                     except Exception as e:
                         logger.error(
                             f"{self.name}: Slot {slot_index} for: {slot.context}: error: {e}"
+                        )
+                        self.event_manager.manage(
+                            Error(
+                                context=self.name,
+                                message=f"Error processing slot {slot_index} for {slot.context}",
+                                error=e,
+                            )
                         )
                         self._slots[slot_index] = None
                         done = True
@@ -173,6 +191,13 @@ class SlottedTaskRunnerThread[Context, Result](
                             pass
                         except Exception as e:
                             logger.error(f"Exception processing result: {e}")
+                            self.event_manager.manage(
+                                Error(
+                                    context=self.name,
+                                    message=f"Exception processing result for {slot.context}",
+                                    error=e,
+                                )
+                            )
 
     def run(self):
         """
@@ -201,7 +226,7 @@ class SlottedTaskRunnerThread[Context, Result](
 class SlottedTaskRunnerFactory(abc.ABC):
     @abc.abstractmethod
     def create[Context, Result](
-        self, name: str
+        self, name: str, event_manager: EventManager
     ) -> SlottedTaskRunner[
         Context, Result
     ]:  # pyright: ignore [reportInvalidTypeVarUse]
@@ -214,12 +239,13 @@ class SlottedTaskRunnerThreadFactory(SlottedTaskRunnerFactory):
         self.loop_interval_seconds = loop_interval_seconds
 
     def create[Context, Result](
-        self, name: str
+        self, name: str, event_manager: EventManager
     ) -> SlottedTaskRunner[
         Context, Result
     ]:  # pyright: ignore [reportInvalidTypeVarUse]
         runner = SlottedTaskRunnerThread[Context, Result](
             name=name,
+            event_manager=event_manager,
             max_concurrent=self.max_concurrent,
             loop_interval_seconds=self.loop_interval_seconds,
         )

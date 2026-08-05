@@ -7,18 +7,15 @@ from TwitchChannelPointsMiner.classes.Settings import Events
 
 
 class Pushover(LogAttributeValidatingEventHook):
-    __slots__ = ["userkey", "token", "priority", "sound", "events"]
-
-    def __init__(self, userkey: str, token: str, priority, sound, events: list):
-        super().__init__("skip_pushover")
+    def __init__(self, userkey: str, token: str, priority, sound, events: list[Events] | Events):
+        super().__init__(events, "skip_pushover")
         self.userkey = userkey
         self.token = token
         self.priority = priority
         self.sound = sound
-        self.events = [str(e) for e in events]
 
     def send(self, message: str, event: Events) -> None:
-        if str(event) in self.events:
+        if event in self.events:
             requests.post(
                 url="https://api.pushover.net/1/messages.json",
                 data={

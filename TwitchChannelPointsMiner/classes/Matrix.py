@@ -9,13 +9,18 @@ from TwitchChannelPointsMiner.classes.Settings import Events
 
 
 class Matrix(LogAttributeValidatingEventHook):
-    __slots__ = ["access_token", "homeserver", "room_id", "events"]
 
-    def __init__(self, username: str, password: str, homeserver: str, room_id: str, events: list):
-        super().__init__("skip_matrix")
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        homeserver: str,
+        room_id: str,
+        events: list[Events] | Events,
+    ):
+        super().__init__(events, "skip_matrix")
         self.homeserver = homeserver
         self.room_id = quote(room_id)
-        self.events = [str(e) for e in events]
 
         body = requests.post(
             url=f"https://{self.homeserver}/_matrix/client/r0/login",
@@ -32,7 +37,7 @@ class Matrix(LogAttributeValidatingEventHook):
             logging.getLogger(__name__).info("Invalid Matrix password provided. Notifications will not be sent.")
 
     def send(self, message: str, event: Events) -> None:
-        if str(event) in self.events:
+        if event in self.events:
             requests.post(
                 url=f"https://{self.homeserver}/_matrix/client/r0/rooms/{self.room_id}/send/m.room.message?access_token={self.access_token}",
                 json={

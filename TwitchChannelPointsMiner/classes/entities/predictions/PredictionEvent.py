@@ -147,6 +147,28 @@ class PredictionEvent:
         """Gets the Outcome with the highest individual prediction."""
         return self._top_outcome_by_key(key=lambda o: o.top_points)
 
+    def prediction_window_end_time(self):
+        """
+        Returns the end time of the prediction window.
+        """
+        return (
+                self.created_at
+                + datetime.timedelta(seconds=self.prediction_window_seconds)
+        )
+
+    def seconds_remaining(self, from_time: datetime.datetime):
+        """
+        Gets the number of seconds from the given time until the end of the prediction window.
+        :param from_time: The time to measure from.
+        :return: The number of seconds.
+        """
+        return (self.prediction_window_end_time() - from_time).total_seconds()
+
+    def winning_outcome(self):
+        if self.winning_outcome_id is None:
+            return None
+        return self.outcome(self.winning_outcome_id)
+
     def _describe_prediction_and_result(self):
         if self.prediction is None:
             prediction = "\tPrediction: None"

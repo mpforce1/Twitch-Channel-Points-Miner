@@ -13,6 +13,8 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +71,20 @@ class BasicWatchStreakRecovery(WatchStreakRecovery, BasicClipVodWatcher):
             logger.error(
                 f"Unable to recover Watch Streak for {streamer}: {result["reason"]}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Watch Streak Recovery",
+                    message=f"Unable to recover Watch Streak for {streamer}: {result["reason"]}",
+                    error=None,
+                )
+            )
 
 
 class WatchStreakRecoveryFactory(abc.ABC):
     @abc.abstractmethod
-    def create(self, twitch: Twitch, streamers: list[Streamer]) -> WatchStreakRecovery:
+    def create(
+        self, twitch: Twitch, streamers: list[Streamer], event_manager: EventManager
+    ) -> WatchStreakRecovery:
         pass
 
 
@@ -86,8 +97,16 @@ class BasicWatchStreakRecoveryFactory(WatchStreakRecoveryFactory):
         self.config = config
         self.runner_factory = runner_factory
 
-    def create(self, twitch: Twitch, streamers: list[Streamer]) -> WatchStreakRecovery:
-        runner = self.runner_factory.create(name="Watch Streak Recovery")
+    def create(
+        self, twitch: Twitch, streamers: list[Streamer], event_manager: EventManager
+    ) -> WatchStreakRecovery:
+        runner = self.runner_factory.create(
+            name="Watch Streak Recovery", event_manager=event_manager
+        )
         return BasicWatchStreakRecovery(
-            twitch=twitch, streamers=streamers, runner=runner, config=self.config
+            twitch=twitch,
+            streamers=streamers,
+            runner=runner,
+            event_manager=event_manager,
+            config=self.config,
         )

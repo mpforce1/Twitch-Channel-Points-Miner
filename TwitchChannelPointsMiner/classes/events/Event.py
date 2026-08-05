@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 
 from TwitchChannelPointsMiner.classes.entities.Bet import FilterCondition
 from TwitchChannelPointsMiner.classes.events.Events import Events
-from TwitchChannelPointsMiner.classes.websocket.data.Predictions import PredictionEvent
 from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
 
@@ -110,37 +109,29 @@ class PointsSpent(ChannelEvent):
 
 
 #  Predictions
-
+@dataclass(kw_only=True)
+class PredictionEventEvent(ChannelEvent):
+    event_id: str
 
 @dataclass(kw_only=True)
-class PredictionEventCreated(ChannelEvent):
-    event: PredictionEvent
+class PredictionEventCreated(PredictionEventEvent):
+    event_id: str
     type: Events = Events.PREDICTION_EVENT_START
 
 
 @dataclass(kw_only=True)
-class PredictionEventUpdated(ChannelEvent):
-    event: PredictionEvent
+class PredictionEventUpdated(PredictionEventEvent):
     type: Events = Events.PREDICTION_EVENT_UPDATE
 
 
 @dataclass(kw_only=True)
-class PredictionEventClosed(ChannelEvent):
-    event: PredictionEvent
+class PredictionEventClosed(PredictionEventEvent):
     type: Events = Events.PREDICTION_EVENT_UPDATE
 
 
 @dataclass(kw_only=True)
-class PredictionResult(ChannelEvent, abc.ABC):
-    event_id: str
-    decision_title: str
-    decision_id: str
-    decision_title: str
-    decision_color: str
-    stake: int
-    """The amount staked on the decided outcome."""
-    gain: int
-    """The amount gained by the user, negative implies a loss, positive implies a win/refund."""
+class PredictionResult(PredictionEventEvent, abc.ABC):
+    pass
 
 
 @dataclass(kw_only=True)
@@ -159,8 +150,7 @@ class PredictionRefund(PredictionResult):
 
 
 @dataclass(kw_only=True)
-class PredictionFailed(ChannelEvent):
-    event_id: str
+class PredictionFailed(PredictionEventEvent):
     error_code: str
     type: Events = Events.PREDICTION_FAILED
 
@@ -202,8 +192,6 @@ class ChatMention(ChannelEvent):
 #  Subscriptions
 @dataclass(kw_only=True)
 class GiftSubReceived(ChannelEvent):
-    gifter_display_name: str
-    tier: int
     type: Events = Events.GIFT_SUB_RECEIVED
 
 
@@ -229,12 +217,12 @@ class MomentClaim(ChannelEvent):
 @dataclass(kw_only=True)
 class DropClaim(Event):
     channel_id: str | None
+    drop_description: str
     type: Events = Events.DROP_CLAIM
 
 
 @dataclass(kw_only=True)
-class PredictionMade(ChannelEvent):
-    event_id: str
+class PredictionMade(PredictionEventEvent):
     outcome_id: str
     amount: int
     type: Events = Events.PREDICTION_MADE
@@ -291,8 +279,7 @@ class SettingsFiltered(FilterReason):
 
 
 @dataclass(kw_only=True)
-class PredictionFilters(ChannelEvent):
-    event_id: str
+class PredictionFilters(PredictionEventEvent):
     reason: FilterReason
     type: Events = Events.PREDICTION_FILTERS
 
@@ -303,6 +290,11 @@ class ChangingWatchSlots(Event):
     dropping: list[str]
     type: Events = Events.CHANGING_WATCH_SLOTS
 
+@dataclass(kw_only=True)
+class CommunityGoalContribution(ChannelEvent):
+    goal_id: str
+    amount: int
+    type: Events = Events.COMMUNITY_GOAL_CONTRIBUTION
 
 # Other
 
@@ -311,7 +303,7 @@ class ChangingWatchSlots(Event):
 class Error(Event):
     context: str
     message: str
-    error: Exception
+    error: Exception | None
     type: Events = Events.ERROR
 
 
@@ -383,42 +375,23 @@ def prediction_result_for(
     _type: str,
     channel_id: str,
     event_id: str,
-    decision_title: str,
-    decision_id: str,
-    decision_color: str,
-    stake: int,
-    gain: int,
 ) -> PredictionResult | None:
     match _type:
         case "WIN":
             return PredictionWin(
                 channel_id=channel_id,
                 event_id=event_id,
-                decision_title=decision_title,
-                decision_id=decision_id,
-                decision_color=decision_color,
-                stake=stake,
-                gain=gain,
             )
         case "LOSE":
             return PredictionLose(
                 channel_id=channel_id,
                 event_id=event_id,
-                decision_title=decision_title,
-                decision_id=decision_id,
-                decision_color=decision_color,
-                stake=stake,
-                gain=gain,
+
             )
         case "REFUND":
             return PredictionRefund(
                 channel_id=channel_id,
                 event_id=event_id,
-                decision_title=decision_title,
-                decision_id=decision_id,
-                decision_color=decision_color,
-                stake=stake,
-                gain=gain,
             )
         case _:
             return None

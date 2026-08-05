@@ -13,6 +13,7 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ class WeeklyRewardsProgressorFactory(abc.ABC):
         self,
         twitch: Twitch,
         streamers: list[Streamer],
+        event_manager: EventManager,
     ) -> WeeklyRewardsProgressor:
         pass
 
@@ -121,11 +123,11 @@ class BasicWeeklyRewardsProgressorFactory(WeeklyRewardsProgressorFactory):
         self.config = config
 
     def create(
-        self,
-        twitch: Twitch,
-        streamers: list[Streamer],
+        self, twitch: Twitch, streamers: list[Streamer], event_manager: EventManager
     ):
-        runner = self.runner_factory.create("Weekly Rewards Progressor")
+        runner = self.runner_factory.create(
+            name="Weekly Rewards Progressor", event_manager=event_manager
+        )
         return BasicWeeklyRewardsProgressor(
-            twitch, streamers, runner, config=self.config
+            twitch, streamers, runner, event_manager=event_manager, config=self.config
         )

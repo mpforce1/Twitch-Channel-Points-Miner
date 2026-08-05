@@ -304,35 +304,20 @@ def test_user_prediction_result(
                 expected_event = PredictionWin(
                     timestamp=timestamp,
                     channel_id="123456",
-                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9",
-                    decision_title="decision outcome title",
-                    decision_id="019fbcce-3f87-7603-823f-61c2f36f2fd9",
-                    decision_color="BLUE",
-                    stake=2000,
-                    gain=result.points_won,
+                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9"
                 )
             elif result.type == "LOSE":
                 expected_event = PredictionLose(
                     timestamp=timestamp,
                     channel_id="123456",
-                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9",
-                    decision_title="decision outcome title",
-                    decision_id="019fbcce-3f87-7603-823f-61c2f36f2fd9",
-                    decision_color="BLUE",
-                    stake=2000,
-                    gain=0,
+                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9"
                 )
             else:
                 expected_update_history_calls += 1
                 expected_event = PredictionRefund(
                     timestamp=timestamp,
                     channel_id="123456",
-                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9",
-                    decision_title="decision outcome title",
-                    decision_id="019fbcce-3f87-7603-823f-61c2f36f2fd9",
-                    decision_color="BLUE",
-                    stake=2000,
-                    gain=0,
+                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9"
                 )
             event_manager.manage.assert_called_once_with(expected_event)
 

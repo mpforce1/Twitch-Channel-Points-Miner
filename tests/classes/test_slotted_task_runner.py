@@ -9,6 +9,7 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
     SlottedTaskRunnerThread,
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import (
     VideoEdge,
@@ -39,6 +40,7 @@ def test_has_free_slot(slots, expected):
         max_concurrent=len(slots),
         loop_interval_seconds=1,
         name="Test",
+        event_manager=MagicMock(spec=EventManager),
     )
     runner._slots = slots
 
@@ -71,6 +73,7 @@ def test_has_context(slots: list, context, expected):
         max_concurrent=len(slots),
         loop_interval_seconds=1,
         name="Test",
+        event_manager=MagicMock(spec=EventManager),
     )
     runner._slots = [
         Slot(
@@ -206,7 +209,10 @@ test_manage_slots_data = [
 )
 def test_manage_slots(slots: list[SlotConfig | None], current_time):
     runner = SlottedTaskRunnerThread(
-        max_concurrent=len(slots), loop_interval_seconds=0, name="Test"
+        max_concurrent=len(slots),
+        loop_interval_seconds=0,
+        name="Test",
+        event_manager=MagicMock(spec=EventManager),
     )
 
     mock_slots = [slot.as_magic_mock() if slot is not None else None for slot in slots]

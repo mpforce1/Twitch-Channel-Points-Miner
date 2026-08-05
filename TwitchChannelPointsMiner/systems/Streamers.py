@@ -8,6 +8,7 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.events.Event import (
     BonusPointsAvailable,
     BonusPointsClaim,
+    Error,
     JoinRaid,
     MomentClaim,
     PointsSpent,
@@ -97,6 +98,13 @@ class StreamerSystem:
             logger.error(
                 f"Error while trying to claim bonus for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Streamer System",
+                    message=f"Error while trying to claim bonus for {streamer}",
+                    error=e,
+                )
+            )
 
     def claim_available(self, data: CommunityPointsUser.ClaimAvailable):
         streamer = find_streamer(self.streamers, data.channel_id)
@@ -128,6 +136,13 @@ class StreamerSystem:
                 logger.info(f"Joining raid from {streamer} to {target}!")
             except RetryError as e:
                 logger.error(f"Error joining raid from {streamer} to {target}: {e}")
+                self.event_manager.manage(
+                    Error(
+                        context="Streamer System",
+                        message=f"Error joining raid from {streamer} to {target}",
+                        error=e,
+                    )
+                )
                 return
 
             self.event_manager.manage(
@@ -148,6 +163,13 @@ class StreamerSystem:
         except RetryError as e:
             logger.error(
                 f"Error while trying to claim moment with id {moment_id} for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}",
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Streamer System",
+                    message=f"Error while trying to claim moment with id {moment_id} for {Settings.logger.anonymiser.streamer_username(streamer)}",
+                    error=e,
+                )
             )
             return
 
