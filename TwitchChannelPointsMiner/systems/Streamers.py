@@ -50,6 +50,9 @@ class StreamerSystem:
     def points_earned(self, data: CommunityPointsUser.PointsEarned):
         streamer = find_streamer(self.streamers, data.channel_id)
         self._update_points_change(streamer, data.balance, data.reason)
+        if data.reason == "WATCH":
+            # End watch session
+            streamer.stream.watch_session_state = None
         logger.info(
             f"+{data.amount} → {streamer} - Reason: {data.reason}.",
             extra={"emoji": ":rocket:", "event": Events.gain_for(data.reason)},
