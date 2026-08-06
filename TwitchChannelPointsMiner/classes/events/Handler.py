@@ -23,7 +23,5 @@ class EventHandler(abc.ABC):
 
 class EventHandlerFactory(abc.ABC):
     @abc.abstractmethod
-    def create(
-        self, streamers: list[Streamer], prediction_events: dict[str, PredictionEvent]
-    ) -> EventHandler:
+    def create(self) -> EventHandler:
         pass

@@ -61,7 +61,7 @@ class StreamerSystem:
             gain_for(
                 timestamp=data.timestamp,
                 reason=data.reason,
-                channel_id=data.channel_id,
+                streamer=streamer,
                 amount=data.amount,
                 balance=data.balance,
             )
@@ -76,7 +76,7 @@ class StreamerSystem:
         self.event_manager.manage(
             PointsSpent(
                 timestamp=data.timestamp,
-                channel_id=data.channel_id,
+                streamer=streamer,
                 amount=spent_estimate,
                 balance=data.balance,
             )
@@ -93,7 +93,7 @@ class StreamerSystem:
         try:
             self.twitch.gql.claim_community_points(streamer.channel_id, claim_id)
             # Only send the event if the request returns successfully
-            self.event_manager.manage(BonusPointsClaim(channel_id=streamer.channel_id))
+            self.event_manager.manage(BonusPointsClaim(streamer=streamer))
         except RetryError as e:
             logger.error(
                 f"Error while trying to claim bonus for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
@@ -112,7 +112,7 @@ class StreamerSystem:
         self.event_manager.manage(
             BonusPointsAvailable(
                 timestamp=data.timestamp,
-                channel_id=data.channel_id,
+                streamer=streamer,
                 claim_id=data.claim_id,
                 amount=data.amount,
             )
@@ -147,8 +147,8 @@ class StreamerSystem:
 
             self.event_manager.manage(
                 JoinRaid(
-                    channel_id=channel_id,
-                    raid_id=raid.raid_id,
+                    streamer=streamer,
+                    raid=raid,
                     target_username=raid.target_login,
                 )
             )
@@ -174,7 +174,7 @@ class StreamerSystem:
             return
 
         self.event_manager.manage(
-            MomentClaim(channel_id=channel_id, moment_id=moment_id)
+            MomentClaim(streamer=streamer, moment_id=moment_id)
         )
 
     # Community Goals
@@ -229,7 +229,7 @@ class StreamerSystem:
             logger.info(f"Watch Streak recovered for {streamer}")
             streamer.watch_streak_missed_streams = set()
             self.event_manager.manage(
-                WatchStreakRecovery(channel_id=recovery.channel_id)
+                WatchStreakRecovery(streamer=streamer)
             )
         except KeyError:
             logger.debug(

@@ -46,7 +46,7 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import (
-    ChangingWatchSlots, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown, StreamUp, WatchStreakMissing,
+    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown, StreamUp, WatchStreakMissing,
     WatchStreakProgress, WatchStreakRecovery
 )
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
@@ -162,7 +162,7 @@ class Twitch(object):
                 if streak_was_missing and not streamer.stream.watch_streak_missing:
                     logger.info(f"Detected Watch Streak for {streamer}")
                     self.event_manager.manage(
-                        WatchStreakProgress(channel_id=streamer.channel_id)
+                        WatchStreakProgress(streamer=streamer)
                     )
 
                 event_properties = {
@@ -304,12 +304,12 @@ class Twitch(object):
             if had_missed_streams and len(streamer.watch_streak_missed_streams) <= 0:
                 logger.info(f"Watch Streak recovered for {streamer}")
                 self.event_manager.manage(
-                    WatchStreakRecovery(channel_id=streamer.channel_id)
+                    WatchStreakRecovery(streamer=streamer)
                 )
             if not had_missed_streams and len(streamer.watch_streak_missed_streams) > 0:
                 logger.info(f"Missing Watch Streak for {streamer}")
                 self.event_manager.manage(
-                    WatchStreakMissing(channel_id=streamer.channel_id)
+                    WatchStreakMissing(streamer=streamer)
                 )
 
     def get_streamer_info(self, streamer: Streamer):
@@ -409,11 +409,7 @@ class Twitch(object):
                 self.update_stream(streamer)
             except StreamerIsOfflineException:
                 streamer.set_offline()
-                self.event_manager.manage(
-                    StreamDown(
-                        channel_id=streamer.channel_id
-                    )
-                )
+                self.event_manager.manage(StreamDown(streamer=streamer))
             except RetryError as e:
                 logger.error(f"Error while checking if {streamer} is online: {e}")
                 self.event_manager.manage(
@@ -425,13 +421,13 @@ class Twitch(object):
                 )
             else:
                 streamer.set_online()
-                self.event_manager.manage(StreamUp(channel_id=streamer.channel_id))
+                self.event_manager.manage(StreamUp(streamer=streamer))
         else:
             try:
                 self.update_stream(streamer)
             except StreamerIsOfflineException:
                 streamer.set_offline()
-                self.event_manager.manage(StreamDown(channel_id=streamer.channel_id))
+                self.event_manager.manage(StreamDown(streamer=streamer))
             except RetryError as e:
                 self.event_manager.manage(
                     Error(
@@ -879,21 +875,21 @@ class Twitch(object):
                 if watched_previous_iteration != selected_set:
                     dropping_ids = list(watched_previous_iteration - selected_set)
                     dropping = list(
-                        str(find_streamer(streamers, channel_id))
+                        find_streamer(streamers, channel_id)
                         for channel_id in dropping_ids
                     )
                     adding_ids = list(selected_set - watched_previous_iteration)
                     adding = list(
-                        str(find_streamer(streamers, channel_id))
+                        find_streamer(streamers, channel_id)
                         for channel_id in adding_ids
                     )
                     logger.info(
-                        f"Changing watch slots: Adding {adding}, Dropping {dropping}"
+                        f"Changing watch slots: Adding {[str(s) for s in adding]}, Dropping {[str(s) for s in dropping]}"
                     )
                     self.event_manager.manage(
                         ChangingWatchSlots(
-                            adding=adding_ids,
-                            dropping=dropping_ids,
+                            adding=adding,
+                            dropping=dropping,
                         )
                     )
 
@@ -1008,7 +1004,7 @@ class Twitch(object):
                 # Do a short sleep to avoid error log spam
                 time.sleep(1)
             watched_previous_iteration = watched_this_iteration
-            watched_this_iteration = set()
+            watched_this_iteration = set[str]()
 
     def send_clip_video_play(
         self, streamer: Streamer, clip: Clip, play_session_id: str
@@ -1432,7 +1428,7 @@ class Twitch(object):
                 if not self.running:
                     return
 
-    def make_prediction(self, event: PredictionEvent, bet: Bet):
+    def make_prediction(self, streamer: Streamer, event: PredictionEvent, bet: Bet):
         """
         Places a prediction on a prediction event.
         :param event: The event.
@@ -1464,8 +1460,8 @@ class Twitch(object):
             )
             self.event_manager.manage(
                 PredictionFailed(
-                    channel_id=event.channel_id,
-                    event_id=event.event_id,
+                    streamer=streamer,
+                    prediction_event=event,
                     error_code=error_code
                 )
             )
@@ -1567,7 +1563,7 @@ class Twitch(object):
                         break
         return campaigns
 
-    def claim_drop(self, drop: Drop):
+    def claim_drop(self, drop: Drop, streamer: Streamer | None = None):
         if drop.drop_instance_id is None:
             logger.debug(f"Unable to claim drop '{drop.id}', no instance id'")
             self.event_manager.manage(
@@ -1583,8 +1579,8 @@ class Twitch(object):
         )
         self.event_manager.manage(
             DropClaim(
-                channel_id=None,
-                drop_description=str(drop)
+                streamer=streamer,
+                drop=drop,
             )
         )
         try:
@@ -1802,6 +1798,17 @@ class Twitch(object):
                 extra={"emoji": ":goal_net:"},
             )
             streamer.channel_points -= amount
+            goal = streamer.community_goals.get(goal_id, None)
+            if goal is None:
+                logger.warning(f"Contributed to unmanaged Community Goal {goal_id}")
+            else:
+                self.event_manager.manage(
+                    CommunityGoalContribution(
+                        streamer=streamer,
+                        goal=goal,
+                        amount=amount,
+                    )
+                )
 
     def update_gift_sub(
         self, streamer: Streamer, gift_sub: GiftSub | None, send_event: bool = True
@@ -1830,7 +1837,7 @@ class Twitch(object):
                     # ignore non-standard gift subs like Turbo
                     self.event_manager.manage(
                         GiftSubReceived(
-                            channel_id=streamer.channel_id,
+                            streamer=streamer,
                         )
                     )
 

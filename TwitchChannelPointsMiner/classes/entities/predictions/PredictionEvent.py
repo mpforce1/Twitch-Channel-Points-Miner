@@ -151,9 +151,8 @@ class PredictionEvent:
         """
         Returns the end time of the prediction window.
         """
-        return (
-                self.created_at
-                + datetime.timedelta(seconds=self.prediction_window_seconds)
+        return self.created_at + datetime.timedelta(
+            seconds=self.prediction_window_seconds
         )
 
     def seconds_remaining(self, from_time: datetime.datetime):

@@ -232,9 +232,7 @@ class TwitchChannelPointsMiner:
                     logger_settings.less,
                     logger_settings.time_zone,
                 )
-            default_event_transformer = default_event_transformer.create(
-                self.streamers, self.prediction_events
-            )
+            default_event_transformer = default_event_transformer.create()
 
         # Set up event manager
         self.event_manager: EventManager
@@ -269,7 +267,7 @@ class TwitchChannelPointsMiner:
         if handlers is not None:
             for handler in handlers:
                 if isinstance(handler, EventHandlerFactory):
-                    handler = handler.create(self.streamers, self.prediction_events)
+                    handler = handler.create()
                 self.event_manager.add_handler(handler)
 
         # Add hooks to event manager

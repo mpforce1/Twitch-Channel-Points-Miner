@@ -52,9 +52,7 @@ class ConsoleHandlerFactory(EventHandlerFactory):
             )
         )
 
-    def create(
-        self, streamers: list[Streamer], prediction_events: dict[str, PredictionEvent]
-    ) -> ConsoleHandler:
+    def create(self) -> ConsoleHandler:
         if isinstance(self.configuration.transformer, EventTransformer):
             transformer = self.configuration.transformer
         else:
@@ -62,8 +60,6 @@ class ConsoleHandlerFactory(EventHandlerFactory):
                 transformer_factory = DefaultTransformerFactory()
             else:
                 transformer_factory = self.configuration.transformer
-            transformer = transformer_factory.create(
-                streamers=streamers, prediction_events=prediction_events
-            )
+            transformer = transformer_factory.create()
 
         return ConsoleHandler(events=self.configuration.events, transformer=transformer)

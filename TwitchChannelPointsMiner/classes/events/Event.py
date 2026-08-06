@@ -3,6 +3,15 @@ import datetime
 from dataclasses import dataclass, field
 
 from TwitchChannelPointsMiner.classes.entities.Bet import FilterCondition
+from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
+from TwitchChannelPointsMiner.classes.entities.Drop import Drop
+from TwitchChannelPointsMiner.classes.entities.Raid import Raid
+from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
+from TwitchChannelPointsMiner.classes.entities.predictions.Prediction import Prediction
+from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import (
+    PredictionEvent,
+)
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
@@ -17,7 +26,7 @@ class Event(abc.ABC):
 
 @dataclass(kw_only=True)
 class ChannelEvent(Event, abc.ABC):
-    channel_id: str
+    streamer: Streamer
 
 
 # Twitch State Changes
@@ -111,11 +120,11 @@ class PointsSpent(ChannelEvent):
 #  Predictions
 @dataclass(kw_only=True)
 class PredictionEventEvent(ChannelEvent):
-    event_id: str
+    prediction_event: PredictionEvent
+
 
 @dataclass(kw_only=True)
 class PredictionEventCreated(PredictionEventEvent):
-    event_id: str
     type: Events = Events.PREDICTION_EVENT_START
 
 
@@ -165,17 +174,19 @@ class MomentClaimAvailable(ChannelEvent):
 
 #  Drops
 @dataclass(kw_only=True)
-class DropProgress(Event):
-    channel_id: str | None
-    drop_id: str
+class DropEvent(Event):
+    streamer: Streamer | None
+    drop: Drop
+
+
+@dataclass(kw_only=True)
+class DropProgress(DropEvent):
     progress: int
     type: Events = Events.DROP_STATUS
 
 
 @dataclass(kw_only=True)
-class DropClaimAvailable(Event):
-    channel_id: str | None
-    drop_id: str
+class DropClaimAvailable(DropEvent):
     type: Events = Events.DROP_CLAIM_AVAILABLE
 
 
@@ -198,8 +209,9 @@ class GiftSubReceived(ChannelEvent):
 # Miner Actions
 @dataclass(kw_only=True)
 class JoinRaid(ChannelEvent):
-    raid_id: str
+    raid: Raid
     target_username: str
+    # The target may not be a managed streamer, so the username is the best we can do
     type: Events = Events.JOIN_RAID
 
 
@@ -215,15 +227,13 @@ class MomentClaim(ChannelEvent):
 
 
 @dataclass(kw_only=True)
-class DropClaim(Event):
-    channel_id: str | None
-    drop_description: str
+class DropClaim(DropEvent):
     type: Events = Events.DROP_CLAIM
 
 
 @dataclass(kw_only=True)
 class PredictionMade(PredictionEventEvent):
-    outcome_id: str
+    prediction: Prediction
     amount: int
     type: Events = Events.PREDICTION_MADE
 
@@ -266,8 +276,7 @@ class EventNotActive(FilterReason):
 class PredictionPointsBelowMinimum(FilterReason):
     """The desired amount of points for the bet is below the minimum (0)"""
 
-    outcome_id: str
-    points: int
+    bet: Bet
 
 
 @dataclass(kw_only=True)
@@ -286,15 +295,17 @@ class PredictionFilters(PredictionEventEvent):
 
 @dataclass(kw_only=True)
 class ChangingWatchSlots(Event):
-    adding: list[str]
-    dropping: list[str]
+    adding: list[Streamer]
+    dropping: list[Streamer]
     type: Events = Events.CHANGING_WATCH_SLOTS
+
 
 @dataclass(kw_only=True)
 class CommunityGoalContribution(ChannelEvent):
-    goal_id: str
+    goal: CommunityGoal
     amount: int
     type: Events = Events.COMMUNITY_GOAL_CONTRIBUTION
+
 
 # Other
 
@@ -313,14 +324,14 @@ class Error(Event):
 def gain_for(
     timestamp: datetime.datetime,
     reason: str,
-    channel_id: str,
+    streamer: Streamer,
     amount: int,
     balance: int,
 ):
     """
     Utility function that gets the specific subclass of GainPoints Event for the given reason code.
     :param reason: The reason code.
-    :param channel_id: The id of the channel.
+    :param streamer: The streamer.
     :param amount: The amount of points gained.
     :param balance: The new balance.
     :return: The Event.
@@ -329,42 +340,42 @@ def gain_for(
         case "RAID":
             return GainForRaid(
                 timestamp=timestamp,
-                channel_id=channel_id,
+                streamer=streamer,
                 amount=amount,
                 balance=balance,
             )
         case "CLAIM":
             return GainForClaim(
                 timestamp=timestamp,
-                channel_id=channel_id,
+                streamer=streamer,
                 amount=amount,
                 balance=balance,
             )
         case "WATCH":
             return GainForWatch(
                 timestamp=timestamp,
-                channel_id=channel_id,
+                streamer=streamer,
                 amount=amount,
                 balance=balance,
             )
         case "WATCH_STREAK":
             return GainForWatchStreak(
                 timestamp=timestamp,
-                channel_id=channel_id,
+                streamer=streamer,
                 amount=amount,
                 balance=balance,
             )
         case "WEEKLY_REWARDS":
             return GainForWeeklyRewards(
                 timestamp=timestamp,
-                channel_id=channel_id,
+                streamer=streamer,
                 amount=amount,
                 balance=balance,
             )
         case _:
             return GainPoints(
                 timestamp=timestamp,
-                channel_id=channel_id,
+                streamer=streamer,
                 amount=amount,
                 balance=balance,
                 reason=reason,
@@ -373,25 +384,24 @@ def gain_for(
 
 def prediction_result_for(
     _type: str,
-    channel_id: str,
-    event_id: str,
+    streamer: Streamer,
+    prediction_event: PredictionEvent,
 ) -> PredictionResult | None:
     match _type:
         case "WIN":
             return PredictionWin(
-                channel_id=channel_id,
-                event_id=event_id,
+                streamer=streamer,
+                prediction_event=prediction_event,
             )
         case "LOSE":
             return PredictionLose(
-                channel_id=channel_id,
-                event_id=event_id,
-
+                streamer=streamer,
+                prediction_event=prediction_event,
             )
         case "REFUND":
             return PredictionRefund(
-                channel_id=channel_id,
-                event_id=event_id,
+                streamer=streamer,
+                prediction_event=prediction_event,
             )
         case _:
             return None

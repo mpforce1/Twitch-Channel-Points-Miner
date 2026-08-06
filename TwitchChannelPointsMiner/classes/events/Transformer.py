@@ -22,7 +22,5 @@ class EventTransformer[Result](abc.ABC):
 
 class EventTransformerFactory[Result](abc.ABC):
     @abc.abstractmethod
-    def create(
-        self, streamers: list[Streamer], prediction_events: dict[str, PredictionEvent]
-    ) -> EventTransformer[Result]:
+    def create(self) -> EventTransformer[Result]:
         pass
