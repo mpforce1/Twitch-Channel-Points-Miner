@@ -37,6 +37,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     WatchStreakProgress,
     WatchStreakRecovery,
     PredictionMade,
+    WeeklyRewardsUpdate,
 )
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
@@ -63,6 +64,7 @@ class DispatchHandler(EventHandler, abc.ABC):
             Events.WATCH_STREAK_PROGRESS: self.handle_watch_streak_progress,
             Events.WATCH_STREAK_MISSING: self.handle_watch_streak_missing,
             Events.WATCH_STREAK_RECOVERY: self.handle_watch_streak_recovery,
+            Events.WEEKLY_REWARDS_UPDATE: self.handle_weekly_rewards_update,
             Events.PREDICTION_EVENT_START: self.handle_prediction_event_created,
             Events.PREDICTION_EVENT_UPDATE: self.handle_prediction_event_updated,
             Events.PREDICTION_EVENT_CLOSED: self.handle_prediction_event_closed,
@@ -122,6 +124,9 @@ class DispatchHandler(EventHandler, abc.ABC):
         pass
 
     def handle_watch_streak_recovery(self, event: WatchStreakRecovery):
+        pass
+
+    def handle_weekly_rewards_update(self, event: WeeklyRewardsUpdate):
         pass
 
     def handle_prediction_event_created(self, event: PredictionEventCreated):

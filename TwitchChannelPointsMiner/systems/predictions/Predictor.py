@@ -25,6 +25,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     SettingsFiltered,
     EventTooShort,
 )
+from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.systems.Predictions import Predictor, PredictorFactory
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
@@ -112,11 +113,19 @@ def skip_event(event: PredictionEvent) -> FilterReason | None:
     if event.status != "ACTIVE":
         logger.info(
             f"Oh no! The event is not active anymore! Current status: {event.status}",
+            extra={
+                "emoji": ":disappointed_relieved:",
+                "event": Events.PREDICTION_FAILED,
+            },
         )
         return EventNotActive(status=event.status)
     if event.prediction is not None:
         logger.debug(
-            f"Not making a prediction on '{event.title}', prediction already made"
+            f"Not making a prediction on '{event.title}', prediction already made",
+            extra={
+                "emoji": ":disappointed_relieved:",
+                "event": Events.PREDICTION_FAILED,
+            },
         )
         return PredictionAlreadyMade()
     return None
@@ -283,7 +292,11 @@ class BasicPredictor(Predictor):
             self.twitch.make_prediction(streamer, event, bet)
         else:
             logger.info(
-                f"Skip betting for the event {event} because '{skip_bet_reason}'"
+                f"Skip betting for the event {event} because '{skip_bet_reason}'",
+                extra={
+                    "emoji": ":pushpin:",
+                    "event": Events.PREDICTION_FILTERS,
+                },
             )
             self.event_manager.manage(
                 PredictionFilters(
@@ -312,7 +325,8 @@ class BasicPredictor(Predictor):
         ):
             # Reject if `minimum_points` isn't `None` and the user has fewer than that many points
             logger.info(
-                f"{streamer} only has {streamer.channel_points} channel points and the minimum for predictions is: {bet_settings.minimum_points}"
+                f"{streamer} only has {streamer.channel_points} channel points and the minimum for predictions is: {bet_settings.minimum_points}",
+                extra={"emoji": ":pushpin:", "event": Events.PREDICTION_FILTERS},
             )
             self.event_manager.manage(
                 PredictionFilters(
@@ -333,7 +347,11 @@ class BasicPredictor(Predictor):
         if predict_after_seconds <= 0:
             # Reject if we've already missed the prediction time
             logger.info(
-                f"Unable to make prediction, the desired time to make the prediction ({prediction_time}) is in the past"
+                f"Unable to make prediction, the desired time to make the prediction ({prediction_time}) is in the past",
+                extra={
+                    "emoji": ":pushpin:",
+                    "event": Events.PREDICTION_FILTERS,
+                },
             )
             self.event_manager.manage(
                 PredictionFilters(

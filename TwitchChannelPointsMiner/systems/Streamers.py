@@ -15,6 +15,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     WatchStreakRecovery,
     gain_for,
 )
+from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.websocket.data import (
@@ -51,6 +52,7 @@ class StreamerSystem:
         self._update_points_change(streamer, data.balance, data.reason)
         logger.info(
             f"+{data.amount} → {streamer} - Reason: {data.reason}.",
+            extra={"emoji": ":rocket:", "event": Events.gain_for(data.reason)},
         )
         streamer.update_history(data.reason, data.amount)
         if Settings.enable_analytics is True:
@@ -72,7 +74,10 @@ class StreamerSystem:
         # We have to estimate this as Twitch doesn't give us the amount in the WS message
         spent_estimate = streamer.channel_points - data.balance
         self._update_points_change(streamer, data.balance, "Spent")
-        logger.info(f"-{spent_estimate} -> {streamer}")
+        logger.info(
+            f"-{spent_estimate} → {streamer} - Spent",
+            extra={"emoji": ":chart_with_downwards_trend:"},
+        )
         self.event_manager.manage(
             PointsSpent(
                 timestamp=data.timestamp,
@@ -89,7 +94,10 @@ class StreamerSystem:
         :param claim_id: The id of the claim.
         """
         if Settings.logger.less is False:
-            logger.info(f"Claiming the bonus for {streamer}!")
+            logger.info(
+                f"Claiming the bonus for {streamer}!",
+                extra={"emoji": ":gift:", "event": Events.BONUS_CLAIM},
+            )
         try:
             self.twitch.gql.claim_community_points(streamer.channel_id, claim_id)
             # Only send the event if the request returns successfully
@@ -133,7 +141,17 @@ class StreamerSystem:
             target = Settings.logger.anonymiser.username(raid.target_login)
             try:
                 self.twitch.gql.join_raid(raid.raid_id)
-                logger.info(f"Joining raid from {streamer} to {target}!")
+                logger.info(
+                    f"Joining raid from {streamer} to {target}!",
+                    extra={"emoji": ":performing_arts:", "event": Events.JOIN_RAID},
+                )
+                self.event_manager.manage(
+                    JoinRaid(
+                        streamer=streamer,
+                        raid=raid,
+                        target_username=raid.target_login,
+                    )
+                )
             except RetryError as e:
                 logger.error(f"Error joining raid from {streamer} to {target}: {e}")
                 self.event_manager.manage(
@@ -157,7 +175,16 @@ class StreamerSystem:
     def moment(self, channel_id: str, moment_id: str):
         streamer = find_streamer(self.streamers, channel_id)
         if Settings.logger.less is False:
-            logger.info(f"Claiming the moment for {streamer}!")
+            logger.info(
+                f"Claiming the moment for {streamer}!",
+                extra={"emoji": ":video_camera:", "event": Events.MOMENT_CLAIM},
+            )
+            self.event_manager.manage(
+                MomentClaim(
+                    streamer=streamer,
+                    moment_id=moment_id,
+                )
+            )
         try:
             self.twitch.gql.claim_moment(moment_id)
         except RetryError as e:
@@ -173,9 +200,7 @@ class StreamerSystem:
             )
             return
 
-        self.event_manager.manage(
-            MomentClaim(streamer=streamer, moment_id=moment_id)
-        )
+        self.event_manager.manage(MomentClaim(streamer=streamer, moment_id=moment_id))
 
     # Community Goals
     def community_goal_created(
@@ -228,9 +253,7 @@ class StreamerSystem:
             streamer = find_streamer(self.streamers, recovery.channel_id)
             logger.info(f"Watch Streak recovered for {streamer}")
             streamer.watch_streak_missed_streams = set()
-            self.event_manager.manage(
-                WatchStreakRecovery(streamer=streamer)
-            )
+            self.event_manager.manage(WatchStreakRecovery(streamer=streamer))
         except KeyError:
             logger.debug(
                 f"Watch Streak Recovery for non-miner channel: {Settings.logger.anonymiser.channel_id(recovery.channel_id)}"

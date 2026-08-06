@@ -21,6 +21,8 @@ class Events(Flag):
     WATCH_STREAK_PROGRESS = auto()
     WATCH_STREAK_MISSING = auto()
     WATCH_STREAK_RECOVERY = auto()
+    #  Weekly Rewards
+    WEEKLY_REWARDS_UPDATE = auto()
     #  Predictions
     PREDICTION_EVENT_START = auto()
     PREDICTION_EVENT_UPDATE = auto()
@@ -67,7 +69,23 @@ class Events(Flag):
         | PREDICTION_REFUND
         | PREDICTION_MADE
         | PREDICTION_FILTERS
+        | PREDICTION_FAILED
     )
+
+    @staticmethod
+    def gain_for(reason: str):
+        match reason:
+            case "RAID":
+                return Events.GAIN_FOR_RAID
+            case "CLAIM":
+                return Events.GAIN_FOR_CLAIM
+            case "WATCH":
+                return Events.GAIN_FOR_WATCH
+            case "WATCH_STREAK":
+                return Events.GAIN_FOR_WATCH_STREAK
+            case _:
+                # Default to catch all type
+                return Events.GAIN_POINTS
 
     @staticmethod
     def union(events: list["Events"]) -> "Events":

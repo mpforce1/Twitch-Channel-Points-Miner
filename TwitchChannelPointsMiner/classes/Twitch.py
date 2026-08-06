@@ -45,11 +45,11 @@ from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent impor
 from TwitchChannelPointsMiner.classes.events.Event import (
     ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown,
     StreamUp, WatchStreakMissing,
-    WatchStreakProgress, WatchStreakRecovery
+    WatchStreakProgress, WatchStreakRecovery, WeeklyRewardsUpdate
 )
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
-from TwitchChannelPointsMiner.classes.gql.Integration import GQL, GQLFactory
+from TwitchChannelPointsMiner.classes.gql.Integration import GQL
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropCampaignInProgress,
@@ -140,7 +140,13 @@ class Twitch(object):
                     watch_streak_milestone=watch_streak_milestone,
                 )
                 if streak_was_missing and not streamer.stream.watch_streak_missing:
-                    logger.info(f"Detected Watch Streak for {streamer}")
+                    logger.info(
+                        f"Detected Watch Streak for {streamer}",
+                        extra={
+                            "emoji": ":rocket:",
+                            "event": Events.WATCH_STREAK_PROGRESS,
+                        },
+                    )
                     self.event_manager.manage(
                         WatchStreakProgress(streamer=streamer)
                     )
@@ -282,12 +288,24 @@ class Twitch(object):
                 reward_list.channel.self.watch_streak_milestone.missed_streams
             )
             if had_missed_streams and len(streamer.watch_streak_missed_streams) <= 0:
-                logger.info(f"Watch Streak recovered for {streamer}")
+                logger.info(
+                    f"Watch Streak recovered for {streamer}",
+                    extra={
+                        "emoji": ":ambulance:",
+                        "event": Events.WATCH_STREAK_RECOVERY,
+                    },
+                )
                 self.event_manager.manage(
                     WatchStreakRecovery(streamer=streamer)
                 )
             if not had_missed_streams and len(streamer.watch_streak_missed_streams) > 0:
-                logger.info(f"Missing Watch Streak for {streamer}")
+                logger.info(
+                    f"Missing Watch Streak for {streamer}",
+                    extra={
+                        "emoji": ":red_question_mark:",
+                        "event": Events.WATCH_STREAK_MISSING,
+                    },
+                )
                 self.event_manager.manage(
                     WatchStreakMissing(streamer=streamer)
                 )
@@ -864,7 +882,11 @@ class Twitch(object):
                         for channel_id in adding_ids
                     )
                     logger.info(
-                        f"Changing watch slots: Adding {[str(s) for s in adding]}, Dropping {[str(s) for s in dropping]}"
+                        f"Changing watch slots: Adding {[str(s) for s in adding]}, Dropping {[str(s) for s in dropping]}",
+                        extra={
+                            "emoji": ":eyes:",
+                            "event": Events.CHANGING_WATCH_SLOTS,
+                        }
                     )
                     self.event_manager.manage(
                         ChangingWatchSlots(
@@ -1260,6 +1282,13 @@ class Twitch(object):
         streamer.weekly_rewards.event_config.days_required_per_week = (
             notification.event_config.days_required_per_week
         )
+        self.event_manager.manage(
+            WeeklyRewardsUpdate(
+                streamer=streamer,
+                update_type=notification.notification_type,
+                weekly_rewards=streamer.weekly_rewards,
+            )
+        )
 
     def get_weekly_reward(self, streamer: Streamer):
         if streamer.settings.weekly_rewards:
@@ -1411,10 +1440,17 @@ class Twitch(object):
     def make_prediction(self, streamer: Streamer, event: PredictionEvent, bet: Bet):
         """
         Places a prediction on a prediction event.
+        :param streamer: The Streamer hosting the event.
         :param event: The event.
-        :param bet: The prediction.
+        :param bet: The prediction to make.
         """
-        logger.info(f"Going to complete bet for {event}")
+        logger.info(
+            f"Going to complete bet for {event}",
+            extra={
+                "emoji": ":four_leaf_clover:",
+                "event": Events.PREDICTIONS,
+            },
+        )
         try:
             response = self.gql.make_prediction(
                 event.event_id, bet.outcome_id, bet.points
@@ -1436,6 +1472,7 @@ class Twitch(object):
                 f"Failed to place bet, error: {error_code}",
                 extra={
                     "emoji": ":four_leaf_clover:",
+                    "event": Events.PREDICTIONS,
                 },
             )
             self.event_manager.manage(
