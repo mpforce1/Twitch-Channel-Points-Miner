@@ -133,10 +133,7 @@ def skip_bet(
     :return: The skip reason if one can be found.
     """
     if bet.points < 0:
-        return PredictionPointsBelowMinimum(
-            outcome_id=bet.outcome_id,
-            points=bet.points,
-        )
+        return PredictionPointsBelowMinimum(bet=bet)
 
     settings: BetSettings = streamer.settings.bet
     if settings.filter_condition is not None:
@@ -265,8 +262,8 @@ class BasicPredictor(Predictor):
         if skip_event_reason is not None:
             self.event_manager.manage(
                 PredictionFilters(
-                    channel_id=streamer.channel_id,
-                    event_id=event_id,
+                    streamer=streamer,
+                    prediction_event=event,
                     reason=skip_event_reason,
                 )
             )
@@ -275,23 +272,23 @@ class BasicPredictor(Predictor):
         if isinstance(bet, FilterReason):
             self.event_manager.manage(
                 PredictionFilters(
-                    channel_id=streamer.channel_id,
-                    event_id=event_id,
+                    streamer=streamer,
+                    prediction_event=event,
                     reason=bet,
                 )
             )
             return
         skip_bet_reason = self.skip_bet(streamer, event, bet)
         if skip_bet_reason is None:
-            self.twitch.make_prediction(event, bet)
+            self.twitch.make_prediction(streamer, event, bet)
         else:
             logger.info(
                 f"Skip betting for the event {event} because '{skip_bet_reason}'"
             )
             self.event_manager.manage(
                 PredictionFilters(
-                    channel_id=streamer.channel_id,
-                    event_id=event_id,
+                    streamer=streamer,
+                    prediction_event=event,
                     reason=skip_bet_reason,
                 )
             )
@@ -319,8 +316,8 @@ class BasicPredictor(Predictor):
             )
             self.event_manager.manage(
                 PredictionFilters(
-                    channel_id=event.channel_id,
-                    event_id=event.event_id,
+                    streamer=streamer,
+                    prediction_event=event,
                     reason=NotEnoughPoints(
                         channel_points=streamer.channel_points,
                         minimum_points=bet_settings.minimum_points,
@@ -340,8 +337,8 @@ class BasicPredictor(Predictor):
             )
             self.event_manager.manage(
                 PredictionFilters(
-                    channel_id=event.channel_id,
-                    event_id=event.event_id,
+                    streamer=streamer,
+                    prediction_event=event,
                     reason=EventTooShort(
                         prediction_time=prediction_time,
                     ),

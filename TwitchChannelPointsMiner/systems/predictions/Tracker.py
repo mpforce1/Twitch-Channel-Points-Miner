@@ -10,6 +10,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     Error,
     PredictionEventCreated,
     PredictionEventUpdated,
+    PredictionMade,
     prediction_result_for,
 )
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
@@ -43,6 +44,13 @@ class PredictionTrackingSystem(PredictionSystem):
         self.predictor = predictor
 
     def event_created(self, data: PredictionsChannel.EventCreated):
+        try:
+            streamer = find_streamer(self.streamers, data.event.channel_id)
+        except KeyError:
+            logger.debug(
+                f"Ignoring new Prediction Event for untracked Streamer {data.event.channel_id}"
+            )
+            return
         if data.event.status == "ACTIVE":
             # Ignore inactive events
             event = PredictionEvent.from_ws(data.event)
@@ -50,8 +58,8 @@ class PredictionTrackingSystem(PredictionSystem):
             self.event_manager.manage(
                 PredictionEventCreated(
                     timestamp=event.created_at,
-                    channel_id=event.channel_id,
-                    event_id=data.event.id,
+                    streamer=streamer,
+                    prediction_event=event,
                 )
             )
             self.predictor.event_created(event)
@@ -64,12 +72,15 @@ class PredictionTrackingSystem(PredictionSystem):
                 f"Ignoring update for untracked Prediction Event '{data.event.title}'"
             )
             return
+        # Don't catch the exception here, if we're tracking an event we should also be tracking the streamer
+        streamer = find_streamer(self.streamers, data.event.channel_id)
+
         event.update(data.event)
         self.event_manager.manage(
             PredictionEventUpdated(
                 timestamp=data.timestamp,
-                channel_id=event.channel_id,
-                event_id=event.event_id,
+                streamer=streamer,
+                prediction_event=event,
             )
         )
         self.predictor.event_updated(event)
@@ -80,7 +91,19 @@ class PredictionTrackingSystem(PredictionSystem):
         if event is None:
             logger.debug(f"Ignoring prediction made for {event_id}, untracked event")
             return
-        event.prediction = Prediction.from_ws(data.prediction)
+        streamer = find_streamer(self.streamers, event.channel_id)
+        old_amount = event.prediction.points if event.prediction is not None else 0
+        prediction = Prediction.from_ws(data.prediction)
+        event.prediction = prediction
+        estimated_amount = prediction.points - old_amount
+        self.event_manager.manage(
+            PredictionMade(
+                streamer=streamer,
+                prediction_event=event,
+                prediction=prediction,
+                amount=estimated_amount,
+            )
+        )
         # Analytics switch
         if Settings.enable_analytics is True:
             streamer = find_streamer(self.streamers, data.prediction.channel_id)
@@ -139,8 +162,8 @@ class PredictionTrackingSystem(PredictionSystem):
 
         prediction_result_event = prediction_result_for(
             _type=result_type,
-            channel_id=channel_id,
-            event_id=event_id,
+            streamer=streamer,
+            prediction_event=event,
         )
         if prediction_result_event is None:
             logger.error(f"Unknown prediction result type: {result_type}")

@@ -4,14 +4,10 @@ import pytz
 from emoji import emojize
 
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import (
-    PredictionEvent,
-)
 from TwitchChannelPointsMiner.classes.events.Event import (
     BonusPointsAvailable,
     BonusPointsClaim,
     ChangingWatchSlots,
-    ChannelEvent,
     ChatMention,
     CommunityGoalContribution,
     DropClaim,
@@ -31,7 +27,6 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     PointsSpent,
     PredictionEventClosed,
     PredictionEventCreated,
-    PredictionEventEvent,
     PredictionEventUpdated,
     PredictionFailed,
     PredictionFilters,
@@ -48,7 +43,6 @@ from TwitchChannelPointsMiner.classes.events.Event import (
 )
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
 from TwitchChannelPointsMiner.logger import ColorPalette
-from TwitchChannelPointsMiner.utils.Entities import find_streamer
 from TwitchChannelPointsMiner.utils.Utils import millify, oxford_comma_list
 
 Transformation = tuple[str, str | None]
@@ -70,120 +64,100 @@ def prepend_emoji(message: str, emoji: str | None):
 class DefaultStringTransformer(EventTransformer[str]):
     """Transformer that turns events into human-readable strings"""
 
-    def __init__(
-        self, streamers: list[Streamer], prediction_events: dict[str, PredictionEvent]
-    ):
-        self.streamers = streamers
-        self.prediction_events = prediction_events
-
-    def find_streamer(self, event: ChannelEvent):
-        return find_streamer(self.streamers, event.channel_id)
-
-    def find_event(self, event: PredictionEventEvent):
-        return self.prediction_events[event.event_id]
-
     def stream_up(self, event: StreamUp):
         return (
-            f"{self.find_streamer(event)} is Online!",
+            f"{event.streamer} is Online!",
             ":partying_face:",
         )
 
     def stream_down(self, event: StreamDown):
         return (
-            f"{self.find_streamer(event)} is Offline!",
+            f"{event.streamer} is Offline!",
             ":sleeping_face:",
         )
 
     def stream_view_count(self, event: StreamViewCount):
         return (
-            f"{self.find_streamer(event)} has {event.view_count} viewers",
+            f"{event.streamer} has {event.view_count} viewers",
             ":input_numbers:",
         )
 
     def bonus_points_available(self, event: BonusPointsAvailable):
         return (
-            f"Bonus Claim available for {self.find_streamer(event)}",
+            f"Bonus Claim available for {event.streamer}",
             "🪎",  # Treasure chest, currently no short code
         )
 
     def gain_points(self, event: GainPoints):
         return (
-            f"+{event.amount} → {self.find_streamer(event)} - Reason: {event.reason}.",
+            f"+{event.amount} → {event.streamer} - Reason: {event.reason}.",
             ":rocket:",
         )
 
     def watch_streak_progress(self, event: WatchStreakProgress):
         return (
-            f"Detected Watch Streak for {self.find_streamer(event)}",
+            f"Detected Watch Streak for {event.streamer}",
             ":fire:",
         )
 
     def watch_streak_missing(self, event: WatchStreakMissing):
         return (
-            f"Missing Watch Streak for {self.find_streamer(event)}",
+            f"Missing Watch Streak for {event.streamer}",
             ":red_question_mark:",
         )
 
     def watch_streak_recovery(self, event: WatchStreakRecovery):
         return (
-            f"Watch Streak recovered for {self.find_streamer(event)}",
+            f"Watch Streak recovered for {event.streamer}",
             ":ambulance:",
         )
 
     def points_spent(self, event: PointsSpent):
         return (
-            f"{event.amount} points spent for {self.find_streamer(event)}",
+            f"{event.amount} points spent for {event.streamer}",
             ":chart_with_downwards_trend:",
         )
 
     def prediction_event_created(self, event: PredictionEventCreated):
-        data = self.find_event(event)
+        prediction_event = event.prediction_event
         return (
-            f"Prediction event started for {self.find_streamer(event)} ({data.prediction_window_seconds}s): "
-            f'"{data.title}": '
-            f"[{oxford_comma_list([outcome.title for outcome in data.outcomes])}]",
+            f"Prediction event started for {event.streamer} ({prediction_event.prediction_window_seconds}s): "
+            f'"{prediction_event.title}": '
+            f"[{oxford_comma_list([outcome.title for outcome in prediction_event.outcomes])}]",
             ":four_leaf_clover:",
         )
 
     def moment_claim_available(self, event: MomentClaimAvailable):
         return (
-            f"Moment claim available for {self.find_streamer(event)}",
+            f"Moment claim available for {event.streamer}",
             ":video_camera:",
         )
 
     def drop_progress(self, event: DropProgress):
         # TODO better info once drops system reworked
-        streamer = (
-            find_streamer(self.streamers, event.channel_id)
-            if event.channel_id is not None
-            else None
-        )
+        streamer = event.streamer
         return (
-            f"Drop progress for {event.drop_id}"
+            f"Drop progress for {event.drop}"
             f"{(f' for {streamer}' if streamer is not None else '')}",
             ":package:",
         )
 
     def drop_claim_available(self, event: DropClaimAvailable):
-        streamer = (
-            find_streamer(self.streamers, event.channel_id)
-            if event.channel_id is not None
-            else None
-        )
+        streamer = event.streamer
         return (
-            f"Drop claim available for {event.drop_id}"
+            f"Drop claim available for {event.drop}"
             f"{(f' for {streamer}' if streamer is not None else '')}",
             ":package:",
         )
 
     def chat_mention(self, event: ChatMention):
         return (
-            f"{event.actor} wrote at {self.find_streamer(event)} wrote: {event.message}",
+            f"{event.actor} wrote at {event.streamer} wrote: {event.message}",
             ":speech_baloon:",
         )
 
     def gift_sub_received(self, event: GiftSubReceived):
-        streamer = self.find_streamer(event)
+        streamer = event.streamer
         gift_sub = streamer.gift_sub
         if gift_sub is None:
             raise ValueError(
@@ -204,34 +178,44 @@ class DefaultStringTransformer(EventTransformer[str]):
 
     def join_raid(self, event: JoinRaid):
         return (
-            f"Joining raid from {self.find_streamer(event)} to {event.target_username}!",
+            f"Joining raid from {event.streamer} to {event.target_username}!",
             ":performing_arts:",
         )
 
     def bonus_points_claim(self, event: BonusPointsClaim):
         return (
-            f"Claiming the bonus for {self.find_streamer(event)}!",
+            f"Claiming the bonus for {event.streamer}!",
             ":wrapped_gift:",
         )
 
     def moment_claim(self, event: MomentClaim):
         return (
-            f"Claiming the moment for {self.find_streamer(event)}!",
+            f"Claiming the moment for {event.streamer}!",
             ":video_camera:",
         )
 
     def drop_claim(self, event: DropClaim):
         return (
-            f'Claiming drop "{event.drop_description}"',
+            f'Claiming drop "{event.drop}"',
             ":package:",
         )
 
     def prediction_made(self, event: PredictionMade):
-        data = self.find_event(event)
-        outcome = data.outcome(event.outcome_id)
+        # TODO we're reacting to all predictions made generally, should we only react to predictions placed by the miner
+        data = event.prediction_event
+        outcome = data.outcome(event.prediction.outcome_id)
+        total_points = data.prediction.points if data.prediction is not None else 0
+        # A prediction can be added to multiple times,
+        # display both the amount placed this time and the total placed if this is an update
+        total_update = (
+            f", Total points placed: {total_points}"
+            if total_points != event.amount
+            else ""
+        )
         return (
-            f"Making prediction for {data.title}: "
-            f'Place {millify(event.amount)} channel points on: "{outcome.title}"',
+            f"Prediction made for {data.title}: "
+            f'Placed {millify(event.amount)} channel points on: "{outcome.title}"'
+            f"{total_update}",
             ":four_leaf_clover:",
         )
 
@@ -250,7 +234,7 @@ class DefaultStringTransformer(EventTransformer[str]):
             case EventNotActive():
                 return f"Event is not longer active: {reason.status}"
             case PredictionPointsBelowMinimum():
-                return f"Chosen stake ({reason.points}) is less than 0"
+                return f"Chosen stake ({reason.bet.points}) is less than 0"
             case SettingsFiltered():
                 return (
                     f"Filtered by your bet settings: "
@@ -261,20 +245,15 @@ class DefaultStringTransformer(EventTransformer[str]):
                 raise ValueError(f"Unhandled FilterReason: {reason}")
 
     def prediction_filters(self, event: PredictionFilters):
-        data = self.find_event(event)
+        data = event.prediction_event
         return (
-            f'Not placing a prediction on "{data.title}" for {self.find_streamer(event)}: '
+            f'Not placing a prediction on "{data.title}" for {event.streamer}: '
             f"{self._filter_reason(event.reason)}",
             ":pushpin:",
         )
 
-    def _watch_slots(self, change: list[str]):
-        return oxford_comma_list(
-            [
-                find_streamer(self.streamers, channel_id).username
-                for channel_id in change
-            ]
-        )
+    def _watch_slots(self, change: list[Streamer]):
+        return oxford_comma_list([streamer.username for streamer in change])
 
     def changing_watch_slots(self, event: ChangingWatchSlots):
         adding = (
@@ -292,12 +271,10 @@ class DefaultStringTransformer(EventTransformer[str]):
         )
 
     def community_goal_contribution(self, event: CommunityGoalContribution):
-        streamer = self.find_streamer(event)
-        goal = streamer.community_goals.get(event.goal_id, None)
-        if goal is None:
-            raise ValueError(f"No Community Goal found for id '{event.goal_id}'")
+        streamer = event.streamer
+        goal = event.goal
         return (
-            f"Contributed {event.amount} points to community goal {goal.title}",
+            f"Contributed {event.amount} points to {streamer.username}'s community goal '{goal.title}'",
             ":goal_net:",
         )
 
@@ -309,9 +286,9 @@ class DefaultStringTransformer(EventTransformer[str]):
         )
 
     def _prediction_event_state(self, event):
-        data = self.find_event(event)
+        data = event.prediction_event
         return (
-            f"Prediction event updated for {self.find_streamer(event)} "
+            f"Prediction event updated for {event.streamer} "
             f"({data.seconds_remaining(datetime.datetime.now())}s remaining): "
             f'"{data.title}"'
             f"status '{data.status}'"
@@ -332,7 +309,7 @@ class DefaultStringTransformer(EventTransformer[str]):
         )
 
     def prediction_result(self, event: PredictionResult):
-        data = self.find_event(event)
+        data = event.prediction_event
         winning_outcome = data.winning_outcome()
         if data.prediction is None:
             raise ValueError(
@@ -344,7 +321,7 @@ class DefaultStringTransformer(EventTransformer[str]):
             )
         result = data.prediction.result
         return (
-            f"Prediction event resulted for {self.find_streamer(event)}: "
+            f"Prediction event resulted for {event.streamer}: "
             f'"{data.title}": '
             f"\n\tWinning outcome: '{(winning_outcome.title if winning_outcome is not None else 'None')}'"
             f"\n\tUser prediction: '{data.outcome(data.prediction.outcome_id).title}'"

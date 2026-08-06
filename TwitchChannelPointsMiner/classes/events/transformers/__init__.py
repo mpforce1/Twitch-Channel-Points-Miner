@@ -36,9 +36,7 @@ class DefaultTransformerFactory(EventTransformerFactory):
         self.timezone = timezone
         """The timezone in which to render timestamps"""
 
-    def create(
-        self, streamers: list[Streamer], prediction_events: dict[str, PredictionEvent]
-    ):
+    def create(self):
         # First add the timestamp and a separator
         transformers: list[EventTransformer[str]] = [
             AddDateTimeTransformer(
@@ -51,5 +49,5 @@ class DefaultTransformerFactory(EventTransformerFactory):
         if self.color_palette is not None:
             transformers.append(ColorPaletteTransformer(palette=self.color_palette))
         # Finally add the message
-        transformers.append(DefaultStringTransformer(streamers, prediction_events))
+        transformers.append(DefaultStringTransformer())
         return MultiTransformer(*transformers)

@@ -26,7 +26,7 @@ class StreamSystem:
         """
         streamer = find_streamer(self.streamers, channel_id)
         streamer.stream_up = time.time()
-        self.event_manager.manage(StreamUp(channel_id=channel_id))
+        self.event_manager.manage(StreamUp(streamer=streamer))
 
     def bring_down(self, channel_id: str):
         """
@@ -36,7 +36,7 @@ class StreamSystem:
         streamer = find_streamer(self.streamers, channel_id)
         if streamer.is_online:
             streamer.set_offline()
-            self.event_manager.manage(StreamDown(channel_id=channel_id))
+            self.event_manager.manage(StreamDown(streamer=streamer))
 
     def update_view_count(self, channel_id: str, view_count: int):
         """
@@ -48,7 +48,7 @@ class StreamSystem:
         if streamer.stream_up_elapsed():
             self.twitch.check_streamer_online(streamer)
         self.event_manager.manage(
-            StreamViewCount(channel_id=channel_id, view_count=view_count)
+            StreamViewCount(streamer=streamer, view_count=view_count)
         )
 
 

@@ -93,7 +93,7 @@ class DefaultEventManagerFactory(EventManagerFactory):
                 priority_manager.set_priority_handler(
                     ConsoleHandlerFactory(
                         configuration=self.console_configuration
-                    ).create(streamers=streamers, prediction_events=prediction_events)
+                    ).create()
                 )
                 return priority_manager
 

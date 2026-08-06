@@ -75,7 +75,7 @@ class PubSubHandler(MessageListener):
                 case PredictionsUser.PredictionMade():
                     self.prediction_system.user_prediction_made(data)
                 case PredictionsUser.PredictionResult():
-                    self.prediction_system.prediction_result(data)
+                    self.prediction_system.user_prediction_result(data)
                 case CommunityPointsChannel.CommunityGoalCreated():
                     self.streamer_system.community_goal_created(
                         message.channel_id, data
