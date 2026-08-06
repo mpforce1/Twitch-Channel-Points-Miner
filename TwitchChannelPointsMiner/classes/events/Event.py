@@ -2,6 +2,7 @@ import abc
 import datetime
 from dataclasses import dataclass, field
 
+from TwitchChannelPointsMiner.classes.StreamerSelector import weekly_rewards
 from TwitchChannelPointsMiner.classes.entities.Bet import FilterCondition
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
@@ -13,6 +14,7 @@ from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent impor
     PredictionEvent,
 )
 from TwitchChannelPointsMiner.classes.events.Events import Events
+from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import WeeklyRewards
 from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
 
@@ -109,6 +111,11 @@ class WatchStreakMissing(ChannelEvent):
 class WatchStreakRecovery(ChannelEvent):
     type: Events = Events.WATCH_STREAK_RECOVERY
 
+@dataclass(kw_only=True)
+class WeeklyRewardsUpdate(ChannelEvent):
+    weekly_rewards: WeeklyRewards
+    update_type: str
+    type: Events = Events.WEEKLY_REWARDS_UPDATE
 
 @dataclass(kw_only=True)
 class PointsSpent(ChannelEvent):
@@ -186,7 +193,9 @@ class DropProgress(DropEvent):
 
 
 @dataclass(kw_only=True)
-class DropClaimAvailable(DropEvent):
+class DropClaimAvailable(Event):
+    streamer: Streamer | None
+    drop: Drop | str
     type: Events = Events.DROP_CLAIM_AVAILABLE
 
 

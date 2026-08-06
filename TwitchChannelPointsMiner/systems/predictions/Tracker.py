@@ -1,5 +1,6 @@
 import logging
 
+from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.entities.predictions.Prediction import Prediction
@@ -13,6 +14,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     PredictionMade,
     prediction_result_for,
 )
+from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.websocket.data import (
     PredictionsChannel,
@@ -55,6 +57,14 @@ class PredictionTrackingSystem(PredictionSystem):
             # Ignore inactive events
             event = PredictionEvent.from_ws(data.event)
             self.prediction_events[event.event_id] = event
+            logger.info(
+                f"Prediction event started for {streamer}: "
+                f"{event.describe(Settings.logger.anonymiser.streamer_username(streamer))}",
+                extra={
+                    "emoji": ":four_leaf_clover:",
+                    "event": Events.PREDICTION_EVENT_START,
+                }
+            )
             self.event_manager.manage(
                 PredictionEventCreated(
                     timestamp=event.created_at,

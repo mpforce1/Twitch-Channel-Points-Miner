@@ -40,6 +40,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     WatchStreakMissing,
     WatchStreakProgress,
     WatchStreakRecovery,
+    WeeklyRewardsUpdate,
 )
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
 from TwitchChannelPointsMiner.logger import ColorPalette
@@ -110,6 +111,25 @@ class DefaultStringTransformer(EventTransformer[str]):
         return (
             f"Watch Streak recovered for {event.streamer}",
             ":ambulance:",
+        )
+
+    def weekly_rewards_update(self, event: WeeklyRewardsUpdate):
+        emojis = [
+            ":seedling:",
+            ":potted_plant:",
+            ":wilted_flower:",
+            ":rose:",
+            ":bouquet:",
+        ]
+        streamer = event.streamer
+        rewards = event.weekly_rewards
+        current_tier = event.weekly_rewards.current_reward.tier
+        # Default emoji for if Twitch starts doing longer events
+        emoji = emojis[current_tier] if current_tier < len(emojis) else ":calendar:"
+        return (
+            f"Weekly Reward update for {streamer}: {event.update_type}. "
+            f"{rewards.days_visited_this_week}/{rewards.event_config.days_required_per_week} days visited this week.",
+            emoji,
         )
 
     def points_spent(self, event: PointsSpent):
@@ -354,6 +374,8 @@ class DefaultStringTransformer(EventTransformer[str]):
                 return self.watch_streak_missing(event)
             case WatchStreakRecovery():
                 return self.watch_streak_recovery(event)
+            case WeeklyRewardsUpdate():
+                return self.weekly_rewards_update(event)
             case PointsSpent():
                 return self.points_spent(event)
             case PredictionEventCreated():

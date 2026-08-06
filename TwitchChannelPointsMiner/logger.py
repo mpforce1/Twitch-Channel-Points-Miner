@@ -236,7 +236,7 @@ class GlobalFormatter(logging.Formatter):
 
             if self.settings.colored is True:
                 record.msg = (
-                    f"{self.settings.color_palette.get(record.event)}{record.msg}"
+                    f"{self.settings.color_palette.get(record.event.name)}{record.msg}"
                 )
         return super().format(record)
 

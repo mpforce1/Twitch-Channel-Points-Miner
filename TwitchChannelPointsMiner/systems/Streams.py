@@ -50,6 +50,3 @@ class StreamSystem:
         self.event_manager.manage(
             StreamViewCount(streamer=streamer, view_count=view_count)
         )
-
-
-
