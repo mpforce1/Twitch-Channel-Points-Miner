@@ -1,10 +1,7 @@
 import abc
 
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import (
-    PredictionEvent,
-)
 from TwitchChannelPointsMiner.classes.events.Event import Event
+from TwitchChannelPointsMiner.logger import LoggerSettings
 
 
 class EventTransformer[Result](abc.ABC):
@@ -22,5 +19,5 @@ class EventTransformer[Result](abc.ABC):
 
 class EventTransformerFactory[Result](abc.ABC):
     @abc.abstractmethod
-    def create(self) -> EventTransformer[Result]:
+    def create(self, settings: LoggerSettings) -> EventTransformer[Result]:
         pass

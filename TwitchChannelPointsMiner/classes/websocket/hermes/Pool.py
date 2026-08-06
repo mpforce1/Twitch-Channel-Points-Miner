@@ -56,6 +56,9 @@ class HermesWebSocketPool(WebSocketPool, HermesWebSocketListener):
         self.__lock = threading.Lock()
         """Lock to prevent improper variable access in a multithreaded context."""
 
+    def add_listener(self, listener: MessageListener):
+        self.pubsub_message_listeners.append(listener)
+
     def topic(self, subscription_id: str) -> PubsubTopic | None:
         """
         Returns the PubSubTopic for the given subscription id or None if the subscription does not exist.

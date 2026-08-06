@@ -1,6 +1,8 @@
 import abc
 
+from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
+from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 
 
 class WebSocketPool(abc.ABC):
@@ -17,6 +19,14 @@ class WebSocketPool(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def add_listener(self, listener: MessageListener):
+        """
+        Adds a listener to this pool
+        :param listener: The listener to add
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def submit(self, topic: PubsubTopic):
         """
         Submits the given topic to an available client.
@@ -28,3 +38,9 @@ class WebSocketPool(abc.ABC):
     def check_stale_connections(self):
         """Finds any stale clients, i.e. no recent ping, and reconnects them."""
         raise NotImplementedError()
+
+
+class WebSocketPoolFactory(abc.ABC):
+    @abc.abstractmethod
+    def create(self, twitch: Twitch, use_hermes: bool) -> WebSocketPool:
+        pass

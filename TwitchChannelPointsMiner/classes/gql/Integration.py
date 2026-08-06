@@ -791,7 +791,7 @@ class GQL:
         return self.post_gql_request_single(
             GQLOperations.FilterableVideoTower_Videos["operationName"],
             json_data,
-            self.parser.parse_filterable_video_tower_videos
+            self.parser.parse_filterable_video_tower_videos,
         )
 
     def clips(
@@ -818,20 +818,17 @@ class GQLFactory:
 
     def __init__(
         self,
-        attempt_strategy: AttemptStrategy | None = None,
         parser: Parser | None = None,
         post_request: PostRequest | None = None,
     ):
-        self.attempt_strategy = attempt_strategy
         self.parser = parser
         self.post_request = post_request
 
-    def create(self, client_session: ClientSession) -> GQL:
+    def create(self, client_session: ClientSession, strategy: AttemptStrategy | None) -> GQL:
         """
         Creates a new GQL instance.
         :param client_session: The ClientSession for the instance.
+        :param strategy: The Attempt Strategy to use.
         :return: The instance.
         """
-        return GQL(
-            client_session, self.attempt_strategy, self.parser, self.post_request
-        )
+        return GQL(client_session, strategy, self.parser, self.post_request)

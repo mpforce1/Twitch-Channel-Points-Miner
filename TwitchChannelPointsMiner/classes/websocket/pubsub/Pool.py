@@ -35,6 +35,9 @@ class PubSubWebSocketPool(WebSocketPool):
     The two limits above are likely to be relaxed for approved third-party applications, as we start to better understand third-party requirements.
     """
 
+    def add_listener(self, listener: MessageListener):
+        self.listeners.append(listener)
+
     def submit(self, topic):
         # Check if we need to create a new WebSocket instance
         if self.ws == [] or len(self.ws[-1].topics) >= 50:

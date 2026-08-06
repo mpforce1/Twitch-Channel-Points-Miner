@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import signal
+import string
 import sys
 import threading
 import time
@@ -11,29 +12,22 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
+from secrets import token_hex
 from typing import Literal
 
-from TwitchChannelPointsMiner.classes.events.Events import Events
-from TwitchChannelPointsMiner.classes.events.handlers.Console import ConsoleConfiguration
-from TwitchChannelPointsMiner.classes.events.managers.Ignore import IgnoreEventManager
-import TwitchChannelPointsMiner.classes.websocket.hermes.data as hermes_data
 from TwitchChannelPointsMiner.classes import WatchStreakRecovery, WeeklyRewardsProgressor
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
+from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings, StreamerSource
-from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerThreadFactory
+from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunnerFactory, SlottedTaskRunnerThreadFactory
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
-    NestedSelector,
     StreamerSelector,
-    PrioritySelector,
-    drops,
-    order,
-    watch_session,
-    watch_streak,
-    weekly_rewards as weekly_rewards_selector,
+    StreamerSelectorFactory,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
+from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
@@ -41,17 +35,17 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
 )
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import Error
-from TwitchChannelPointsMiner.classes.events.Handler import EventHandler, EventHandlerFactory
-from TwitchChannelPointsMiner.classes.events.Manager import EventManager, EventManagerFactory
-from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer, EventTransformerFactory
+from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
+from TwitchChannelPointsMiner.classes.events.Manager import EventManagerFactory
+from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformerFactory
 from TwitchChannelPointsMiner.classes.events.handlers.Hook import EventHookAdapter
-from TwitchChannelPointsMiner.classes.events.managers import DefaultEventManagerFactory
+from TwitchChannelPointsMiner.classes.events.managers.Basic import BasicEventManagerFactory
 from TwitchChannelPointsMiner.classes.events.transformers import DefaultTransformerFactory
-from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory, GQL
+from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
+from TwitchChannelPointsMiner.classes.websocket.Factory import DefaultWebSocketPoolFactory
+from TwitchChannelPointsMiner.classes.websocket.Pool import WebSocketPoolFactory
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
-from TwitchChannelPointsMiner.classes.websocket.hermes import HermesWebSocketPool
-from TwitchChannelPointsMiner.classes.websocket.pubsub import PubSubWebSocketPool
-from TwitchChannelPointsMiner.constants import HERMES_WEBSOCKET, CLIENT_ID_WEB
+from TwitchChannelPointsMiner.constants import CLIENT_ID, CLIENT_VERSION
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers
 from TwitchChannelPointsMiner.systems.Notifications import NotificationsSystem
 from TwitchChannelPointsMiner.systems.Streamers import StreamerSystem
@@ -68,6 +62,7 @@ from TwitchChannelPointsMiner.utils import (
     AttemptStrategy,
     interruptible_sleep,
 )
+from TwitchChannelPointsMiner.utils.Entities import find_streamer
 from TwitchChannelPointsMiner.utils.Utils import interruptible_repeating_task, normalise_username
 
 # Suppress:
@@ -91,6 +86,61 @@ logging.getLogger("seleniumwire").setLevel(logging.ERROR)
 logging.getLogger("websocket").setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
+
+
+class Factories:
+    """Simple container for miner factories"""
+
+    def __init__(
+        self,
+        streamer_selector: StreamerSelectorFactory | None = None,
+        runner_factory: SlottedTaskRunnerFactory | None = None,
+        gql: GQLFactory | None = None,
+        ws_pool: WebSocketPoolFactory | None = None,
+        weekly_rewards: (
+            WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory | None
+        ) = None,
+        watch_streak_recovery: (
+            WatchStreakRecovery.WatchStreakRecoveryFactory | None
+        ) = None,
+        event_manager: EventManagerFactory | None = None,
+        default_event_transformer: EventTransformerFactory[str] | None = None,
+    ):
+        # Setup defaults for any None value
+        self.streamer_selector = (
+            streamer_selector
+            if streamer_selector is not None
+            else StreamerSelectorFactory()
+        )
+        self.runner_factory = (
+            runner_factory
+            if runner_factory is not None
+            else SlottedTaskRunnerThreadFactory()
+        )
+        self.gql = gql if gql is not None else GQLFactory()
+        self.ws_pool = ws_pool if ws_pool is not None else DefaultWebSocketPoolFactory()
+        self.weekly_rewards = (
+            weekly_rewards
+            if weekly_rewards is not None
+            else WeeklyRewardsProgressor.BasicWeeklyRewardsProgressorFactory(
+                runner_factory=self.runner_factory
+            )
+        )
+        self.watch_streak_recovery = (
+            watch_streak_recovery
+            if watch_streak_recovery is not None
+            else WatchStreakRecovery.BasicWatchStreakRecoveryFactory(
+                runner_factory=self.runner_factory
+            )
+        )
+        self.event_manager = (
+            event_manager if event_manager is not None else BasicEventManagerFactory()
+        )
+        self.default_event_transformer = (
+            default_event_transformer
+            if default_event_transformer is not None
+            else DefaultTransformerFactory()
+        )
 
 
 class TwitchChannelPointsMiner:
@@ -132,23 +182,23 @@ class TwitchChannelPointsMiner:
         # Default values for all streamers
         streamer_settings: StreamerSettings = StreamerSettings(),
         # GQL Integration
-        gql: GQL | AttemptStrategy | GQLFactory | None = None,
+        gql: AttemptStrategy | None = None,
         # True if we want to use the new Hermes WebSocket API
         use_hermes: bool = False,
         # Weekly Rewards Progression
         weekly_rewards: (
-            WeeklyRewardsProgressor.BasicConfiguration | WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory | Literal[False] | None
+            WeeklyRewardsProgressor.BasicConfiguration | Literal[False] | None
         ) = None,
         # Watch Streak Recovery
         watch_streak_recovery: (
-            WatchStreakRecovery.BasicConfiguration | WatchStreakRecovery.WatchStreakRecoveryFactory | Literal[False] | None
+            WatchStreakRecovery.BasicConfiguration | Literal[False] | None
         ) = None,
         # Event Management
-        event_manager: EventManagerFactory | EventManager | Literal[False] | None = False,
-        # Default event to string transformer for event handlers
-        default_event_transformer: EventTransformerFactory[str] | EventTransformer[str] | None = None,
+        event_manager: bool = False,
         # Event Handlers
-        handlers: list[EventHandler | EventHandlerFactory] | None = None,
+        handlers: list[EventHandler] | None = None,
+        # Factories
+        factories: Factories | None = None,
     ):
         # Validate the user has changed default username and password
         startup_error = None
@@ -209,65 +259,28 @@ class TwitchChannelPointsMiner:
         # user_agent = get_user_agent("FIREFOX")
         user_agent = get_user_agent("CHROME")
 
-        if gql is None:
-            # Use the default factory
-            gql = GQLFactory()
-        elif isinstance(gql, AttemptStrategy):
-            # Convenience for the expected most common use case where gql is provided
-            gql = GQLFactory(attempt_strategy=gql)
-        elif not isinstance(gql, GQLFactory):
-            # Invalid argument type
-            raise ValueError(f"gql must be an instance of be one of None, AttemptStrategy, or GQLFactory")
-
-        # Create these here as they're needed now
+        # State objects
         self.streamers: list[Streamer] = []
         self.prediction_events: dict[str, PredictionEvent] = dict()
         self.background_tasks: list[threading.Thread] = []
 
+        # Factory setup
+        factories = factories if factories is not None else Factories()
+
         # Default event transformer
-        if not isinstance(default_event_transformer, EventTransformer):
-            if default_event_transformer is None:
-                default_event_transformer = DefaultTransformerFactory(
-                    logger_settings.color_palette,
-                    logger_settings.less,
-                    logger_settings.time_zone,
-                )
-            default_event_transformer = default_event_transformer.create()
+        default_event_transformer = factories.default_event_transformer.create(logger_settings)
 
         # Set up event manager
-        self.event_manager: EventManager
-        if event_manager is False:
-            # Disable event management
-            self.event_manager = IgnoreEventManager()
-        elif isinstance(event_manager, EventManager):
-            # Use provided manager
-            self.event_manager = event_manager
-        else:
-            # Factory setup
-            if event_manager is None:
-                # Use default values + values from logger settings
-                event_manager_factory = DefaultEventManagerFactory(
-                    console_configuration=ConsoleConfiguration(
-                        events=Events.default(),
-                        transformer=DefaultTransformerFactory(
-                            color_palette=logger_settings.color_palette,
-                            less=logger_settings.less,
-                            timezone=logger_settings.time_zone,
-                        ),
-                    )
-                )
-            else:
-                # Use provider factory
-                event_manager_factory = event_manager
-            self.event_manager = event_manager_factory.create(
-                self.background_tasks, self.streamers, self.prediction_events
-            )
+        self.event_manager = factories.event_manager.create(
+            config=event_manager,
+            background_tasks=self.background_tasks,
+            streamers=self.streamers,
+            prediction_events=self.prediction_events,
+        )
 
         # Add handlers to event manager
         if handlers is not None:
             for handler in handlers:
-                if isinstance(handler, EventHandlerFactory):
-                    handler = handler.create()
                 self.event_manager.add_handler(handler)
 
         # Add hooks to event manager
@@ -279,131 +292,61 @@ class TwitchChannelPointsMiner:
                 )
             )
 
-        # Set up Twitch API
+        # Client session
+        device_id = "".join(
+            random.choice(string.ascii_letters + string.digits) for _ in range(32)
+        )
+        twitch_login = TwitchLogin(
+            CLIENT_ID, device_id, username, user_agent, password=password
+        )
+        client_session_id = token_hex(16)
+        client_session = ClientSession(
+            login=twitch_login,
+            user_agent=user_agent,
+            version=CLIENT_VERSION,
+            device_id=device_id,
+            session_id=client_session_id,
+            version_outdated=True,
+        )
+
+        # GQL API
+        gql_api = factories.gql.create(client_session=client_session, strategy=gql)
+
+        # Twitch API
         self.twitch = Twitch(
             event_manager=self.event_manager,
-            username=self.username,
-            user_agent=user_agent,
-            password=password,
-            gql_factory=gql
+            username=username,
+            client_session=client_session,
+            gql=gql_api,
         )
 
-        self.weekly_rewards_factory: (
-            WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory | None
-        )
-        if weekly_rewards is None:
-            # Default factory
-            runner_factory = SlottedTaskRunnerThreadFactory()
-            self.weekly_rewards_factory = (
-                WeeklyRewardsProgressor.BasicWeeklyRewardsProgressorFactory(
-                    runner_factory=runner_factory,
-                )
-            )
-        elif weekly_rewards is False:
-            # Disable
-            self.weekly_rewards_factory = None
-        elif isinstance(weekly_rewards, WeeklyRewardsProgressor.BasicConfiguration):
-            # Default factory with custom config
-            runner_factory = SlottedTaskRunnerThreadFactory(
-                max_concurrent=weekly_rewards.max_concurrent,
-                loop_interval_seconds=weekly_rewards.interval_seconds,
-            )
-            self.weekly_rewards_factory = (
-                WeeklyRewardsProgressor.BasicWeeklyRewardsProgressorFactory(
-                    runner_factory=runner_factory,
-                    config=weekly_rewards,
-                )
-            )
-        elif isinstance(
-            weekly_rewards, WeeklyRewardsProgressor.WeeklyRewardsProgressorFactory
-        ):
-            # Custom factory
-            self.weekly_rewards_factory = weekly_rewards
-        else:
-            raise ValueError(
-                "weekly_rewards must be an instance of one of None, False, BasicConfiguration, or WeeklyRewardsProgressorFactory"
-            )  # pyright: ignore
+        # WebSockets
+        self.ws_pool = factories.ws_pool.create(self.twitch, use_hermes)
 
-        self.watch_streak_recovery_factory: (
-            WatchStreakRecovery.WatchStreakRecoveryFactory | None
+        # Weekly reward progression
+        factories.weekly_rewards.create(
+            config=weekly_rewards,
+            twitch=self.twitch,
+            streamers=self.streamers,
+            background_tasks=self.background_tasks,
+            event_manager=self.event_manager,
         )
-        if watch_streak_recovery is None:
-            # Default factory
-            runner_factory = SlottedTaskRunnerThreadFactory()
-            self.watch_streak_recovery_factory = (
-                WatchStreakRecovery.BasicWatchStreakRecoveryFactory(
-                    runner_factory=runner_factory
-                )
-            )
-        elif watch_streak_recovery is False:
-            # Disable
-            self.watch_streak_recovery_factory = None
-        elif isinstance(watch_streak_recovery, WatchStreakRecovery.BasicConfiguration):
-            # Default factory with custom config
-            runner_factory = SlottedTaskRunnerThreadFactory(
-                max_concurrent=watch_streak_recovery.max_concurrent,
-                loop_interval_seconds=watch_streak_recovery.interval_seconds,
-            )
-            self.watch_streak_recovery_factory = (
-                WatchStreakRecovery.BasicWatchStreakRecoveryFactory(
-                    runner_factory=runner_factory, config=watch_streak_recovery
-                )
-            )
-        elif isinstance(
-            watch_streak_recovery, WatchStreakRecovery.WatchStreakRecoveryFactory
-        ):
-            # Custom factory
-            self.watch_streak_recovery_factory = watch_streak_recovery
-        else:
-            raise ValueError(
-                f"watch_streak_recovery must be an instance of one of None, False, BasicConfiguration, or WatchStreakRecoveryFactory"
-            )
+
+        # Watch streak recovery
+        factories.watch_streak_recovery.create(
+            config=watch_streak_recovery,
+            twitch=self.twitch,
+            streamers=self.streamers,
+            background_tasks=self.background_tasks,
+            event_manager=self.event_manager,
+        )
 
         self.claim_drops_startup = claim_drops_startup
 
-        # Convert priority setting into a StreamerSelector
-        if priority is None:
-            self.streamer_selector = NestedSelector(
-                [
-                    watch_session(),
-                    watch_streak(),
-                    weekly_rewards_selector(),
-                    drops(),
-                    order(),
-                ]
-            )
-        elif isinstance(priority, Priority):
-            self.streamer_selector = PrioritySelector([priority])
-        elif isinstance(priority, StreamerSelector):
-            self.streamer_selector = priority
-        elif isinstance(priority, list):
-            is_list_priority = True
-            is_list_selector = True
-            for item in priority:
-                if isinstance(item, Priority):
-                    is_list_selector = False
-                elif isinstance(item, StreamerSelector):
-                    is_list_priority = False
-            if is_list_priority:
-                self.streamer_selector = PrioritySelector(
-                    priority  # pyright: ignore [reportArgumentType]
-                )
-            elif is_list_selector:
-                self.streamer_selector = NestedSelector(
-                    priority  # pyright: ignore [reportArgumentType]
-                )
-            else:
-                logger.error(
-                    f"Unable to parse priority list, cannot contain a mix of Priority and StreamerSelector."
-                )
-                return
-        else:
-            logger.error(
-                f"priority must be an instance of one of None, Priority, StreamerSelector, list[Priority], or list[StreamerSelector]"
-            )  # pyright: ignore
+        # Streamer Selector
+        self.streamer_selector = factories.streamer_selector.create(priority)
 
-        self.ws_pool = None
-
+        # Remaining state
         self.session_id = str(uuid.uuid4())
         self.running = False
         self.start_datetime = None
@@ -411,6 +354,8 @@ class TwitchChannelPointsMiner:
 
         # Reset logging
         logging.basicConfig(handlers=[], force=True)
+        # Setup logging based on settings
+        # TODO factory setup
         self.logs_file, self.queue_listener = configure_loggers(
             self.username, logger_settings
         )
@@ -442,6 +387,7 @@ class TwitchChannelPointsMiner:
                 extra={"force_console": True},
             )
 
+        # Setup termination signals for miner shutdown
         for sign in [signal.SIGINT, signal.SIGSEGV, signal.SIGTERM]:
             signal.signal(sign, self.end_signal)
 
@@ -731,17 +677,8 @@ class TwitchChannelPointsMiner:
                     parser=WebSocketJsonParser(),
                 )
             ]
-            if Settings.use_hermes:
-                self.ws_pool = HermesWebSocketPool(
-                    url=f"{HERMES_WEBSOCKET}?clientId={CLIENT_ID_WEB}",
-                    twitch=self.twitch,
-                    request_encoder=hermes_data.JsonEncoder(),
-                    response_decoder=hermes_data.JsonDecoder(),
-                    listeners=pubsub_handlers,
-                )
-            else:
-                self.ws_pool = PubSubWebSocketPool(twitch=self.twitch, listeners=pubsub_handlers)
-
+            for listener in pubsub_handlers:
+                self.ws_pool.add_listener(listener)
             self.ws_pool.start()
 
             # Subscribe to community-points-user. Get update for points spent or gains
@@ -782,8 +719,6 @@ class TwitchChannelPointsMiner:
 
             # viewer-milestones gives us information about recovered streaks
             self.ws_pool.submit(PubsubTopic("viewer-milestones", user_id=user_id))
-
-            progress_weekly_rewards = False
 
             for streamer in self.streamers:
                 self.ws_pool.submit(
@@ -862,35 +797,6 @@ class TwitchChannelPointsMiner:
             context_refresh_thread.name = "Refresh channel points contexts"
             context_refresh_thread.start()
             self.background_tasks.append(context_refresh_thread)
-
-            # Periodic task to refresh Weekly Rewards
-            if progress_weekly_rewards:
-                # Progressor
-                if self.weekly_rewards_factory is not None:
-                    weekly_rewards_progressor_thread = (
-                        self.weekly_rewards_factory.create(
-                            self.twitch,
-                            self.streamers,
-                            self.event_manager
-                        )
-                    )
-                    weekly_rewards_progressor_thread.name = "Weekly Rewards Progressor"
-                    weekly_rewards_progressor_thread.start()
-                    self.background_tasks.append(weekly_rewards_progressor_thread)
-
-            # Watch Streak Recovery
-            if (
-                any(streamer.settings.watch_streak for streamer in self.streamers)
-                and self.watch_streak_recovery_factory is not None
-            ):
-                watch_streak_recovery_thread = (
-                    self.watch_streak_recovery_factory.create(
-                        self.twitch, self.streamers, self.event_manager
-                    )
-                )
-                watch_streak_recovery_thread.name = "Watch Streak Recovery"
-                watch_streak_recovery_thread.start()
-                self.background_tasks.append(watch_streak_recovery_thread)
 
             # General streamer state
             sync_streamer_state_period = timedelta(minutes=60).total_seconds()
@@ -1004,24 +910,28 @@ class TwitchChannelPointsMiner:
         if not Settings.logger.less and self.prediction_events != {}:
             print("")
             for event_id in self.prediction_events:
-                event = self.prediction_events[event_id]
-                if (
-                        event.bet_confirmed is True
-                        and event.streamer.settings.make_predictions is True
-                ):
-                    logger.info(
-                        f"{event.streamer.settings.bet}",
-                        extra={"emoji": ":wrench:"},
-                    )
-                    if event.streamer.settings.bet.filter_condition is not None:
+                try:
+                    event = self.prediction_events[event_id]
+                    streamer = find_streamer(self.streamers, event_id)
+                    if (
+                            event.prediction is not None
+                            and streamer.settings.make_predictions is True
+                    ):
                         logger.info(
-                            f"{event.streamer.settings.bet.filter_condition}",
-                            extra={"emoji": ":pushpin:"},
+                            f"{streamer.settings.bet}",
+                            extra={"emoji": ":wrench:"},
                         )
-                    logger.info(
-                        f"{event.print_recap()}",
-                        extra={"emoji": ":bar_chart:"},
-                    )
+                        if streamer.settings.bet.filter_condition is not None:
+                            logger.info(
+                                f"{streamer.settings.bet.filter_condition}",
+                                extra={"emoji": ":pushpin:"},
+                            )
+                        logger.info(
+                            f"{event.describe_result(streamer.username)}",
+                            extra={"emoji": ":bar_chart:"},
+                        )
+                except KeyError:
+                    pass
 
         print("")
         for streamer_index in range(0, len(self.streamers)):

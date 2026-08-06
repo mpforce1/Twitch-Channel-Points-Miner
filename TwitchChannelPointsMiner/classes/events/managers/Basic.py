@@ -10,19 +10,25 @@ from TwitchChannelPointsMiner.classes.events.Manager import (
     EventManager,
     EventManagerFactory,
 )
+from TwitchChannelPointsMiner.classes.events.managers.Ignore import IgnoreEventManager
 
 
-class IgnoreEventManager(EventManager):
-    """Event Manager that ignores all events"""
+class BasicEventManager(EventManager):
+    """Basic Event Manager implementation that maintains a list of handlers and passes events to each in turn"""
 
-    def manage(self, event: Event):
-        pass
+    def __init__(self, handlers: list[EventHandler] | None = None):
+        self.handlers = handlers if handlers is not None else list[EventHandler]()
 
     def add_handler(self, handler: EventHandler):
-        pass
+        self.handlers.append(handler)
+
+    def manage(self, event: Event):
+        for handler in self.handlers:
+            if event.type in handler.handles():
+                handler.handle(event)
 
 
-class IgnoreEventManagerFactory(EventManagerFactory):
+class BasicEventManagerFactory(EventManagerFactory):
     def create(
         self,
         config: bool,
@@ -30,4 +36,4 @@ class IgnoreEventManagerFactory(EventManagerFactory):
         streamers: list[Streamer],
         prediction_events: dict[str, PredictionEvent],
     ) -> EventManager:
-        return IgnoreEventManager()
+        return BasicEventManager() if config else IgnoreEventManager()

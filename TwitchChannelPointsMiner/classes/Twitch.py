@@ -8,11 +8,9 @@ import logging
 import os
 import random
 import re
-import string
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
-from secrets import choice, token_hex
 from typing import Callable
 
 import requests
@@ -33,8 +31,6 @@ from TwitchChannelPointsMiner.classes.Settings import (
     Settings,
 )
 from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
-from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
-from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
@@ -44,14 +40,16 @@ from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import (
-    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown, StreamUp, WatchStreakMissing,
+    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown,
+    StreamUp, WatchStreakMissing,
     WatchStreakProgress, WatchStreakRecovery
 )
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
-from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
+from TwitchChannelPointsMiner.classes.gql.Integration import GQL, GQLFactory
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropCampaignInProgress,
@@ -62,8 +60,6 @@ from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower imp
 from TwitchChannelPointsMiner.classes.gql.data.response.RewardList import RewardListResponse
 from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.constants import (
-    CLIENT_ID,
-    CLIENT_VERSION,
     URL,
 )
 from TwitchChannelPointsMiner.utils import (
@@ -92,10 +88,9 @@ class Twitch(object):
     def __init__(
         self,
         event_manager: EventManager,
-        username,
-        user_agent,
-        password=None,
-        gql_factory: GQLFactory | None = None,
+        username: str,
+        client_session: ClientSession,
+        gql: GQL,
     ):
         self.event_manager = event_manager
         cookies_path = os.path.join(Path().absolute(), "cookies")
@@ -104,23 +99,8 @@ class Twitch(object):
         self.twilight_build_id_pattern = re.compile(
             r'window\.__twilightBuildID\s*=\s*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"'
         )
-        device_id = "".join(
-            choice(string.ascii_letters + string.digits) for _ in range(32)
-        )
-        twitch_login = TwitchLogin(
-            CLIENT_ID, device_id, username, user_agent, password=password
-        )
-        client_session_id = token_hex(16)
-        self.client_session = ClientSession(
-            login=twitch_login,
-            user_agent=user_agent,
-            version=CLIENT_VERSION,
-            device_id=device_id,
-            session_id=client_session_id,
-            version_outdated=True,
-        )
-        gql_factory = gql_factory if gql_factory is not None else GQLFactory()
-        self.gql = gql_factory.create(self.client_session)
+        self.client_session = client_session
+        self.gql = gql
         self.running = True
 
     def login(self):
@@ -1327,7 +1307,7 @@ class Twitch(object):
             }
 
         if community_points.available_claim is not None:
-            self.claim_bonus(streamer, community_points.available_claim.id)
+            self.gql.claim_community_points(streamer.channel_id, community_points.available_claim.id)
 
         if streamer.settings.community_goals is True:
             self.contribute_to_community_goals(streamer)
