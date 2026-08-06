@@ -80,6 +80,10 @@ class Events(Flag):
         return Events.union([e for e in Events])
 
     @staticmethod
+    def none():
+        return Events.all() & ~Events.all()
+
+    @staticmethod
     def default():
         """
         Gets a union of Events that's all Events except a few less useful events.

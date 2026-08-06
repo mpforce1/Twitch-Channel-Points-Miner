@@ -54,6 +54,7 @@ class DefaultEventManagerFactory(EventManagerFactory):
 
     def create(
         self,
+        config: bool,
         background_tasks: list[Thread],
         streamers: list[Streamer],
         prediction_events: dict[str, PredictionEvent],

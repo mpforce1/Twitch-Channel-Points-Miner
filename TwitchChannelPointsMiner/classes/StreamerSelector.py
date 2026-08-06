@@ -518,6 +518,7 @@ def sort_oldest_stream(streamer: Streamer):
         else 0
     )
 
+
 def sort_newest_stream(streamer: Streamer):
     return -sort_oldest_stream(streamer)
 
@@ -589,3 +590,55 @@ def group(
     if selector is None:
         selector = order()
     return PriorityGroupSelector(streamers=streamers, selector=selector)
+
+
+class StreamerSelectorFactory:
+    def create(
+        self,
+        priority: (
+            None | Priority | list[Priority] | StreamerSelector | list[StreamerSelector]
+        ),
+    ) -> StreamerSelector:
+        # Convert priority setting into a StreamerSelector
+        if priority is None:
+            # Default priorities
+            return NestedSelector(
+                [
+                    watch_session(),
+                    watch_streak(),
+                    weekly_rewards(),
+                    drops(),
+                    order(),
+                ]
+            )
+        elif isinstance(priority, Priority):
+            # Priority -> PrioritySelector
+            return PrioritySelector([priority])
+        elif isinstance(priority, StreamerSelector):
+            # Already a selector
+            return priority
+        elif isinstance(priority, list):
+            # Check which type of list we have
+            is_list_priority = True
+            is_list_selector = True
+            for item in priority:
+                if isinstance(item, Priority):
+                    is_list_selector = False
+                elif isinstance(item, StreamerSelector):
+                    is_list_priority = False
+            if is_list_priority:
+                # list[Priority] -> PrioritySelector
+                return PrioritySelector(
+                    priority  # pyright: ignore [reportArgumentType]
+                )
+            elif is_list_selector:
+                # list[StreamerSelector] -> NestedSelector
+                return NestedSelector(priority)  # pyright: ignore [reportArgumentType]
+            else:
+                raise ValueError(
+                    f"Unable to parse priority list, cannot contain a mix of Priority and StreamerSelector."
+                )
+        else:
+            raise ValueError(
+                f"priority must be an instance of one of None, Priority, StreamerSelector, list[Priority], or list[StreamerSelector]"
+            )

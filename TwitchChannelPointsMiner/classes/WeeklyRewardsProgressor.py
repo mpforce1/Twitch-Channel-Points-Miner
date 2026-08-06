@@ -1,6 +1,7 @@
 import abc
 import logging
-from typing import TypedDict
+from threading import Thread
+from typing import Literal, TypedDict
 
 from TwitchChannelPointsMiner.classes.ClipVodWatcher import (
     BasicClipVodWatcher,
@@ -106,10 +107,12 @@ class WeeklyRewardsProgressorFactory(abc.ABC):
     @abc.abstractmethod
     def create(
         self,
+        config: BasicConfiguration | Literal[False] | None,
         twitch: Twitch,
         streamers: list[Streamer],
+        background_tasks: list[Thread],
         event_manager: EventManager,
-    ) -> WeeklyRewardsProgressor:
+    ) -> WeeklyRewardsProgressor | None:
         pass
 
 
@@ -117,17 +120,27 @@ class BasicWeeklyRewardsProgressorFactory(WeeklyRewardsProgressorFactory):
     def __init__(
         self,
         runner_factory: SlottedTaskRunnerFactory,
-        config: BasicConfiguration | None = None,
     ):
         self.runner_factory = runner_factory
-        self.config = config
 
     def create(
-        self, twitch: Twitch, streamers: list[Streamer], event_manager: EventManager
+        self,
+        config: BasicConfiguration | Literal[False] | None,
+        twitch: Twitch,
+        streamers: list[Streamer],
+        background_tasks: list[Thread],
+        event_manager: EventManager,
     ):
+        if config is False:
+            return None
+        elif config is None:
+            config = BasicConfiguration()
         runner = self.runner_factory.create(
             name="Weekly Rewards Progressor", event_manager=event_manager
         )
-        return BasicWeeklyRewardsProgressor(
-            twitch, streamers, runner, event_manager=event_manager, config=self.config
+        progressor = BasicWeeklyRewardsProgressor(
+            twitch, streamers, runner, event_manager=event_manager, config=config
         )
+        progressor.start()
+        background_tasks.append(progressor)
+        return progressor
