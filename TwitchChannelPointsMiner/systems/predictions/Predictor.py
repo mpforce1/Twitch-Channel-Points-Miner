@@ -29,6 +29,7 @@ from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.systems.Predictions import Predictor, PredictorFactory
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
+from TwitchChannelPointsMiner.utils.Utils import millify
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +268,13 @@ class BasicPredictor(Predictor):
         if streamer is None:
             logger.debug(f"Not placing bet on '{event.title}', untracked streamer")
             return
+        logger.info(
+            f"Going to complete bet for {event}",
+            extra={
+                "emoji": ":four_leaf_clover:",
+                "event": Events.PREDICTIONS,
+            },
+        )
         skip_event_reason = self.skip_event(streamer, event)
         if skip_event_reason is not None:
             self.event_manager.manage(
@@ -289,6 +297,13 @@ class BasicPredictor(Predictor):
             return
         skip_bet_reason = self.skip_bet(streamer, event, bet)
         if skip_bet_reason is None:
+            logger.info(
+                f"Attempting to place {millify(bet.points)} channel points on: '{event.outcome(bet.outcome_id).title}'",
+                extra={
+                    "emoji": ":four_leaf_clover:",
+                    "event": Events.PREDICTIONS,
+                },
+            )
             self.twitch.make_prediction(streamer, event, bet)
         else:
             logger.info(
@@ -374,7 +389,11 @@ class BasicPredictor(Predictor):
         place_bet_thread.start()
 
         logger.info(
-            f"Place the bet after: {predict_after_seconds}s for: {self.prediction_events[event.event_id]}"
+            f"Place the bet after {predict_after_seconds}s for {streamer} on: {self.prediction_events[event.event_id]}",
+            extra={
+                "emoji": ":four_leaf_clover:",
+                "event": Events.PREDICTIONS
+            }
         )
 
     def event_updated(self, event: PredictionEvent):

@@ -927,7 +927,7 @@ class TwitchChannelPointsMiner:
                                 extra={"emoji": ":pushpin:"},
                             )
                         logger.info(
-                            f"{event.describe_result(streamer.username)}",
+                            f"{event.describe_result()}",
                             extra={"emoji": ":bar_chart:"},
                         )
                 except KeyError:

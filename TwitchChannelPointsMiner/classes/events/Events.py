@@ -15,6 +15,7 @@ class Events(Flag):
     GAIN_FOR_WATCH = auto()
     GAIN_FOR_WATCH_STREAK = auto()
     GAIN_FOR_WEEKLY_REWARDS = auto()
+    GAIN_FOR_PREDICTION = auto()
     GAIN_FOR_OTHER = auto()
     POINTS_SPENT = auto()
     #  Watch Streak
@@ -57,7 +58,13 @@ class Events(Flag):
 
     # Unions
     GAIN_POINTS = (
-        GAIN_FOR_RAID | GAIN_FOR_CLAIM | GAIN_FOR_WATCH | GAIN_FOR_WATCH_STREAK
+        GAIN_FOR_RAID
+        | GAIN_FOR_CLAIM
+        | GAIN_FOR_WATCH
+        | GAIN_FOR_WATCH_STREAK
+        | GAIN_FOR_WEEKLY_REWARDS
+        | GAIN_FOR_PREDICTION
+        | GAIN_FOR_OTHER
     )
     """Gaining channel points."""
     PREDICTIONS = (
@@ -83,6 +90,10 @@ class Events(Flag):
                 return Events.GAIN_FOR_WATCH
             case "WATCH_STREAK":
                 return Events.GAIN_FOR_WATCH_STREAK
+            case "WEEKLY_REWARDS":
+                return Events.GAIN_FOR_WEEKLY_REWARDS
+            case "PREDICTION":
+                return Events.GAIN_FOR_PREDICTION
             case _:
                 # Default to catch all type
                 return Events.GAIN_POINTS

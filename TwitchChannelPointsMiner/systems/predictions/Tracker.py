@@ -1,6 +1,5 @@
 import logging
 
-from TwitchChannelPointsMiner.classes.Anonymiser import Anonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.entities.predictions.Prediction import Prediction
@@ -58,12 +57,11 @@ class PredictionTrackingSystem(PredictionSystem):
             event = PredictionEvent.from_ws(data.event)
             self.prediction_events[event.event_id] = event
             logger.info(
-                f"Prediction event started for {streamer}: "
-                f"{event.describe(Settings.logger.anonymiser.streamer_username(streamer))}",
+                f"Prediction event started for {streamer}: \n" f"{event.describe()}",
                 extra={
                     "emoji": ":four_leaf_clover:",
                     "event": Events.PREDICTION_EVENT_START,
-                }
+                },
             )
             self.event_manager.manage(
                 PredictionEventCreated(
@@ -106,6 +104,17 @@ class PredictionTrackingSystem(PredictionSystem):
         prediction = Prediction.from_ws(data.prediction)
         event.prediction = prediction
         estimated_amount = prediction.points - old_amount
+        outcome = event.outcome(data.prediction.outcome_id)
+        # Only provide the change if more than 1 prediction was made
+        change = (
+            f" (+{prediction.points} total points)"
+            if prediction.points != estimated_amount
+            else ""
+        )
+        logger.info(
+            f"Prediction made for {streamer} on '{event.title}' - {estimated_amount} points on '{outcome.title}'{change}",
+            extra={"emoji": ":four_leaf_clover:", "event": Events.PREDICTION_MADE},
+        )
         self.event_manager.manage(
             PredictionMade(
                 streamer=streamer,
@@ -162,11 +171,7 @@ class PredictionTrackingSystem(PredictionSystem):
             else 0
         )
 
-        logger.info(
-            event.describe_result(
-                Settings.logger.anonymiser.username(streamer.username)
-            )
-        )
+        logger.info(f"Prediction result for {streamer}\n" f"{event.describe_result()}")
 
         result_type = data.prediction.result.type
 

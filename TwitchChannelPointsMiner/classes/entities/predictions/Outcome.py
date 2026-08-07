@@ -105,6 +105,10 @@ class Outcome:
             case _:
                 raise KeyError(f"Unhandled OutcomeKeys type: {key}")
 
+    def describe(self):
+        odds = f": Odds {self.odds}" if self.odds != 0 else ""
+        return f"'{self.title}'{odds}"
+
     @classmethod
     def from_ws(cls, outcome: WSOutcome):
         return cls(
