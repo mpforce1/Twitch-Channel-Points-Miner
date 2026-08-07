@@ -48,7 +48,11 @@ class StreamerSystem:
             streamer.persistent_series(event_type=reason)
 
     def points_earned(self, data: CommunityPointsUser.PointsEarned):
-        streamer = find_streamer(self.streamers, data.channel_id)
+        try:
+            streamer = find_streamer(self.streamers, data.channel_id)
+        except KeyError:
+            logger.debug(f"Ignoring points-earned for untracked streamer {data.channel_id}")
+            return
         self._update_points_change(streamer, data.balance, data.reason)
         if data.reason == "WATCH":
             # End watch session
@@ -73,7 +77,11 @@ class StreamerSystem:
         )
 
     def points_spent(self, data: CommunityPointsUser.PointsSpent):
-        streamer = find_streamer(self.streamers, data.channel_id)
+        try:
+            streamer = find_streamer(self.streamers, data.channel_id)
+        except KeyError:
+            logger.debug(f"Ignoring points-spent for untracked streamer {data.channel_id}")
+            return
         # We have to estimate this as Twitch doesn't give us the amount in the WS message
         spent_estimate = streamer.channel_points - data.balance
         self._update_points_change(streamer, data.balance, "Spent")
@@ -118,7 +126,11 @@ class StreamerSystem:
             )
 
     def claim_available(self, data: CommunityPointsUser.ClaimAvailable):
-        streamer = find_streamer(self.streamers, data.channel_id)
+        try:
+            streamer = find_streamer(self.streamers, data.channel_id)
+        except KeyError:
+            logger.debug(f"Ignoring claim-available for untracked streamer {data.channel_id}")
+            return
         # Send the Available event before claiming
         self.event_manager.manage(
             BonusPointsAvailable(
