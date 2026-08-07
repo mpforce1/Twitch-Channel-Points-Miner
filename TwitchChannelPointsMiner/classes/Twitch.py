@@ -1444,13 +1444,6 @@ class Twitch(object):
         :param event: The event.
         :param bet: The prediction to make.
         """
-        logger.info(
-            f"Going to complete bet for {event}",
-            extra={
-                "emoji": ":four_leaf_clover:",
-                "event": Events.PREDICTIONS,
-            },
-        )
         try:
             response = self.gql.make_prediction(
                 event.event_id, bet.outcome_id, bet.points

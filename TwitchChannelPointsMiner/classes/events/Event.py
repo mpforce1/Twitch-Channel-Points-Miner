@@ -2,7 +2,6 @@ import abc
 import datetime
 from dataclasses import dataclass, field
 
-from TwitchChannelPointsMiner.classes.StreamerSelector import weekly_rewards
 from TwitchChannelPointsMiner.classes.entities.Bet import FilterCondition
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
@@ -95,6 +94,12 @@ class GainForWatchStreak(GainPoints):
 class GainForWeeklyRewards(GainPoints):
     reason: str = "WEEKLY_REWARDS"
     type: Events = Events.GAIN_FOR_WEEKLY_REWARDS
+
+
+@dataclass(kw_only=True)
+class GainForPrediction(GainPoints):
+    reason: str = "PREDICTION"
+    type: Events = Events.GAIN_FOR_PREDICTION
 
 
 @dataclass(kw_only=True)
@@ -376,6 +381,13 @@ def gain_for(
             )
         case "WEEKLY_REWARDS":
             return GainForWeeklyRewards(
+                timestamp=timestamp,
+                streamer=streamer,
+                amount=amount,
+                balance=balance,
+            )
+        case "PREDICTION":
+            return GainForPrediction(
                 timestamp=timestamp,
                 streamer=streamer,
                 amount=amount,

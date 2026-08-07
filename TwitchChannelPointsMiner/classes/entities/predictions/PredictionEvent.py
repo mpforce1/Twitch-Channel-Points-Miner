@@ -70,7 +70,7 @@ class PredictionEvent:
 
     def __str__(self):
         return (
-            f"EventPrediction: {Settings.logger.anonymiser.channel_id(self.channel_id)} - {self.title}"
+            f"EventPrediction - {self.title}"
             if Settings.logger.less
             else self.__repr__()
         )
@@ -170,22 +170,25 @@ class PredictionEvent:
 
     def _describe_prediction_and_result(self):
         if self.prediction is None:
-            prediction = "\tPrediction: None"
-            result = "\tResult: None"
+            prediction = "\tPrediction: None\n"
+            result = "\tResult: None\n"
         else:
             outcome = self.outcome(self.prediction.outcome_id)
+            stake = self.prediction.points
             prediction = (
-                f"\tPrediction:"
-                f"\t\tOutcome: {outcome.title}"
-                f"\t\tOdds: {outcome.odds}"
-                f"\t\tWager: {self.prediction.points}"
+                f"\tPrediction:\n"
+                f"\t\tOutcome: '{outcome.title}'\n"
+                f"\t\tOdds: {outcome.odds}\n"
+                f"\t\tStake: {stake}\n"
             )
             if self.prediction.result is None:
-                result = "\tResult: None"
+                result = "\tResult: None\n"
             else:
                 match self.prediction.result.type:
                     case "WIN":
-                        points = f"Won: +{self.prediction.result.points_won}"
+                        # The points_won should be guaranteed non-none in this case
+                        points_won: int = self.prediction.result.points_won  # pyright: ignore [reportAssignmentType]
+                        points = f"Won: +{points_won} (net +{points_won-stake})"
                     case "LOSE":
                         points = f"Lost: -{self.prediction.points}"
                     case "REFUND":
@@ -195,41 +198,38 @@ class PredictionEvent:
                             f"Unknown result type: {self.prediction.result.type}"
                         )
                 result = f"\tResult: {points}"
-        return f"{prediction}\n" f"{result}"
+        return f"{prediction}" f"{result}"
 
-    def _describe(self, streamer_display_name: str):
-        return (
-            "Prediction Event:\n"
-            f"\tStreamer: '{streamer_display_name}'\n"
-            f"\tTitle: '{self.title}'\n"
-            f"\tStatus: '{self.status}'\n"
-        )
+    def _describe(self):
+        return f"\tTitle: '{self.title}'\n" f"\tStatus: '{self.status}'\n"
 
-    def describe(self, streamer_display_name: str):
+    def describe(self):
         """
         Gets a human-readable (English) string, containing a description of the event.
         Shows the outcomes, the prediction if one has been placed, and the result if the event has been resulted.
-        :param streamer_display_name: The name of the Streamer for the event.
         :return: The description string.
         """
-        outcomes = [f"\t\tOutcome: {outcome.title}" for outcome in self.outcomes]
+        outcomes = "\n".join(
+            [f"\t\t{outcome.describe()}" for outcome in self.outcomes]
+        )
+        prediction_and_result = (
+            self._describe_prediction_and_result()
+            if self.prediction is not None
+            else ""
+        )
         return (
-            f"{self._describe(streamer_display_name)}"
+            f"{self._describe()}"
             f"\tOutcomes:\n{outcomes}\n"
-            f"{self._describe_prediction_and_result()}"
+            f"{prediction_and_result}"
         )
 
-    def describe_result(self, streamer_display_name: str):
+    def describe_result(self):
         """
         Gets a human-readable (English) string, containing a description of the event.
         Shows the prediction and result, but not outcomes.
-        :param streamer_display_name: The name of the Streamer for the event.
         :return: The description string.
         """
-        return (
-            f"{self._describe(streamer_display_name)}\n"
-            f"{self._describe_prediction_and_result()}"
-        )
+        return f"{self._describe()}{self._describe_prediction_and_result()}"
 
     @classmethod
     def from_ws(cls, event: WSPredictionEvent):
