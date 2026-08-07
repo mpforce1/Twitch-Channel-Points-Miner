@@ -136,13 +136,15 @@ def test_raid_update(system):
         patcher.setattr(datetime, "datetime", mock_datetime)
         system.raid_update(streamer.channel_id, data)
 
-    assert streamer.raid == Raid(raid_id=data.id, target_login=data.target_username)
+    raid_expected = Raid(raid_id=data.id, target_login=data.target_username)
+
+    assert streamer.raid == raid_expected
     system.twitch.gql.join_raid.assert_called_once_with(data.id)
     system.event_manager.manage.assert_called_once_with(
         JoinRaid(
             timestamp=timestamp,
-            channel_id=streamer.channel_id,
-            raid_id=data.id,
+            streamer=streamer,
+            raid=raid_expected,
             target_username=data.target_username,
         )
     )
@@ -165,7 +167,7 @@ def test_moment(system):
 
     system.twitch.gql.claim_moment.assert_called_once_with(moment_id)
     system.event_manager.manage.assert_called_once_with(
-        MomentClaim(timestamp=timestamp, channel_id=channel_id, moment_id=moment_id)
+        MomentClaim(timestamp=timestamp, streamer=streamer, moment_id=moment_id)
     )
 
 
@@ -312,7 +314,7 @@ def test_watch_streak_recovered(system):
 
     assert len(streamer.watch_streak_missed_stremer) == 0
     system.event_manager.manage.assert_called_once_with(
-        WatchStreakRecovery(timestamp=timestamp, channel_id=data.channel_id)
+        WatchStreakRecovery(timestamp=timestamp, streamer=streamer)
     )
 
     # Untracked streamer

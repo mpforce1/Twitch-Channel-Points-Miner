@@ -178,14 +178,6 @@ class StreamerSystem:
                 )
                 return
 
-            self.event_manager.manage(
-                JoinRaid(
-                    streamer=streamer,
-                    raid=raid,
-                    target_username=raid.target_login,
-                )
-            )
-
     # Moments
     def moment(self, channel_id: str, moment_id: str):
         streamer = find_streamer(self.streamers, channel_id)
@@ -214,8 +206,6 @@ class StreamerSystem:
                 )
             )
             return
-
-        self.event_manager.manage(MomentClaim(streamer=streamer, moment_id=moment_id))
 
     # Community Goals
     def community_goal_created(

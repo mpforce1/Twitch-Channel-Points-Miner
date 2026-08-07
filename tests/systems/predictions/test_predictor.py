@@ -309,7 +309,7 @@ test_skip_bet_data = [
     (
         BetSettings(filter_condition=None),
         Bet(outcome_id="0-id", points=-1),
-        PredictionPointsBelowMinimum(outcome_id="0-id", points=-1),
+        PredictionPointsBelowMinimum(bet=Bet(outcome_id="0-id", points=-1)),
     ),
     # No filter, accept
     (BetSettings(filter_condition=None), Bet(outcome_id="0-id", points=0), None),
@@ -675,9 +675,25 @@ test_make_prediction_data = [
     # Create bet filter
     (True, True, None, "Skip create bet", False, False, True),
     # Skip bet
-    (True, True, None, None, "Skip bet", False, True),
+    (
+        True,
+        True,
+        None,
+        Bet(outcome_id="019fdd38-d82c-7575-b487-aa60a611d33b", points=10),
+        "Skip bet",
+        False,
+        True,
+    ),
     # All pass
-    (True, True, None, None, None, True, False),
+    (
+        True,
+        True,
+        None,
+        Bet(outcome_id="019fdd39-13b9-74a9-bab7-126d366c0312", points=100),
+        None,
+        True,
+        False,
+    ),
 ]
 
 
@@ -721,7 +737,7 @@ def test_make_prediction(
     predictor.skip_event.return_value = skip_event
     predictor.create_bet = MagicMock()
     predictor.create_bet.return_value = bet
-    predictor.skip_bet = MagicMock()
+    predictor.skip_bet = MagicMock(spec=Bet)
     predictor.skip_bet.return_value = skip_bet
 
     predictor.make_prediction(event_id)
@@ -821,8 +837,8 @@ def test_event_created(
         event_manager.manage.assert_called_once_with(
             PredictionFilters(
                 timestamp=time_now,
-                channel_id=channel_id,
-                event_id=event_id,
+                streamer=streamer,
+                prediction_event=event,
                 reason=NotEnoughPoints(
                     channel_points=channel_points, minimum_points=minimum_points
                 ),
@@ -833,8 +849,8 @@ def test_event_created(
         event_manager.manage.assert_called_once_with(
             PredictionFilters(
                 timestamp=time_now,
-                channel_id=channel_id,
-                event_id=event_id,
+                streamer=streamer,
+                prediction_event=event,
                 reason=EventTooShort(prediction_time=prediction_time),
             ),
         )

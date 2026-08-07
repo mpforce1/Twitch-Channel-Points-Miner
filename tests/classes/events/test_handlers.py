@@ -64,7 +64,7 @@ def test_dispatch_handler():
     handle_stream_up = MagicMock()
     handler = DispatchHandlerTest(handle_stream_up)
 
-    event = StreamUp(channel_id="1234")
+    event = StreamUp(streamer=MagicMock())
 
     handler.handle(event)
 
