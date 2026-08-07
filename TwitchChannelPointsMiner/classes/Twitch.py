@@ -881,7 +881,7 @@ class Twitch(object):
                         find_streamer(streamers, channel_id)
                         for channel_id in adding_ids
                     )
-                    logger.info(
+                    logger.debug(
                         f"Changing watch slots: Adding {[str(s) for s in adding]}, Dropping {[str(s) for s in dropping]}",
                         extra={
                             "emoji": ":eyes:",
