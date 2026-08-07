@@ -5,7 +5,7 @@ from TwitchChannelPointsMiner.utils.Utils import simple_repr
 class User:
     """A User in a Prediction Event"""
 
-    def __init__(self, _id: str, display_name: str):
+    def __init__(self, _id: str, display_name: str | None):
         self.id = _id
         """The channel id of the user"""
         self.display_name = display_name

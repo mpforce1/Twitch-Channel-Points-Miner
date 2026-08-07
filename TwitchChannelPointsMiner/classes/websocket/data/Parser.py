@@ -247,7 +247,7 @@ class Parser:
         user = expect_dict(user)
         return Predictions.User(
             id=parse_expected_value(user, "user_id", expect_str),
-            display_name=parse_expected_value(user, "user_display_name", expect_str),
+            display_name=parse_expected_value(user, "user_display_name", optional_parser(expect_str)),
         )
 
     def prediction_result_parser(self, result):

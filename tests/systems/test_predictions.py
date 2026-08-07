@@ -80,11 +80,14 @@ def prediction(outcome_index: int, points: int, created_seconds_from_start: int)
     )
 
 
+class MockDateTime(datetime.datetime):
+    pass
+
 def test_full(monkeypatch):
     """Integration test for Tracker and Predictor"""
     # Patch datetime
     now = datetime.datetime.fromisoformat("2026-08-02T12:00:01Z")
-    mock_datetime = MagicMock()
+    mock_datetime = MockDateTime
     mock_datetime.now = MagicMock()
     mock_datetime.now.return_value = now
     monkeypatch.setattr(datetime, "datetime", mock_datetime)
@@ -170,7 +173,7 @@ def test_full(monkeypatch):
 
     # Prediction should have been made
     twitch.make_prediction.assert_called_once()
-    bet: Bet = twitch.make_prediction.call_args_list[0][0][1]
+    bet: Bet = twitch.make_prediction.call_args_list[0][0][2]
     # Bet on 5 as it has the highest individual bet, 50 points as that's 5% of user's points
     assert bet == Bet(outcome_id="5-id", points=50)
 
@@ -209,13 +212,17 @@ def test_full(monkeypatch):
     tracker.user_prediction_result(prediction_result)
 
     # Event manager
+    event_resulted_expected = PredictionEvent.from_ws(copy.deepcopy(event_updated))
+    event_resulted_expected.prediction = Prediction.from_ws(
+        copy.deepcopy(prediction_with_result)
+    )
     event_manager.manage.assert_has_calls(
         [
             call(
                 PredictionWin(
                     timestamp=now,
-                    channel_id=base_event.channel_id,
-                    event_id=base_event.id,
+                    streamer=streamer,
+                    prediction_event=event_resulted_expected,
                 )
             )
         ],

@@ -80,8 +80,9 @@ test_event_created_data = [
 def test_event_created(data):
     event_manager = MagicMock()
     predictor = MagicMock()
+    streamers = [Streamer("123456789", "123456789")]
     tracker = PredictionTrackingSystem(
-        streamers=[],
+        streamers=streamers,
         prediction_events=dict(),
         event_manager=event_manager,
         predictor=predictor,
@@ -103,8 +104,9 @@ def test_event_updated(event_is_tracked):
     event_manager = MagicMock()
     predictor = MagicMock()
     prediction_events = MagicMock()
+    streamers = [Streamer("123456789", "123456789")]
     tracker = PredictionTrackingSystem(
-        streamers=[],
+        streamers=streamers,
         prediction_events=prediction_events,
         event_manager=event_manager,
         predictor=predictor,
@@ -116,6 +118,7 @@ def test_event_updated(event_is_tracked):
     data = MagicMock()
     data.event = MagicMock()
     data.event.id = "456123"
+    data.event.channel_id = "123456789"
     data.event.title = "event title"
 
     tracker.event_updated(data)
@@ -162,6 +165,7 @@ def test_user_prediction_made(event_is_tracked):
         event = MagicMock()
         event.title = "event title"
         event.outcome.return_value = outcome
+        event.channel_id = "123456"
     else:
         event = None
     prediction_events.get.return_value = event
@@ -303,21 +307,21 @@ def test_user_prediction_result(
                 expected_update_history_calls += 1
                 expected_event = PredictionWin(
                     timestamp=timestamp,
-                    channel_id="123456",
-                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9"
+                    streamer=streamer,
+                    prediction_event=event,
                 )
             elif result.type == "LOSE":
                 expected_event = PredictionLose(
                     timestamp=timestamp,
-                    channel_id="123456",
-                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9"
+                    streamer=streamer,
+                    prediction_event=event,
                 )
             else:
                 expected_update_history_calls += 1
                 expected_event = PredictionRefund(
                     timestamp=timestamp,
-                    channel_id="123456",
-                    event_id="019fbcc6-e84f-7406-acde-fe591ac13fb9"
+                    streamer=streamer,
+                    prediction_event=event,
                 )
             event_manager.manage.assert_called_once_with(expected_event)
 

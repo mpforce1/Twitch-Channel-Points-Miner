@@ -187,7 +187,9 @@ class PredictionEvent:
                 match self.prediction.result.type:
                     case "WIN":
                         # The points_won should be guaranteed non-none in this case
-                        points_won: int = self.prediction.result.points_won  # pyright: ignore [reportAssignmentType]
+                        points_won: int = (
+                            self.prediction.result.points_won
+                        )  # pyright: ignore [reportAssignmentType]
                         points = f"Won: +{points_won} (net +{points_won-stake})"
                     case "LOSE":
                         points = f"Lost: -{self.prediction.points}"
@@ -209,9 +211,7 @@ class PredictionEvent:
         Shows the outcomes, the prediction if one has been placed, and the result if the event has been resulted.
         :return: The description string.
         """
-        outcomes = "\n".join(
-            [f"\t\t{outcome.describe()}" for outcome in self.outcomes]
-        )
+        outcomes = "\n".join([f"\t\t{outcome.describe()}" for outcome in self.outcomes])
         prediction_and_result = (
             self._describe_prediction_and_result()
             if self.prediction is not None

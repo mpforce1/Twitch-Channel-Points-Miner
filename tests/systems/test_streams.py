@@ -38,7 +38,7 @@ def test_bring_up():
 
     assert streamer.stream_up == current_time
     event_manager.manage.assert_called_once_with(
-        StreamUp(timestamp=timestamp, channel_id=channel_id)
+        StreamUp(timestamp=timestamp, streamer=streamer)
     )
 
 
@@ -68,7 +68,7 @@ def test_bring_down():
 
     streamer.set_offline.assert_called_once()
     event_manager.manage.assert_called_once_with(
-        StreamDown(timestamp=timestamp, channel_id=channel_id)
+        StreamDown(timestamp=timestamp, streamer=streamer)
     )
 
 
@@ -104,7 +104,5 @@ def test_update_view_count(stream_up_elapsed: bool):
     if stream_up_elapsed:
         twitch.check_streamer_online.assert_called_once()
     event_manager.manage.assert_called_once_with(
-        StreamViewCount(
-            timestamp=timestamp, channel_id=channel_id, view_count=view_count
-        )
+        StreamViewCount(timestamp=timestamp, streamer=streamer, view_count=view_count)
     )
