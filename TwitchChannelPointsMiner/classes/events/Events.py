@@ -16,6 +16,7 @@ class Events(Flag):
     GAIN_FOR_WATCH_STREAK = auto()
     GAIN_FOR_WEEKLY_REWARDS = auto()
     GAIN_FOR_PREDICTION = auto()
+    GAIN_FOR_REFUND = auto()
     GAIN_FOR_OTHER = auto()
     POINTS_SPENT = auto()
     #  Watch Streak
@@ -51,7 +52,7 @@ class Events(Flag):
     PREDICTION_FILTERS = auto()
     CHANGING_WATCH_SLOTS = auto()
     COMMUNITY_GOAL_CONTRIBUTION = auto()
-    """Predictions being skipped"""
+    SHUTDOWN = auto()
 
     # Other
     ERROR = auto()
@@ -64,6 +65,7 @@ class Events(Flag):
         | GAIN_FOR_WATCH_STREAK
         | GAIN_FOR_WEEKLY_REWARDS
         | GAIN_FOR_PREDICTION
+        | GAIN_FOR_REFUND
         | GAIN_FOR_OTHER
     )
     """Gaining channel points."""
@@ -124,4 +126,5 @@ class Events(Flag):
             & ~Events.MOMENT_CLAIM_AVAILABLE
             & ~Events.PREDICTION_EVENT_UPDATE
             & ~Events.DROP_CLAIM_AVAILABLE
+            & ~Events.CHANGING_WATCH_SLOTS
         )

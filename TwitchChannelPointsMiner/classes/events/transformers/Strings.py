@@ -34,6 +34,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     PredictionPointsBelowMinimum,
     PredictionResult,
     SettingsFiltered,
+    Shutdown,
     StreamDown,
     StreamUp,
     StreamViewCount,
@@ -298,6 +299,12 @@ class DefaultStringTransformer(EventTransformer[str]):
             ":goal_net:",
         )
 
+    def shutdown(self, event: Shutdown):
+        return (
+            f"Miner stopping: {event.reason}",
+            ":stop_sign:",
+        )
+
     def error(self, event: Error):
         error_str = f": {event.error}" if event.error is not None else ""
         return (
@@ -412,6 +419,8 @@ class DefaultStringTransformer(EventTransformer[str]):
                 return self.changing_watch_slots(event)
             case CommunityGoalContribution():
                 return self.community_goal_contribution(event)
+            case Shutdown():
+                return self.shutdown(event)
             case Error():
                 return self.error(event)
             case _:
