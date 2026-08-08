@@ -34,7 +34,7 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
-from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Event import Error, Shutdown
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
 from TwitchChannelPointsMiner.classes.events.Manager import EventManagerFactory
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformerFactory
@@ -567,7 +567,7 @@ class TwitchChannelPointsMiner:
                         "No valid streamers available after initialization.",
                         extra={"force_console": True},
                     )
-                    self.end()
+                    self.end("No valid streamer in config")
                     return
 
             self.original_streamers = [
@@ -691,7 +691,8 @@ class TwitchChannelPointsMiner:
                     "No user_id, exiting...",
                     extra={"force_console": True},
                 )
-                self.end()
+                self.end("Unable to get user id")
+                return
 
             self.ws_pool.submit(
                 PubsubTopic(
@@ -848,7 +849,7 @@ class TwitchChannelPointsMiner:
                 f"Shutting down",
                 extra={"force_console": True},
             )
-            self.end()
+            self.end("Top Level Error")
 
     def end_signal(self, signum, frame):
         if not self.running:
@@ -858,11 +859,13 @@ class TwitchChannelPointsMiner:
             "CTRL+C Detected! Please wait just a moment!",
             extra={"force_console": True},
         )
-        self.end()
+        self.end("CTRL-C")
 
-    def end(self):
+    def end(self, reason: str):
         if not self.running:
             return
+
+        self.event_manager.manage(Shutdown(reason=reason))
 
         for streamer in self.streamers:
             if streamer.irc_chat is not None and streamer.settings.chat != ChatPresence.NEVER:

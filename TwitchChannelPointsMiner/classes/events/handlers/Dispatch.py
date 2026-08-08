@@ -16,6 +16,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     GainForClaim,
     GainForPrediction,
     GainForRaid,
+    GainForRefund,
     GainForWatch,
     GainForWatchStreak,
     GainForWeeklyRewards,
@@ -63,6 +64,7 @@ class DispatchHandler(EventHandler, abc.ABC):
             Events.GAIN_FOR_WATCH_STREAK: self.handle_gain_for_watch_streak,
             Events.GAIN_FOR_WEEKLY_REWARDS: self.handle_gain_for_weekly_rewards,
             Events.GAIN_FOR_PREDICTION: self.handle_gain_for_prediction,
+            Events.GAIN_FOR_REFUND: self.handle_gain_for_refund,
             Events.WATCH_STREAK_PROGRESS: self.handle_watch_streak_progress,
             Events.WATCH_STREAK_MISSING: self.handle_watch_streak_missing,
             Events.WATCH_STREAK_RECOVERY: self.handle_watch_streak_recovery,
@@ -120,6 +122,9 @@ class DispatchHandler(EventHandler, abc.ABC):
         pass
 
     def handle_gain_for_prediction(self, event: GainForPrediction):
+        pass
+
+    def handle_gain_for_refund(self, event: GainForRefund):
         pass
 
     def handle_watch_streak_progress(self, event: WatchStreakProgress):

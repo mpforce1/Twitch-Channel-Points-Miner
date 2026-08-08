@@ -101,6 +101,10 @@ class GainForPrediction(GainPoints):
     reason: str = "PREDICTION"
     type: Events = Events.GAIN_FOR_PREDICTION
 
+@dataclass(kw_only=True)
+class GainForRefund(GainPoints):
+    reason: str = "REFUND"
+    type: Events = Events.GAIN_FOR_REFUND
 
 @dataclass(kw_only=True)
 class WatchStreakProgress(ChannelEvent):
@@ -320,6 +324,10 @@ class CommunityGoalContribution(ChannelEvent):
     amount: int
     type: Events = Events.COMMUNITY_GOAL_CONTRIBUTION
 
+@dataclass(kw_only=True)
+class Shutdown(Event):
+    reason: str
+    type: Events = Events.SHUTDOWN
 
 # Other
 
@@ -388,6 +396,13 @@ def gain_for(
             )
         case "PREDICTION":
             return GainForPrediction(
+                timestamp=timestamp,
+                streamer=streamer,
+                amount=amount,
+                balance=balance,
+            )
+        case "REFUND":
+            return GainForRefund(
                 timestamp=timestamp,
                 streamer=streamer,
                 amount=amount,
