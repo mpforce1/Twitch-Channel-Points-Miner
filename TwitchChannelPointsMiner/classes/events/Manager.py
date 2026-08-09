@@ -1,8 +1,5 @@
 import abc
-from threading import Thread
 
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
 
@@ -25,20 +22,3 @@ class EventManager(abc.ABC):
         pass
 
 
-class EventManagerFactory(abc.ABC):
-    @abc.abstractmethod
-    def create(
-        self,
-        config: bool,
-        background_tasks: list[Thread],
-        streamers: list[Streamer],
-        prediction_events: dict[str, PredictionEvent],
-    ) -> EventManager:
-        """
-        Creates an EventManager.
-        :param config: If True, an EventManager will be created, otherwise Events will be ignored.
-        :param background_tasks: A list of tasks that can be appended to.
-        :param streamers: The list of Streamers managed by the miner.
-        :param prediction_events: The Prediction Events managed by the miner.
-        """
-        pass

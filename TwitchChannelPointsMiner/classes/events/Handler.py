@@ -1,9 +1,5 @@
 import abc
 
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import (
-    PredictionEvent,
-)
 from TwitchChannelPointsMiner.classes.events.Event import (
     Event,
 )
@@ -18,10 +14,8 @@ class EventHandler(abc.ABC):
 
     @abc.abstractmethod
     def handle(self, event: Event):
-        pass
-
-
-class EventHandlerFactory(abc.ABC):
-    @abc.abstractmethod
-    def create(self) -> EventHandler:
+        """
+        Handles the given Event.
+        :param event: The event to handle.
+        """
         pass

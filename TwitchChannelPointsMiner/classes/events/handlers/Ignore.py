@@ -1,9 +1,6 @@
 from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Events import Events
-from TwitchChannelPointsMiner.classes.events.Handler import (
-    EventHandler,
-    EventHandlerFactory,
-)
+from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
 
 
 class IgnoreEventHandler(EventHandler):
@@ -14,8 +11,3 @@ class IgnoreEventHandler(EventHandler):
 
     def handle(self, event: Event):
         return
-
-
-class IgnoreEventHandlerFactory(EventHandlerFactory):
-    def create(self) -> IgnoreEventHandler:
-        return IgnoreEventHandler()

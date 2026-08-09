@@ -1,22 +1,16 @@
-from dataclasses import dataclass
 import logging
 import time
+from dataclasses import dataclass
 from queue import Empty, Queue
 from threading import Thread
 
 from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
     SlottedTaskRunner,
-    SlottedTaskRunnerFactory,
-)
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import (
-    PredictionEvent,
 )
 from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
 from TwitchChannelPointsMiner.classes.events.Manager import (
     EventManager,
-    EventManagerFactory,
 )
 from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
 
@@ -70,6 +64,7 @@ class QueueManager(Thread, EventManager):
                     timeout_seconds=self.task_timeout_seconds,
                     on_complete=None,
                 ):
+                    # Unfortunate, ideally the manager should be set up with enough threads to avoid this
                     logger.debug(f"All slots full, waiting 0.1 seconds")
                     time.sleep(0.1)
 
@@ -78,39 +73,14 @@ class QueueManager(Thread, EventManager):
 
     def run(self):
         while self.running:
-            try:
-                event = self.queue.get_nowait()
-                self._submit(event)
-            except Empty:
-                pass
+            # Process all events in the queue
+            while self.runner.has_free_slot():
+                # stop once the runner is full to try and avoid sleeping in _submit
+                try:
+                    event = self.queue.get_nowait()
+                    self._submit(event)
+                except Empty:
+                    break
+            # Once all events that can be processed
             interruptible_sleep(lambda: self.running, self.loop_sleep_seconds)
         self.runner.stop()
-
-
-class QueueManagerFactory(EventManagerFactory):
-    def __init__(
-        self,
-        runner_factory: SlottedTaskRunnerFactory,
-        configuration: QueueConfiguration,
-        event_manager: EventManager,
-    ):
-        self.runner_factory = runner_factory
-        self.configuration = configuration
-        self.event_manager = event_manager
-
-    def create(
-        self,
-        background_tasks: list[Thread],
-        streamers: list[Streamer],
-        prediction_events: dict[str, PredictionEvent],
-    ) -> QueueManager:
-        manager = QueueManager(
-            runner=self.runner_factory.create(
-                name="Event Queue Manager", event_manager=self.event_manager
-            ),
-            task_timeout_seconds=self.configuration.task_timeout_seconds,
-            loop_sleep_seconds=self.configuration.loop_sleep_seconds,
-        )
-        manager.start()
-        background_tasks.append(manager)
-        return manager
