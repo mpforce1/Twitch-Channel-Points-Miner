@@ -1,4 +1,7 @@
+import shutil
+from dataclasses import dataclass
 import datetime
+from typing import Literal
 
 import pytz
 from emoji import emojize
@@ -43,6 +46,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     WatchStreakRecovery,
     WeeklyRewardsUpdate,
 )
+from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
 from TwitchChannelPointsMiner.logger import ColorPalette
 from TwitchChannelPointsMiner.utils.Utils import millify, oxford_comma_list
@@ -63,8 +67,17 @@ def prepend_emoji(message: str, emoji: str | None):
         return emojize(f"{emoji}  {message}")
 
 
+@dataclass
+class LineConfig:
+    max_length: int | Literal["console"] | None
+
+
 class DefaultStringTransformer(EventTransformer[str]):
     """Transformer that turns events into human-readable strings"""
+
+    def __init__(self, configs: dict[Events, LineConfig] | None = None):
+        self.configs = configs if configs is not None else dict[Events, LineConfig]()
+
 
     def stream_up(self, event: StreamUp):
         return (
@@ -429,7 +442,18 @@ class DefaultStringTransformer(EventTransformer[str]):
     def transform(self, event: Event) -> str:
         transformation = self.get_transformation(event)
         if transformation is not None:
-            return prepend_emoji(transformation[0], transformation[1])
+            prepended = prepend_emoji(transformation[0], transformation[1])
+            config = self.configs.get(event.type, None)
+            if config is None:
+                return prepended
+            else:
+                match config.max_length:
+                    case "console":
+                        return prepended[:shutil.get_terminal_size()[0]]
+                    case int():
+                        return prepended[:config.max_length]
+                    case _:
+                        return prepended
         else:
             raise ValueError(f"Unhandled Event: {event}")
 
