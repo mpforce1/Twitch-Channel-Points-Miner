@@ -1,0 +1,49 @@
+from TwitchChannelPointsMiner.classes.events.Event import Event
+from TwitchChannelPointsMiner.classes.events.Events import Events
+from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
+from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import (
+    WebhookHandler,
+)
+from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
+    DefaultStringTransformer,
+)
+from TwitchChannelPointsMiner.utils import AttemptStrategy
+
+
+class GotifyTransformer(EventTransformer[dict]):
+    def __init__(self, priority: int, get_message: EventTransformer[str] | None = None):
+        self.priority = priority
+        self.get_message = (
+            get_message if get_message is not None else DefaultStringTransformer()
+        )
+
+    def transform(self, event: Event) -> dict:
+        return {"message": self.get_message.transform(event), "priority": self.priority}
+
+
+def gotify(
+    webhook_api_url: str,
+    priority: int,
+    name: str = "Gotify",
+    events: list[Events] | Events | None = None,
+    transformer: EventTransformer[dict] | None = None,
+    attempt_strategy: AttemptStrategy | None = None,
+    timeout: float | tuple[float, float] | None = None,
+):
+    if webhook_api_url == "https://example.com/message?token=TOKEN":
+        raise ValueError(
+            f"URL ({webhook_api_url}) is from the example, please use your own"
+        )
+
+    return WebhookHandler(
+        name=name,
+        webhook_api_url=webhook_api_url,
+        events=events,
+        transformer=(
+            transformer
+            if transformer is not None
+            else GotifyTransformer(priority=priority)
+        ),
+        attempt_strategy=attempt_strategy,
+        timeout=timeout,
+    )
