@@ -1,5 +1,5 @@
 import itertools
-from typing import Literal
+from typing import Literal, Mapping
 
 from colorama import Fore
 
@@ -112,3 +112,13 @@ class RainbowTransformer(EventTransformer):
 
     def transform(self, event: Event) -> str:
         return self._state.apply(self.to_str.transform(event))
+
+
+class MappingToDictTransformer(EventTransformer[dict]):
+    """Converts a transformer that produces a Mapping into one that produces a dict"""
+
+    def __init__(self, base: EventTransformer[Mapping]):
+        self.base = base
+
+    def transform(self, event: Event) -> dict:
+        return dict(self.base.transform(event))
