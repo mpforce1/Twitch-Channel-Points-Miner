@@ -128,3 +128,7 @@ class Events(Flag):
             & ~Events.DROP_CLAIM_AVAILABLE
             & ~Events.CHANGING_WATCH_SLOTS
         )
+
+    @staticmethod
+    def reduce(events: "Events | list[Events]") -> "Events":
+        return Events.union(events) if isinstance(events, list) else events

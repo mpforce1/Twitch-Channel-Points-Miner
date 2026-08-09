@@ -1,31 +1,38 @@
+import logging
 from threading import Thread
 from typing import Literal
 
 from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
+    SlottedTaskRunnerFactory,
     SlottedTaskRunnerThreadFactory,
 )
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import (
-    PredictionEvent,
-)
-from TwitchChannelPointsMiner.classes.events.Manager import (
-    EventManager,
-    EventManagerFactory,
-)
+from TwitchChannelPointsMiner.classes.events.Events import Events
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
+from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformerFactory
 from TwitchChannelPointsMiner.classes.events.handlers.Console import (
-    ConsoleConfiguration,
-    ConsoleHandlerFactory,
+    ConsoleHandler,
 )
 from TwitchChannelPointsMiner.classes.events.managers.Delegate import (
-    DelegatingManagerFactory,
+    DelegatingManager,
 )
+from TwitchChannelPointsMiner.classes.events.managers.Factory import (
+    EventManagerConfiguration,
+    EventManagerFactory,
+)
+from TwitchChannelPointsMiner.classes.events.managers.Ignore import IgnoreEventManager
 from TwitchChannelPointsMiner.classes.events.managers.Priority import (
-    PriorityManagerFactory,
+    PriorityManager,
 )
 from TwitchChannelPointsMiner.classes.events.managers.Queue import (
     QueueConfiguration,
-    QueueManagerFactory,
+    QueueManager,
 )
+from TwitchChannelPointsMiner.classes.events.transformers import (
+    DefaultTransformerFactory,
+)
+from TwitchChannelPointsMiner.logger import LoggerSettings
+
+logger = logging.getLogger(__name__)
 
 
 class DefaultEventManagerFactory(EventManagerFactory):
@@ -33,16 +40,36 @@ class DefaultEventManagerFactory(EventManagerFactory):
 
     def __init__(
         self,
-        console_configuration: ConsoleConfiguration | Literal[False] | None = None,
-        queue_configuration: QueueConfiguration | None = None,
+        runner_factory: SlottedTaskRunnerFactory | None = None,
+        transformer_factory: EventTransformerFactory[str] | None = None,
     ):
-        self.console_configuration: ConsoleConfiguration | Literal[False] | None = (
-            console_configuration
-        )
-        """The console configuration, or None to default configuration, or False to disable console output"""
-        self.queue_configuration = (
-            queue_configuration
-            if queue_configuration is not None
+        self.runner_factory = runner_factory
+        self.transformer_factory = transformer_factory
+        self._manager = None
+
+    def _create(
+        self,
+        config: EventManagerConfiguration | Literal[True] | None,
+        settings: LoggerSettings,
+        background_tasks: list[Thread],
+    ) -> EventManager:
+        logger.info(f"Creating event manager")
+        # Ignore any events if configuration is None
+        if config is None:
+            logger.info(f"Ignoring all events")
+            return IgnoreEventManager()
+
+        # If True, use the default
+        if config is True:
+            logger.info(f"Using default config")
+            config = EventManagerConfiguration()
+
+        # use a delegating manager to enable deferred management of task runner events
+        manager = DelegatingManager()
+        # Setup queue
+        queue_config = (
+            config.queue
+            if config.queue is not None
             else QueueConfiguration(
                 task_timeout_seconds=60,
                 loop_sleep_seconds=0.5,
@@ -50,56 +77,55 @@ class DefaultEventManagerFactory(EventManagerFactory):
                 runner_loop_interval_seconds=0.5,
             )
         )
-        """The queue manager configuration"""
+        # Either use the base runner factory or use the values from the config to create a thread factory
+        task_runner_factory = (
+            self.runner_factory
+            if self.runner_factory is not None
+            else SlottedTaskRunnerThreadFactory(
+                max_concurrent=queue_config.max_concurrent,
+                loop_interval_seconds=queue_config.runner_loop_interval_seconds,
+            )
+        )
+        runner = task_runner_factory.create(
+            name="Queue Event Manager", event_manager=manager
+        )
+        queue_manager = QueueManager(
+            runner=runner,
+            task_timeout_seconds=queue_config.task_timeout_seconds,
+            loop_sleep_seconds=queue_config.loop_sleep_seconds,
+        )
+        queue_manager.start()
+        background_tasks.append(queue_manager)
+        if not config.console:
+            logger.info(f"Not using console")
+            # Don't output to the console
+            manager.set_manager(queue_manager)
+        else:
+            logger.info(f"Using console")
+            # Use a priority manager to avoid slow logging
+            priority_manager = PriorityManager(delegate_manager=queue_manager)
+            # Add console handler
+            transformer_factory = (
+                self.transformer_factory
+                if self.transformer_factory is not None
+                else DefaultTransformerFactory()
+            )
+            priority_manager.set_priority_handler(
+                ConsoleHandler(
+                    events=Events.reduce(config.events),
+                    transformer=transformer_factory.create(settings=settings),
+                )
+            )
+            manager.set_manager(priority_manager)
+        return manager
 
     def create(
         self,
-        config: bool,
+        config: EventManagerConfiguration | Literal[True] | None,
+        settings: LoggerSettings,
         background_tasks: list[Thread],
-        streamers: list[Streamer],
-        prediction_events: dict[str, PredictionEvent],
     ):
-        # use a delegating manager to enable deferred setup post task runner creation
-        def post_manager_setup(manager: EventManager):
-            event_manager_runner_factory = SlottedTaskRunnerThreadFactory(
-                max_concurrent=self.queue_configuration.max_concurrent,
-                loop_interval_seconds=self.queue_configuration.runner_loop_interval_seconds,
-            )
-            queue_manager_factory = QueueManagerFactory(
-                runner_factory=event_manager_runner_factory,
-                configuration=self.queue_configuration,
-                event_manager=manager,
-            )
-            queue_manager = queue_manager_factory.create(
-                background_tasks=background_tasks,
-                streamers=streamers,
-                prediction_events=prediction_events,
-            )
-            if self.console_configuration is False:
-                # Don't output to the console
-                return queue_manager
-            else:
-                # Use a priority manager to avoid slow logging
-                priority_manager_factory = PriorityManagerFactory(
-                    delegate_manager=queue_manager
-                )
-                priority_manager = priority_manager_factory.create(
-                    background_tasks=background_tasks,
-                    streamers=streamers,
-                    prediction_events=prediction_events,
-                )
-                background_tasks.append(queue_manager)
-
-                # Add console handler
-                priority_manager.set_priority_handler(
-                    ConsoleHandlerFactory(
-                        configuration=self.console_configuration
-                    ).create()
-                )
-                return priority_manager
-
-        return DelegatingManagerFactory(post_manager_setup).create(
-            background_tasks=background_tasks,
-            streamers=streamers,
-            prediction_events=prediction_events,
-        )
+        # By default, use a singleton manager
+        if self._manager is None:
+            self._manager = self._create(config, settings, background_tasks)
+        return self._manager

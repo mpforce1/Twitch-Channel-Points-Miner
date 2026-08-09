@@ -1,15 +1,6 @@
-from threading import Thread
-
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import (
-    PredictionEvent,
-)
 from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
-from TwitchChannelPointsMiner.classes.events.Manager import (
-    EventManager,
-    EventManagerFactory,
-)
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 
 
 class IgnoreEventManager(EventManager):
@@ -20,14 +11,3 @@ class IgnoreEventManager(EventManager):
 
     def add_handler(self, handler: EventHandler):
         pass
-
-
-class IgnoreEventManagerFactory(EventManagerFactory):
-    def create(
-        self,
-        config: bool,
-        background_tasks: list[Thread],
-        streamers: list[Streamer],
-        prediction_events: dict[str, PredictionEvent],
-    ) -> EventManager:
-        return IgnoreEventManager()

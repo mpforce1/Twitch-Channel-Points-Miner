@@ -1,0 +1,36 @@
+import abc
+from dataclasses import dataclass
+from threading import Thread
+from typing import Literal
+
+from TwitchChannelPointsMiner.classes.events.Events import Events
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
+from TwitchChannelPointsMiner.classes.events.managers.Queue import QueueConfiguration
+from TwitchChannelPointsMiner.logger import LoggerSettings
+
+
+@dataclass(kw_only=True)
+class EventManagerConfiguration:
+    console: bool = False
+    timestamps: Literal["full"] | Literal["short"] | None = "full"
+    queue: QueueConfiguration | None = None
+    events: Events | list[Events] = Events.all()
+
+
+class EventManagerFactory(abc.ABC):
+    @abc.abstractmethod
+    def create(
+        self,
+        config: EventManagerConfiguration | Literal[True] | None,
+        settings: LoggerSettings,
+        background_tasks: list[Thread],
+    ) -> EventManager:
+        """
+        Creates an EventManager.
+        :param config: If not None, an EventManager will be created, otherwise Events will be ignored.
+        :param settings: The logger settings for the application.
+        :param background_tasks: A list of tasks that can be appended to.
+        :param streamers: The list of Streamers managed by the miner.
+        :param prediction_events: The Prediction Events managed by the miner.
+        """
+        pass

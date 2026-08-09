@@ -36,10 +36,10 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import Error, Shutdown
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
-from TwitchChannelPointsMiner.classes.events.Manager import EventManagerFactory
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformerFactory
 from TwitchChannelPointsMiner.classes.events.handlers.Hook import EventHookAdapter
-from TwitchChannelPointsMiner.classes.events.managers.Basic import BasicEventManagerFactory
+from TwitchChannelPointsMiner.classes.events.managers import DefaultEventManagerFactory
+from TwitchChannelPointsMiner.classes.events.managers.Factory import EventManagerConfiguration, EventManagerFactory
 from TwitchChannelPointsMiner.classes.events.transformers import DefaultTransformerFactory
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
 from TwitchChannelPointsMiner.classes.websocket.Factory import DefaultWebSocketPoolFactory
@@ -94,7 +94,7 @@ class Factories:
     def __init__(
         self,
         streamer_selector: StreamerSelectorFactory | None = None,
-        runner_factory: SlottedTaskRunnerFactory | None = None,
+        clip_vod_watcher_runner: SlottedTaskRunnerFactory | None = None,
         gql: GQLFactory | None = None,
         ws_pool: WebSocketPoolFactory | None = None,
         weekly_rewards: (
@@ -103,8 +103,9 @@ class Factories:
         watch_streak_recovery: (
             WatchStreakRecovery.WatchStreakRecoveryFactory | None
         ) = None,
-        event_manager: EventManagerFactory | None = None,
         default_event_transformer: EventTransformerFactory[str] | None = None,
+        event_manager_runner: SlottedTaskRunnerFactory | None = None,
+        event_manager: EventManagerFactory | None = None,
     ):
         # Setup defaults for any None value
         self.streamer_selector = (
@@ -112,35 +113,45 @@ class Factories:
             if streamer_selector is not None
             else StreamerSelectorFactory()
         )
-        self.runner_factory = (
-            runner_factory
-            if runner_factory is not None
-            else SlottedTaskRunnerThreadFactory()
+        """Factory that produces a streamer selector for use selecting streamers to watch"""
+        clip_vod_watcher_runner = (
+            clip_vod_watcher_runner if clip_vod_watcher_runner is not None else SlottedTaskRunnerThreadFactory()
         )
         self.gql = gql if gql is not None else GQLFactory()
+        """Factory that produces Twitch GQL API integrations"""
         self.ws_pool = ws_pool if ws_pool is not None else DefaultWebSocketPoolFactory()
+        """Factory that produces Twitch WebSocket Client Pools"""
         self.weekly_rewards = (
             weekly_rewards
             if weekly_rewards is not None
             else WeeklyRewardsProgressor.BasicWeeklyRewardsProgressorFactory(
-                runner_factory=self.runner_factory
+                runner_factory=clip_vod_watcher_runner
             )
         )
+        """Factory that produces Weekly Rewards Progressors"""
         self.watch_streak_recovery = (
             watch_streak_recovery
             if watch_streak_recovery is not None
             else WatchStreakRecovery.BasicWatchStreakRecoveryFactory(
-                runner_factory=self.runner_factory
+                runner_factory=clip_vod_watcher_runner
             )
         )
-        self.event_manager = (
-            event_manager if event_manager is not None else BasicEventManagerFactory()
-        )
+        """Factory that produces Watch Streak Recoveries"""
         self.default_event_transformer = (
             default_event_transformer
             if default_event_transformer is not None
             else DefaultTransformerFactory()
         )
+        """Factory that produces Event to String EventTransformers"""
+        self.event_manager = (
+            event_manager
+            if event_manager is not None
+            else DefaultEventManagerFactory(
+                runner_factory=event_manager_runner,
+                transformer_factory=self.default_event_transformer,
+            )
+        )
+        """Factory that produces EventManagers"""
 
 
 class TwitchChannelPointsMiner:
@@ -194,7 +205,7 @@ class TwitchChannelPointsMiner:
             WatchStreakRecovery.BasicConfiguration | Literal[False] | None
         ) = None,
         # Event Management
-        event_manager: bool = False,
+        event_manager: EventManagerConfiguration | Literal[True] | None = None,
         # Event Handlers
         handlers: list[EventHandler] | None = None,
         # Factories
@@ -273,9 +284,8 @@ class TwitchChannelPointsMiner:
         # Set up event manager
         self.event_manager = factories.event_manager.create(
             config=event_manager,
+            settings=logger_settings,
             background_tasks=self.background_tasks,
-            streamers=self.streamers,
-            prediction_events=self.prediction_events,
         )
 
         # Add handlers to event manager
