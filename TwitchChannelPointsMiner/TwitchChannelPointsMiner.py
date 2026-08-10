@@ -37,10 +37,12 @@ from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent impor
 from TwitchChannelPointsMiner.classes.events.Event import Error, Shutdown
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformerFactory
+from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandlerFactory
 from TwitchChannelPointsMiner.classes.events.handlers.Hook import EventHookAdapter
 from TwitchChannelPointsMiner.classes.events.managers import DefaultEventManagerFactory
 from TwitchChannelPointsMiner.classes.events.managers.Factory import EventManagerConfiguration, EventManagerFactory
 from TwitchChannelPointsMiner.classes.events.transformers import DefaultTransformerFactory
+from TwitchChannelPointsMiner.classes.events.transformers.hooks import DefaultEventTransformerFactory
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
 from TwitchChannelPointsMiner.classes.websocket.Factory import DefaultWebSocketPoolFactory
 from TwitchChannelPointsMiner.classes.websocket.Pool import WebSocketPoolFactory
@@ -140,9 +142,9 @@ class Factories:
         self.default_event_transformer = (
             default_event_transformer
             if default_event_transformer is not None
-            else DefaultTransformerFactory()
+            else DefaultEventTransformerFactory()
         )
-        """Factory that produces Event to String EventTransformers"""
+        """Factory that produces Event to String EventTransformers for use in event hooks"""
         self.event_manager = (
             event_manager
             if event_manager is not None
@@ -207,7 +209,7 @@ class TwitchChannelPointsMiner:
         # Event Management
         event_manager: EventManagerConfiguration | Literal[True] | None = None,
         # Event Handlers
-        handlers: list[EventHandler] | None = None,
+        handlers: list[EventHandler | EventHandlerFactory] | None = None,
         # Factories
         factories: Factories | None = None,
     ):
@@ -291,6 +293,8 @@ class TwitchChannelPointsMiner:
         # Add handlers to event manager
         if handlers is not None:
             for handler in handlers:
+                if isinstance(handler, EventHandlerFactory):
+                    handler = handler(default_event_transformer)
                 self.event_manager.add_handler(handler)
 
         # Add hooks to event manager
