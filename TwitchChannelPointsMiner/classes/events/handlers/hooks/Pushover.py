@@ -1,6 +1,7 @@
 from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
+from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandlerFactory
 from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import (
     WebhookHandler,
 )
@@ -50,9 +51,10 @@ def pushover(
     name: str = "Pushover",
     events: list[Events] | Events | None = None,
     transformer: EventTransformer[dict] | None = None,
+    get_message: EventTransformer[str] | None = None,
     attempt_strategy: AttemptStrategy | None = None,
     timeout: float | tuple[float, float] | None = None,
-):
+) -> EventHandlerFactory:
     if userkey == "YOUR-ACCOUNT-TOKEN":
         raise ValueError(
             f"userkey '{userkey}' is from the example, please provide your own"
@@ -61,7 +63,7 @@ def pushover(
         raise ValueError(
             f"token '{token} is from the example, please provide your own'"
         )
-    return WebhookHandler(
+    return lambda default_transformer: WebhookHandler(
         name=name,
         webhook_api_url=webhook_api_url,
         events=events,
@@ -74,6 +76,9 @@ def pushover(
                 priority=priority,
                 sound=sound,
                 title=title,
+                get_message=(
+                    get_message if get_message is not None else default_transformer
+                ),
             )
         ),
         attempt_strategy=attempt_strategy,
