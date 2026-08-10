@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Handler import EventHandler
-from TwitchChannelPointsMiner.classes.events.Event import StreamUp
+from TwitchChannelPointsMiner.classes.events.Event import StreamerOnline
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.events.managers.Priority import PriorityManager
 from TwitchChannelPointsMiner.classes.events.managers.Queue import QueueManager
@@ -26,7 +26,7 @@ def test_queue_manager():
     handler.handles.return_value = event_type
     manager.add_handler(handler)
 
-    event: Any = MagicMock(spec=StreamUp)
+    event: Any = MagicMock(spec=StreamerOnline)
     event.type = Events.STREAMER_ONLINE
 
     manager.manage(event)
@@ -53,7 +53,7 @@ def test_priority_manager():
     delegate_manager = MagicMock(spec=EventManager)
     manager = PriorityManager(delegate_manager=delegate_manager)
 
-    event = MagicMock(spec=StreamUp)
+    event = MagicMock(spec=StreamerOnline)
     event.type = Events.STREAMER_ONLINE
 
     # No priority handler

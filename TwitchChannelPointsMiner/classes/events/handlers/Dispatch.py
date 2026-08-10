@@ -34,6 +34,8 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     PredictionWin,
     StreamDown,
     StreamUp,
+    StreamerOffline,
+    StreamerOnline,
     StreamViewCount,
     WatchStreakMissing,
     WatchStreakProgress,
@@ -53,9 +55,11 @@ class DispatchHandler(EventHandler, abc.ABC):
     def __init__(self):
         # Use Any here as we know this should be correct
         self._method_cache: dict[Events, Any] = {
-            Events.STREAMER_ONLINE: self.handle_stream_up,
-            Events.STREAMER_OFFLINE: self.handle_stream_down,
+            Events.STREAM_UP: self.handle_stream_up,
+            Events.STREAM_DOWN: self.handle_stream_down,
             Events.STREAM_VIEW_COUNT: self.handle_stream_view_count,
+            Events.STREAMER_ONLINE: self.handle_streamer_online,
+            Events.STREAMER_OFFLINE: self.handle_streamer_offline,
             Events.BONUS_POINTS_AVAILABLE: self.handle_bonus_points_available,
             Events.GAIN_FOR_OTHER: self.handle_gain_points,
             Events.GAIN_FOR_RAID: self.handle_gain_for_raid,
@@ -98,6 +102,12 @@ class DispatchHandler(EventHandler, abc.ABC):
         pass
 
     def handle_stream_view_count(self, event: StreamViewCount):
+        pass
+
+    def handle_streamer_online(self, event: StreamerOnline):
+        pass
+
+    def handle_streamer_offline(self, event: StreamerOffline):
         pass
 
     def handle_bonus_points_available(self, event: BonusPointsAvailable):

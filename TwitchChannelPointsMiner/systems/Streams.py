@@ -6,6 +6,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     StreamDown,
     StreamUp,
     StreamViewCount,
+    StreamerOffline,
 )
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
@@ -27,6 +28,7 @@ class StreamSystem:
         streamer = find_streamer(self.streamers, channel_id)
         streamer.stream_up = time.time()
         self.event_manager.manage(StreamUp(streamer=streamer))
+        # No StreamerOnline as it can take a few seconds for the stream URL to become available
 
     def bring_down(self, channel_id: str):
         """
@@ -37,6 +39,7 @@ class StreamSystem:
         if streamer.is_online:
             streamer.set_offline()
             self.event_manager.manage(StreamDown(streamer=streamer))
+            self.event_manager.manage(StreamerOffline(streamer=streamer))
 
     def update_view_count(self, channel_id: str, view_count: int):
         """

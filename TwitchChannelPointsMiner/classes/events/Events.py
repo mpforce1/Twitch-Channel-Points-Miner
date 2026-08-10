@@ -5,6 +5,8 @@ from functools import reduce
 class Events(Flag):
     # Twitch State Changes
     #  Streamer
+    STREAM_UP = auto()
+    STREAM_DOWN = auto()
     STREAMER_ONLINE = auto()
     STREAMER_OFFLINE = auto()
     STREAM_VIEW_COUNT = auto()
@@ -117,15 +119,23 @@ class Events(Flag):
     @staticmethod
     def default():
         """
-        Gets a union of Events that's all Events except a few less useful events.
+        Gets a union of Events that's all Events except a few less useful or too frequent events.
         """
         return (
             Events.all()
+            # People general prefer STREAMER_ONLINE
+            & ~Events.STREAM_UP
+            # This happens at the same time as STREAMER_OFFLINE
+            & ~Events.STREAM_DOWN
+            # Happens every few seconds and isn't that useful
             & ~Events.STREAM_VIEW_COUNT
+            # All the "AVAILABLE" events are followed by a claim event
             & ~Events.BONUS_POINTS_AVAILABLE
             & ~Events.MOMENT_CLAIM_AVAILABLE
-            & ~Events.PREDICTION_EVENT_UPDATE
             & ~Events.DROP_CLAIM_AVAILABLE
+            # Prediction updates happen every few seconds
+            & ~Events.PREDICTION_EVENT_UPDATE
+            # Happens a little bit too often
             & ~Events.CHANGING_WATCH_SLOTS
         )
 

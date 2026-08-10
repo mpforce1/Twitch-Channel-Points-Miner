@@ -34,11 +34,19 @@ class ChannelEvent(Event, abc.ABC):
 #  Streamer
 @dataclass(kw_only=True)
 class StreamUp(ChannelEvent):
+    type: Events = Events.STREAM_UP
+
+@dataclass(kw_only=True)
+class StreamDown(ChannelEvent):
+    type: Events = Events.STREAM_DOWN
+
+@dataclass(kw_only=True)
+class StreamerOnline(ChannelEvent):
     type: Events = Events.STREAMER_ONLINE
 
 
 @dataclass(kw_only=True)
-class StreamDown(ChannelEvent):
+class StreamerOffline(ChannelEvent):
     type: Events = Events.STREAMER_OFFLINE
 
 
