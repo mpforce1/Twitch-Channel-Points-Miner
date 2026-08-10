@@ -43,8 +43,8 @@ from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import (
-    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown,
-    StreamUp, WatchStreakMissing,
+    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown, StreamerOffline,
+    StreamerOnline, WatchStreakMissing,
     WatchStreakProgress, WatchStreakRecovery, WeeklyRewardsUpdate
 )
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
@@ -408,6 +408,7 @@ class Twitch(object):
             except StreamerIsOfflineException:
                 streamer.set_offline()
                 self.event_manager.manage(StreamDown(streamer=streamer))
+                self.event_manager.manage(StreamerOffline(streamer=streamer))
             except RetryError as e:
                 logger.error(f"Error while checking if {streamer} is online: {e}")
                 self.event_manager.manage(
@@ -419,13 +420,14 @@ class Twitch(object):
                 )
             else:
                 streamer.set_online()
-                self.event_manager.manage(StreamUp(streamer=streamer))
+                self.event_manager.manage(StreamerOnline(streamer=streamer))
         else:
             try:
                 self.update_stream(streamer)
             except StreamerIsOfflineException:
                 streamer.set_offline()
                 self.event_manager.manage(StreamDown(streamer=streamer))
+                self.event_manager.manage(StreamerOffline(streamer=streamer))
             except RetryError as e:
                 self.event_manager.manage(
                     Error(

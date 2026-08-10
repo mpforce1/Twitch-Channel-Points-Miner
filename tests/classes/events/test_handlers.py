@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from TwitchChannelPointsMiner.classes.EventHook import EventHook
-from TwitchChannelPointsMiner.classes.events.Event import StreamUp
+from TwitchChannelPointsMiner.classes.events.Event import StreamerOnline
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
 from TwitchChannelPointsMiner.classes.events.handlers.Console import ConsoleHandler
@@ -19,7 +19,7 @@ def test_console_handler():
 
     handler = ConsoleHandler(Events.all(), transformer)
 
-    event = MagicMock(spec=StreamUp)
+    event = MagicMock(spec=StreamerOnline)
     event.type = Events.STREAMER_ONLINE
 
     with pytest.MonkeyPatch.context() as patcher:
@@ -38,7 +38,7 @@ def test_hook_adapter():
 
     handler = EventHookAdapter(hook=hook, transformer=transformer)
 
-    event = MagicMock(spec=StreamUp)
+    event = MagicMock(spec=StreamerOnline)
     event_type = Events.STREAMER_ONLINE
     event.type = event_type
 
@@ -56,7 +56,7 @@ class DispatchHandlerTest(DispatchHandler):
     def handles(self) -> Events:
         return Events.all()
 
-    def handle_stream_up(self, event: StreamUp):
+    def handle_stream_up(self, event: StreamerOnline):
         return self._handle_stream_up(event)
 
 
@@ -64,7 +64,7 @@ def test_dispatch_handler():
     handle_stream_up = MagicMock()
     handler = DispatchHandlerTest(handle_stream_up)
 
-    event = StreamUp(streamer=MagicMock())
+    event = StreamerOnline(streamer=MagicMock())
 
     handler.handle(event)
 

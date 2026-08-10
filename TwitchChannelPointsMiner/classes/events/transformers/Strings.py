@@ -40,6 +40,8 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     Shutdown,
     StreamDown,
     StreamUp,
+    StreamerOffline,
+    StreamerOnline,
     StreamViewCount,
     WatchStreakMissing,
     WatchStreakProgress,
@@ -81,20 +83,33 @@ class DefaultStringTransformer(EventTransformer[str]):
 
     def stream_up(self, event: StreamUp):
         return (
-            f"{event.streamer} is Online!",
-            ":partying_face:",
+            f"{event.streamer}'s Stream is Up!",
+            ":up_arrow:",
         )
 
     def stream_down(self, event: StreamDown):
         return (
-            f"{event.streamer} is Offline!",
-            ":sleeping_face:",
+            f"{event.streamer}'s Stream is Down!",
+            ":down_arrow:",
         )
 
     def stream_view_count(self, event: StreamViewCount):
         return (
             f"{event.streamer} has {event.view_count} viewers",
             ":input_numbers:",
+        )
+
+    def streamer_online(self, event: StreamerOnline):
+        return (
+            f"{event.streamer} is Online!",
+            ":partying_face:",
+        )
+
+
+    def streamer_offline(self, event: StreamerOffline):
+        return (
+            f"{event.streamer} is Offline!",
+            ":sleeping_face:",
         )
 
     def bonus_points_available(self, event: BonusPointsAvailable):
@@ -384,6 +399,10 @@ class DefaultStringTransformer(EventTransformer[str]):
                 return self.stream_down(event)
             case StreamViewCount():
                 return self.stream_view_count(event)
+            case StreamerOnline():
+                return self.streamer_online(event)
+            case StreamerOffline():
+                return self.streamer_offline(event)
             case BonusPointsAvailable():
                 return self.bonus_points_available(event)
             case GainPoints():
