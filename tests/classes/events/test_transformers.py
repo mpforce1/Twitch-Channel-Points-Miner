@@ -5,7 +5,7 @@ import pytest
 
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    AddDateTimeTransformer,
+    TimestampTransformer,
     ColorPaletteTransformer,
     prepend_emoji,
 )
@@ -72,7 +72,7 @@ test_add_date_time_data = [
     "less,timezone,base_message,timestamp,expected", test_add_date_time_data
 )
 def test_add_date_time_transformer(less, timezone, base_message, timestamp, expected):
-    transformer = AddDateTimeTransformer(less=less, timezone=timezone)
+    transformer = TimestampTransformer(less=less, timezone=timezone)
     event = MagicMock()
     event.timestamp = timestamp
     assert transformer.transform(event) == expected

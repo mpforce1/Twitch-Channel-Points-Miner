@@ -4,25 +4,42 @@ from TwitchChannelPointsMiner.classes.events.Transformer import (
 )
 
 from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    AddDateTimeTransformer,
+    EmojiTransformer,
+    TimestampTransformer,
     ColorPaletteTransformer,
     DefaultStringTransformer,
     MultiTransformer,
     StaticStringTransformer,
+    TruncateTransformer,
 )
 from TwitchChannelPointsMiner.logger import LoggerSettings
 
 
 class DefaultTransformerFactory(EventTransformerFactory):
     """
-    Creates a transformer that turns events into a human-readable string, colorized by a ColorPalette, prepended by the
-    date time.
+    Creates a transformer that turns events into a human-readable string, colorized by a ColorPalette, prepended by an
+    emoji and the event's date time.
     """
 
     def create(self, settings: LoggerSettings):
+        """
+        Creates strings in this format:
+
+        `"{timestamp} - {colour code}{emoji}  {message}"`
+
+        where
+
+        `timestamp` is formatted as either `"{d/%m/%y %H:%M:%S}` or {"%d/%m %H:%M:%S"} depending on `settings.less`.
+
+        `colour code` is a 0-width ansi colour code.
+
+        `emoji` is an emoji representative of the event or the miner's default emoji.
+
+        `message` is a human-readable string representation of the event.
+        """
         # First add the timestamp and a separator
         transformers: list[EventTransformer[str]] = [
-            AddDateTimeTransformer(
+            TimestampTransformer(
                 less=settings.less,
                 timezone=settings.time_zone,
             ),
@@ -31,6 +48,16 @@ class DefaultTransformerFactory(EventTransformerFactory):
         # Then add a colour code if we have a palette
         if settings.color_palette is not None:
             transformers.append(ColorPaletteTransformer(palette=settings.color_palette))
-        # Finally add the message
+        # Add the emoji if enabled
+        if settings.emoji:
+            transformers.append(EmojiTransformer())
+            # Pad right with 2 spaces
+            transformers.append(StaticStringTransformer("  "))
+        # Add the message
         transformers.append(DefaultStringTransformer())
-        return MultiTransformer(*transformers)
+        line_transformer = MultiTransformer(*transformers)
+        # Optionally truncate the line
+        if settings.console_truncate is not False:
+            return TruncateTransformer(base=line_transformer)
+        else:
+            return line_transformer

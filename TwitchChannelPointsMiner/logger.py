@@ -7,6 +7,7 @@ from datetime import datetime
 from logging import LogRecord
 from logging.handlers import QueueHandler, QueueListener, TimedRotatingFileHandler
 from pathlib import Path
+from typing import Literal
 
 import emoji
 import pytz
@@ -75,6 +76,7 @@ class LoggerSettings:
         "console_enabled",
         "console_level",
         "console_username",
+        "console_truncate",
         "time_zone",
         "file_level",
         "emoji",
@@ -100,6 +102,7 @@ class LoggerSettings:
         console_enabled: bool = True,
         console_level: int = logging.INFO,
         console_username: bool = False,
+        console_truncate: int | Literal["console", False] = False,
         time_zone: str | None = None,
         file_level: int = logging.DEBUG,
         emoji: bool = platform.system() != "Windows",
@@ -122,6 +125,7 @@ class LoggerSettings:
         self.console_enabled = console_enabled
         self.console_level = console_level
         self.console_username = console_username
+        self.console_truncate = console_truncate
         self.time_zone = time_zone
         self.file_level = file_level
         self.emoji = emoji
