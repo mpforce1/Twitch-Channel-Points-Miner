@@ -71,17 +71,24 @@ class Events(Flag):
         | GAIN_FOR_OTHER
     )
     """Gaining channel points."""
+
+    PREDICTION_RESULT = (
+        PREDICTION_WIN
+        | PREDICTION_LOSE
+        | PREDICTION_REFUND
+    )
+    """The result of a prediction"""
+
     PREDICTIONS = (
         PREDICTION_EVENT_START
         | PREDICTION_EVENT_UPDATE
         | PREDICTION_EVENT_CLOSED
-        | PREDICTION_WIN
-        | PREDICTION_LOSE
-        | PREDICTION_REFUND
+        | PREDICTION_RESULT
         | PREDICTION_MADE
         | PREDICTION_FILTERS
         | PREDICTION_FAILED
     )
+    """Any prediction related event"""
 
     @staticmethod
     def gain_for(reason: str):
