@@ -5,9 +5,6 @@ from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandle
 from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import (
     WebhookHandler,
 )
-from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    DefaultStringTransformer,
-)
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
 
@@ -19,16 +16,14 @@ class PushoverTransformer(EventTransformer[dict]):
         priority,
         sound,
         title: str | None,
-        get_message: EventTransformer[str] | None = None,
+        get_message: EventTransformer[str],
     ):
         self.userkey = userkey
         self.token = token
         self.priority = priority
         self.sound = sound
         self.title = title if title is not None else "Twitch Channel Points Miner"
-        self.get_message = (
-            get_message if get_message is not None else DefaultStringTransformer()
-        )
+        self.get_message = get_message
 
     def transform(self, event: Event) -> dict:
         return {

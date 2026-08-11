@@ -13,9 +13,6 @@ from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import (
 from TwitchChannelPointsMiner.classes.events.transformers.Misc import (
     MappingToDictTransformer,
 )
-from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    DefaultStringTransformer,
-)
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 from TwitchChannelPointsMiner.utils.QueueRunner import QueueRunner
 
@@ -26,10 +23,8 @@ class WebhookData(TypedDict):
 
 
 class WebhookTransformer(EventTransformer[WebhookData]):
-    def __init__(self, get_message: EventTransformer[str] | None = None):
-        self.get_message = (
-            get_message if get_message is not None else DefaultStringTransformer()
-        )
+    def __init__(self, get_message: EventTransformer[str]):
+        self.get_message = get_message
 
     def transform(self, event: Event) -> WebhookData:
         return {

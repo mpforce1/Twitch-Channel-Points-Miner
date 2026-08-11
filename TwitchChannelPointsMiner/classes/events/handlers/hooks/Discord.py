@@ -1,4 +1,4 @@
-from urllib.parse import parse_qs, urlparse, urlunsplit
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Events import Events
@@ -8,9 +8,6 @@ from TwitchChannelPointsMiner.classes.events.Transformer import (
 from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandlerFactory
 from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import (
     WebhookHandler,
-)
-from TwitchChannelPointsMiner.classes.events.transformers.hooks.Markdown import (
-    CodeblockTransformer,
 )
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
@@ -25,15 +22,13 @@ class DiscordTransformer(EventTransformer[dict]):
 
     def __init__(
         self,
+        get_content: EventTransformer[str],
         username: str | None = "Twitch Channel Points Miner",
         avatar_url: str | None = "https://i.imgur.com/X9fEkhT.png",
-        get_content: EventTransformer[str] | None = None,
     ) -> None:
         self.username = username
         self.avatar_url = avatar_url
-        self.get_content = (
-            get_content if get_content is not None else CodeblockTransformer()
-        )
+        self.get_content = get_content
 
     def transform(self, event: Event) -> dict[str, str]:
         data = {"content": self.get_content.transform(event)}
@@ -45,12 +40,16 @@ class DiscordTransformer(EventTransformer[dict]):
 
 
 def add_wait_to_url(url: str):
+    """
+    Adds a "wait=true" query param to the given url. This helps us to ensure message delivery.
+    :param url: The url to modify
+    :return: The modified url.
+    """
     # Check if "wait" is already part of the url query
-    return url  # TODO
     scheme, netloc, path, params, query, fragment = urlparse(url)
     if "wait" not in parse_qs(query):
         query = f"{query}{('&' if query != '' else '')}wait=true"
-        return urlunsplit((scheme, netloc, path, params, query, fragment))
+        return urlunparse((scheme, netloc, path, params, query, fragment))
     return url
 
 
@@ -77,7 +76,7 @@ def discord(
 
     return lambda default_transformer: WebhookHandler(
         name=name,
-        webhook_api_url=f"{webhook_api_url}?wait=true",
+        webhook_api_url=webhook_api_url,
         events=events,
         transformer=(
             transformer

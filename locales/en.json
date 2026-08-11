@@ -1,0 +1,121 @@
+{
+  "stream_up": "{streamer}: Stream is Up!",
+  "stream_down": "{streamer}: Stream is Down!",
+  "stream_view_count": {
+    "singular": "{streamer} has {count} viewer",
+    "plural": "{streamer} has {count} viewers"
+  },
+  "streamer_online": "{streamer} is Online!",
+  "streamer_offline": "{streamer} is Offline!",
+  "bonus_points_available": "Bonus Claim available for {streamer}",
+  "gain_points": "+{amount} → {streamer} - Reason: {reason}",
+  "points_spent": {
+    "singular": "{count} point spent for {streamer}",
+    "plural": "{count} points spent for {streamer}"
+  },
+  "watch_streak_progress": "Detected Watch Streak for {streamer}",
+  "watch_streak_missing": "Missing Watch Streak for {streamer}",
+  "watch_streak_recovery": "Watch Streak recovered for {streamer}",
+  "weekly_rewards_update": {
+    "days": {
+      "singular": "{count} day",
+      "plural": "{count} days"
+    },
+    "main": "Weekly Reward update for {streamer}: {update_type}. {days_visited_this_week}/{days} visited this week."
+  },
+  "predictions": {
+    "outcome_simple": "【{title}】",
+    "outcome": "【{title}: Odds {odds}】",
+    "event_created": "Prediction event started for {streamer} ({prediction_window_seconds}s): \"{title}\": [{outcomes}]",
+    "prediction_made": {
+      "points": {
+        "singular": "{count} channel point",
+        "plural": "{count} channel points"
+      },
+      "total_update": {
+        "some": ", Total points placed: {total_points}",
+        "none": ""
+      },
+      "main": "Prediction made for \"{title}\": Placed {points} on \"{outcome_title}\"{total_update}"
+    },
+    "filters": {
+      "reasons": {
+        "too_short": "Chosen prediction time is in the past: {time}",
+        "not_enough_points": "You don't have enough channel points: {channel_points} < {minimum_points}",
+        "not_active": "Event is not longer active: {status}",
+        "below_minimum": "Chosen stake ({stake}) is less than 0",
+        "settings": "Filtered by your bet settings: {conditional}"
+      },
+      "main": "Not placing a prediction on \"{title}\" for {streamer}: {reason}"
+    },
+    "event_update": "Prediction event updated for {streamer} {remaining}s: \"{title}\", status \"{status}\"{outcomes}",
+    "prediction_result": {
+      "winning_outcome": {
+        "some": "\n\tWinning outcome: {outcome}",
+        "none": ""
+      },
+      "user_prediction": "User prediction: {outcome}",
+      "user_result": "User Result: \"{type}\"",
+      "points": {
+        "win": "Points gained: {points}",
+        "lose": "Points lost: {points}",
+        "refund": "Refunded: {points}"
+      },
+      "main": "Prediction event resulted for {streamer}: \"{title}\": {winning_outcome}\n\t{user_prediction}\n\t{user_result}\n\t{points}"
+    },
+    "prediction_failed": "Failed to place bet, error: {error_code}"
+  },
+  "moment_claim_available": "Moment claim available for {streamer}",
+  "drops": {
+    "drop": "{name} ({benefit}) {current_minutes_watched}/{minutes_required} ({percentage_progress}%)",
+    "progress": "Drop progress for {drop}{with_streamer}",
+    "with_streamer": {
+      "some": " for {streamer}",
+      "none": ""
+    },
+    "claim_available": "Drop claim available for {drop}{with_streamer}",
+    "claim": "Claiming drop \"{drop}\""
+  },
+  "chat_mention": "{actor} wrote at {streamer} wrote: {message}",
+  "gift_sub_received": {
+    "gifter": {
+      "some": "{value}",
+      "none": "Anonymous"
+    },
+    "days": {
+      "singular": "{count} day)",
+      "plural": "{count} days"
+    },
+    "main": "Tier-{tier} Gift Sub from {gifter} for {streamer}, ends at {ends_at} (in {days})"
+  },
+  "join_raid": "Joining raid from {streamer} to {target}!",
+  "bonus_points_claim": "Claiming the bonus for {streamer}!",
+  "moment_claim": "Claiming the moment for {streamer}!",
+  "changing_watch_slots": {
+    "streamer": "{streamer}",
+    "adding": {
+      "some": " Adding {streamers}.",
+      "none": ""
+    },
+    "dropping": {
+      "some": " Dropping {streamers}.",
+      "none": ""
+    },
+    "main": "Changing watch slots:{adding}{dropping}"
+  },
+  "community_goal_contribution": {
+    "points": {
+      "singular": "{count} point",
+      "plural": "{count} points"
+    },
+    "main": "Contributed {points} to {streamer}'s community goal \"{title}\""
+  },
+  "shutdown": "Miner stopping: {reason}",
+  "error": {
+    "error_str": {
+      "some": ": {error}",
+      "none": ""
+    },
+    "occurred": "Error occurred: {context}: {message}{error_str}"
+  }
+}

@@ -3,12 +3,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from TwitchChannelPointsMiner.classes.EventHook import EventHook
-from TwitchChannelPointsMiner.classes.events.Event import StreamerOnline
+from TwitchChannelPointsMiner.classes.events.Event import StreamUp, StreamerOnline
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
 from TwitchChannelPointsMiner.classes.events.handlers.Console import ConsoleHandler
 from TwitchChannelPointsMiner.classes.events.handlers.Dispatch import DispatchHandler
 from TwitchChannelPointsMiner.classes.events.handlers.Hook import EventHookAdapter
+from TwitchChannelPointsMiner.classes.events.handlers.hooks.Discord import (
+    add_wait_to_url,
+)
 
 
 def test_console_handler():
@@ -56,7 +59,7 @@ class DispatchHandlerTest(DispatchHandler):
     def handles(self) -> Events:
         return Events.all()
 
-    def handle_stream_up(self, event: StreamerOnline):
+    def handle_stream_up(self, event: StreamUp):
         return self._handle_stream_up(event)
 
 
@@ -64,8 +67,31 @@ def test_dispatch_handler():
     handle_stream_up = MagicMock()
     handler = DispatchHandlerTest(handle_stream_up)
 
-    event = StreamerOnline(streamer=MagicMock())
+    event = StreamUp(streamer=MagicMock())
 
     handler.handle(event)
 
     handle_stream_up.assert_called_once_with(event)
+
+
+def test_discord_add_wait_to_url():
+    assert (
+        add_wait_to_url(
+            "https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J"
+        )
+        == "https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J?wait=true"
+    )
+
+    assert (
+        add_wait_to_url(
+            "https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde?wait=true"
+        )
+        == "https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde?wait=true"
+    )
+
+    assert (
+        add_wait_to_url(
+            "https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde?something=else"
+        )
+        == "https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde?something=else&wait=true"
+    )
