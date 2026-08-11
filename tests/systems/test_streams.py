@@ -1,13 +1,14 @@
 import datetime
 import time
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
 from TwitchChannelPointsMiner.classes.events.Event import (
-    StreamerOffline,
-    StreamerOnline,
+    StreamDown,
+    StreamUp,
     StreamViewCount,
+    StreamerOffline,
 )
 from TwitchChannelPointsMiner.systems.Streams import StreamSystem
 
@@ -38,7 +39,7 @@ def test_bring_up():
 
     assert streamer.stream_up == current_time
     event_manager.manage.assert_called_once_with(
-        StreamerOnline(timestamp=timestamp, streamer=streamer)
+        StreamUp(timestamp=timestamp, streamer=streamer)
     )
 
 
@@ -48,6 +49,7 @@ def test_bring_down():
 
     streamer = MagicMock()
     streamer.channel_id = channel_id
+    streamer.is_online = True
 
     event_manager = MagicMock()
 
@@ -67,8 +69,11 @@ def test_bring_down():
         system.bring_down(channel_id)
 
     streamer.set_offline.assert_called_once()
-    event_manager.manage.assert_called_once_with(
-        StreamerOffline(timestamp=timestamp, streamer=streamer)
+    event_manager.manage.assert_has_calls(
+        [
+            call(StreamDown(timestamp=timestamp, streamer=streamer)),
+            call(StreamerOffline(timestamp=timestamp, streamer=streamer)),
+        ]
     )
 
 

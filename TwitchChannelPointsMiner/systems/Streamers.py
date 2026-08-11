@@ -186,12 +186,12 @@ class StreamerSystem:
                 f"Claiming the moment for {streamer}!",
                 extra={"emoji": ":video_camera:", "event": Events.MOMENT_CLAIM},
             )
-            self.event_manager.manage(
-                MomentClaim(
-                    streamer=streamer,
-                    moment_id=moment_id,
-                )
+        self.event_manager.manage(
+            MomentClaim(
+                streamer=streamer,
+                moment_id=moment_id,
             )
+        )
         try:
             self.twitch.gql.claim_moment(moment_id)
         except RetryError as e:

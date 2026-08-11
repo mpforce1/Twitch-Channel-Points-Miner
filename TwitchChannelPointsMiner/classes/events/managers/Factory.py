@@ -12,7 +12,6 @@ from TwitchChannelPointsMiner.logger import LoggerSettings
 @dataclass(kw_only=True)
 class EventManagerConfiguration:
     console: bool = False
-    timestamps: Literal["full"] | Literal["short"] | None = "full"
     queue: QueueConfiguration | None = None
     events: Events | list[Events] = Events.all()
 

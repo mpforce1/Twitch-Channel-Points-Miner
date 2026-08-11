@@ -5,24 +5,22 @@ from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandle
 from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import (
     WebhookHandler,
 )
-from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    DefaultStringTransformer,
-)
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
 
 class TelegramTransformer(EventTransformer[dict]):
+
     def __init__(
         self,
+        get_text: EventTransformer[str],
         chat_id: int,
         token: str,
         disable_notification: bool = False,
-        get_text: EventTransformer[str] | None = None,
     ):
         self.chat_id = chat_id
         self.token = token
         self.disable_notification = disable_notification
-        self.get_text = get_text if get_text is not None else DefaultStringTransformer()
+        self.get_text = get_text
 
     def transform(self, event: Event) -> dict:
         return {

@@ -1,10 +1,8 @@
 from textwrap import dedent
 from typing import Literal
+
 from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
-from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    DefaultStringTransformer,
-)
 
 
 class CodeblockTransformer(EventTransformer[str]):
@@ -18,7 +16,7 @@ class CodeblockTransformer(EventTransformer[str]):
 
     def __init__(
         self,
-        base: EventTransformer[str] = DefaultStringTransformer(),
+        base: EventTransformer[str],
         fence: Literal["```", "~~~"] = "```",
         language: str = "",
     ):

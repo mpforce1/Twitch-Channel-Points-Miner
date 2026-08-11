@@ -207,7 +207,7 @@ class TwitchChannelPointsMiner:
             WatchStreakRecovery.BasicConfiguration | Literal[False] | None
         ) = None,
         # Event Management
-        event_manager: EventManagerConfiguration | Literal[True] | None = None,
+        event_manager: EventManagerConfiguration | Literal[True] | None = True,
         # Event Handlers
         handlers: list[EventHandler | EventHandlerFactory] | None = None,
         # Factories

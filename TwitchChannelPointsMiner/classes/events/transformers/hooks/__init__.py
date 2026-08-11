@@ -35,5 +35,5 @@ class DefaultEventTransformerFactory(EventTransformerFactory[str]):
             # Pad right with a space
             transformers.append(StaticStringTransformer(" "))
         # Add the message
-        transformers.append(DefaultStringTransformer())
+        transformers.append(DefaultStringTransformer(translator=settings.translator))
         return CodeblockTransformer(base=MultiTransformer(*transformers))

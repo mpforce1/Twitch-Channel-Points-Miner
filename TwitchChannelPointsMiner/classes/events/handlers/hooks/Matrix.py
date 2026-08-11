@@ -5,15 +5,12 @@ from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Transformer import EventTransformer
 from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandlerFactory
 from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import WebhookHandler
-from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    DefaultStringTransformer,
-)
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
 
 class MatrixTransformer(EventTransformer[dict]):
-    def __init__(self, get_body: EventTransformer[str] | None = None):
-        self.get_body = get_body if get_body is not None else DefaultStringTransformer()
+    def __init__(self, get_body: EventTransformer[str]):
+        self.get_body = get_body
 
     def transform(self, event: Event) -> dict:
         return {

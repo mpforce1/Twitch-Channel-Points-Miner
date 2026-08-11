@@ -21,6 +21,7 @@ from TwitchChannelPointsMiner.classes.Matrix import Matrix
 from TwitchChannelPointsMiner.classes.Pushover import Pushover
 from TwitchChannelPointsMiner.classes.Settings import Events
 from TwitchChannelPointsMiner.classes.Telegram import Telegram
+from TwitchChannelPointsMiner.classes.Translator import Translator
 from TwitchChannelPointsMiner.classes.Webhook import Webhook
 from TwitchChannelPointsMiner.utils import remove_emoji
 
@@ -93,6 +94,7 @@ class LoggerSettings:
         "username",
         "redact_secrets",
         "anonymiser",
+        "translator",
     ]
 
     def __init__(
@@ -118,7 +120,9 @@ class LoggerSettings:
         hooks: list[EventHook] | None = None,
         username: str | None = None,
         redact_secrets: bool = False,
-        anonymiser: Anonymiser | bool | None = None
+        anonymiser: Anonymiser | bool | None = None,
+        translator: Translator | None = None,
+        locale: str | None = None,
     ):
         self.save = save
         self.less = less
@@ -150,6 +154,7 @@ class LoggerSettings:
             self.anonymiser: Anonymiser = ConsistentAnonymiser()
         else:
             self.anonymiser: Anonymiser = anonymiser
+        self.translator = translator if translator is not None else Translator("locales", locale)
 
 
 class ExceptionFormatter(logging.Formatter):
