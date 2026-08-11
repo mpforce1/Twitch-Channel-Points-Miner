@@ -255,7 +255,7 @@ class GQLOperations:
         "variables": {"cursor": "", "filter": "GIFT", "limit": 100, "platform": "WEB"},
         "extensions": {
             "persistedQuery": {
-                "sha256Hash": "149b5d57366d01d1ee948852b3d0fa36cf7b907ffba914bdb677627c014f08d6",
+                "sha256Hash": "dfac9fc0965996a636f07fd98ae5f9878a628134b330b47a0d26c02a0c225854",
                 "version": 1,
             }
         },
