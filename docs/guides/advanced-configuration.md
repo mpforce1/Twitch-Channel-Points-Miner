@@ -785,12 +785,12 @@ If `True`, the miner will contribute the maximum channel points per stream to th
 
 Join the streamer's IRC chat, can be set to one of these `ChatPresence`:
 
-| Name      | Description                                                    |
-|-----------|----------------------------------------------------------------|
-| `ALWAYS`  | Always attempt to join this streamer's chat.                   |
-| `NEVER`   | Never attempt to join this streamer's chat.                    |
-| `ONLINE`  | Only attempt to join this streamer's chat when they're online. |
-| `OFFLINE` | Only attempt to join this streamer's chat when thy're offline. |
+| Name      | Description                                                     |
+|-----------|-----------------------------------------------------------------|
+| `ALWAYS`  | Always attempt to join this streamer's chat.                    |
+| `NEVER`   | Never attempt to join this streamer's chat.                     |
+| `ONLINE`  | Only attempt to join this streamer's chat when they're online.  |
+| `OFFLINE` | Only attempt to join this streamer's chat when they're offline. |
 
 #### `simulate_hls_playback`
 
