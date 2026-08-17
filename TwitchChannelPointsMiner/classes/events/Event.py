@@ -261,6 +261,8 @@ class DropClaim(DropEvent):
 class PredictionMade(PredictionEventEvent):
     prediction: Prediction
     amount: int
+    previous_amount: int
+    # Increasing your wager causes another "PredictionMade" event, this represents the total take prior to the increase
     type: Events = Events.PREDICTION_MADE
 
 

@@ -160,7 +160,7 @@ class LineConfig:
     max_length: int | Literal["console"] | None
 
 
-class DefaultStringTransformer(EventTransformer[str]):
+class TranslatorTransformer(EventTransformer[str]):
     """Transformer that turns events into human-readable strings"""
 
     def __init__(
@@ -482,14 +482,16 @@ class DefaultStringTransformer(EventTransformer[str]):
             locale=self.locale,
             arg={"count": event.amount},
         )
+        change = event.amount - event.previous_amount
         # A prediction can be added to multiple times,
         # display both the amount placed this time and the total placed if this is an update
         total_update_str = self.translator.translate_optional(
             lambda t: t.predictions.prediction_made.total_update,
-            data.prediction,
+            event.amount if change != 0 else None,
             locale=self.locale,
-            get_args=lambda p: {"total_points": p.points},
+            get_args=lambda p: {"total_points": p},
         )
+
 
         return self.translator.translate(
             lambda t: t.predictions.prediction_made.main,
@@ -762,6 +764,17 @@ class DefaultStringTransformer(EventTransformer[str]):
             return to_str(event)
         else:
             raise ValueError(f"Unhandled Event: {event}")
+
+
+class TranslatorNameTransformer(EventTransformer[str]):
+    """Transformer that gets the name of the event in a given locale (or the default one)"""
+
+    def __init__(self, translator: Translator, locale: str | None = None):
+        self.translator = translator
+        self.locale = locale
+
+    def transform(self, event: Event) -> str:
+        return self.translator.get_translation(locale=self.locale).names[event.type]
 
 
 class TimestampTransformer(EventTransformer[str]):
