@@ -72,11 +72,7 @@ class Events(Flag):
     )
     """Gaining channel points."""
 
-    PREDICTION_RESULT = (
-        PREDICTION_WIN
-        | PREDICTION_LOSE
-        | PREDICTION_REFUND
-    )
+    PREDICTION_RESULT = PREDICTION_WIN | PREDICTION_LOSE | PREDICTION_REFUND
     """The result of a prediction"""
 
     PREDICTIONS = (
@@ -149,3 +145,22 @@ class Events(Flag):
     @staticmethod
     def reduce(events: "Events | list[Events]") -> "Events":
         return Events.union(events) if isinstance(events, list) else events
+
+    @staticmethod
+    def has_name(name: str):
+        """
+        Gets whether the given string represents the name of an Events
+        :param name: The name to check
+        :return: True, if the enum exists, False otherwise.
+        """
+        return name in Events.__members__
+
+    @staticmethod
+    def for_name(name: str):
+        """
+        Gets the enum of the given name.
+        :param name: The name of the enum to get.
+        :return: The Events
+        :raises KeyError: If an Events with the given name cannot be found
+        """
+        return Events[name]

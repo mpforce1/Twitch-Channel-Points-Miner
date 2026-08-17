@@ -121,6 +121,7 @@ class PredictionTrackingSystem(PredictionSystem):
                 prediction_event=event,
                 prediction=prediction,
                 amount=estimated_amount,
+                previous_amount=old_amount,
             )
         )
         # Analytics switch

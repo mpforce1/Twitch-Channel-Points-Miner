@@ -5,9 +5,15 @@ from typing import TypedDict
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
 from TwitchChannelPointsMiner.classes.entities.GiftSub import Gifter
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.events.Events import Events
 
 
 # Args
+@dataclass(kw_only=True)
+class ArgNone(TypedDict):
+    pass
+
+
 @dataclass(kw_only=True)
 class ArgStreamer(TypedDict):
     streamer: Streamer
@@ -27,9 +33,11 @@ class ArgTitle(TypedDict):
 class ArgOutcome(ArgTitle):
     odds: int | float
 
+
 @dataclass(kw_only=True)
 class ArgUserPrediction(TypedDict):
     outcome: str
+
 
 @dataclass(kw_only=True)
 class ArgTotalPoints(TypedDict):
@@ -248,6 +256,9 @@ class Optional[TArg]:
 
 
 # Groups
+@dataclass(kw_only=True)
+class General:
+    account: str
 
 
 @dataclass(kw_only=True)
@@ -345,6 +356,8 @@ class Error:
 # Top level model
 @dataclass(kw_only=True)
 class Translation:
+    general: General
+    names: dict[Events, str]
     stream_up: Requires[ArgStreamer]
     stream_down: Requires[ArgStreamer]
     stream_view_count: Pluralizable[ArgStreamerAndCount]

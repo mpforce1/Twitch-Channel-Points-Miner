@@ -3,7 +3,8 @@ from TwitchChannelPointsMiner.classes.events.Transformer import (
     EventTransformerFactory,
 )
 from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
-    DefaultStringTransformer,
+    TranslatorNameTransformer,
+    TranslatorTransformer,
     EmojiTransformer,
     MultiTransformer,
     StaticStringTransformer,
@@ -21,10 +22,16 @@ class DefaultEventTransformerFactory(EventTransformerFactory[str]):
         """
         Creates strings in this format:
 
-        `"```{emoji} {message}```"`
+        `"```
+        {emoji} {event name}
+        {optional "Account: " account_name}
+        {message}
+        ```"`
 
         where
         `emoji` is an emoji representative of the event or the miner's default emoji.
+
+        `optional "Account: " account_name` is the user's account name prefixed by "Account: " or nothing
 
         `message` is a human-readable string representation of the event.
         """
@@ -32,8 +39,20 @@ class DefaultEventTransformerFactory(EventTransformerFactory[str]):
         # Add the emoji if enabled
         if settings.emoji:
             transformers.append(EmojiTransformer())
-            # Pad right with a space
-            transformers.append(StaticStringTransformer(" "))
+            transformers.append(StaticStringTransformer(value=" "))
+        # Then the name of the event plus \n
+        transformers.append(TranslatorNameTransformer(translator=settings.translator))
+        transformers.append(StaticStringTransformer(value="\n"))
+        # Then add account name if set
+        transformers.append(
+            StaticStringTransformer(
+                value=(
+                    f"{settings.translator.get_translation().general.account}: {settings.username}\n"
+                    if settings.username is not None
+                    else ""
+                )
+            )
+        )
         # Add the message
-        transformers.append(DefaultStringTransformer(translator=settings.translator))
+        transformers.append(TranslatorTransformer(translator=settings.translator))
         return CodeblockTransformer(base=MultiTransformer(*transformers))

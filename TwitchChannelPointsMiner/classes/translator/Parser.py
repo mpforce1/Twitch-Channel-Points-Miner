@@ -1,10 +1,12 @@
 from typing import Callable, get_type_hints, is_typeddict
 from TwitchChannelPointsMiner.JsonParser import (
     InvalidJsonShapeError,
+    JsonParentContext,
     expect_dict,
     expect_str,
     parse_expected_value,
 )
+from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.translator.Model import (
     ArgChangingWatchSlots,
     ArgChatMention,
@@ -47,6 +49,7 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     Drops,
     Error,
     Filters,
+    General,
     GiftSubReceived,
     Optional,
     Pluralizable,
@@ -181,6 +184,33 @@ def pluralizable_parser[TArg: ArgCount](
 
 
 # Model
+
+
+#  General
+def general_parser(value) -> General:
+    value = expect_dict(value)
+    return General(account=parse_expected_value(value, "account", expect_str))
+
+
+#  Names
+def names_parser(value) -> dict[Events, str]:
+    value = expect_dict(value)
+    # Check the dict contains only all the Events
+    missing_events = Events.all()
+    result = dict[Events, str]()
+    for key in value:
+        with JsonParentContext(key):
+            if not Events.has_name(key):
+                raise InvalidJsonShapeError([], f"Unknown Events enum: {key}")
+            event = Events.for_name(key)
+            result[event] = expect_str(value[key])
+            missing_events = missing_events & ~event
+    if missing_events == Events.none():
+        return result
+    else:
+        raise InvalidJsonShapeError(
+            [], f"Missing Events enum(s): {missing_events.name}"
+        )
 
 
 #  Predictions
@@ -351,6 +381,8 @@ def error_parser(value):
 def translation_parser(root):
     root = expect_dict(root)
     return Translation(
+        general=parse_expected_value(root, "general", general_parser),
+        names=parse_expected_value(root, "names", names_parser),
         stream_up=parse_expected_value(root, "stream_up", requires_parser(ArgStreamer)),
         stream_down=parse_expected_value(
             root, "stream_down", requires_parser(ArgStreamer)
