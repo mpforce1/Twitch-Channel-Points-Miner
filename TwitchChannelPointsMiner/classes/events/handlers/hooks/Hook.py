@@ -69,14 +69,14 @@ class WebhookHandler(EventHandler):
             if runner is not None
             else QueueRunner[Event](
                 name="Webhook",
-                remove_on_failure=False,
+                remove_on_failure=True,
                 sleep_interval_seconds=0.2,
                 process_item=self._process_item,
             )
         )
         """
         The underlying runner enabling sequential processing of events.
-        Defaults to a queue runner that keeps items in the queue until processed 
+        Defaults to a queue runner that keeps items in the queue until processed or failure 
         and waits 0.2 seconds between checking for queued items.
         """
         self.runner.start()
