@@ -2,6 +2,7 @@ import logging
 import os
 import platform
 import queue
+import shutil
 import sys
 from datetime import datetime
 from logging import LogRecord
@@ -129,7 +130,7 @@ class LoggerSettings:
         self.console_enabled = console_enabled
         self.console_level = console_level
         self.console_username = console_username
-        self.console_truncate = console_truncate
+        self.console_truncate: int | Literal["console", False] = console_truncate
         self.time_zone = time_zone
         self.file_level = file_level
         self.emoji = emoji
@@ -247,13 +248,21 @@ class GlobalFormatter(logging.Formatter):
                 record.msg = (
                     f"{self.settings.color_palette.get(record.event.name)}{record.msg}"
                 )
-        return super().format(record)
+        # Truncate if required
+        base_formatted = super().format(record)
+        if self.settings.console_truncate is False:
+            return base_formatted
+        max_length = (
+            shutil.get_terminal_size()[0]
+            if self.settings.console_truncate == "console"
+            else self.settings.console_truncate
+        )
+        return base_formatted[:max_length]
 
 class LimitedConsoleHandler(logging.StreamHandler):
     def emit(self, record: LogRecord) -> None:
         if hasattr(record, "force_console"):
             super().emit(record)
-
 
 
 def configure_loggers(username, settings: LoggerSettings):
