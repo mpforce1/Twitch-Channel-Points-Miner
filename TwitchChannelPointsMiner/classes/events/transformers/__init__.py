@@ -5,6 +5,7 @@ from TwitchChannelPointsMiner.classes.events.Transformer import (
 
 from TwitchChannelPointsMiner.classes.events.transformers.Strings import (
     EmojiTransformer,
+    LineConfig,
     TimestampTransformer,
     ColorPaletteTransformer,
     TranslatorTransformer,
@@ -47,7 +48,9 @@ class DefaultTransformerFactory(EventTransformerFactory):
         ]
         # Then add account name if set
         if settings.username is not None:
-            transformers.append(StaticStringTransformer(value=f"{settings.username} - "))
+            transformers.append(
+                StaticStringTransformer(value=f"{settings.username} - ")
+            )
         # Then add a colour code if we have a palette
         if settings.color_palette is not None:
             transformers.append(ColorPaletteTransformer(palette=settings.color_palette))
@@ -61,6 +64,9 @@ class DefaultTransformerFactory(EventTransformerFactory):
         line_transformer = MultiTransformer(*transformers)
         # Optionally truncate the line
         if settings.console_truncate is not False:
-            return TruncateTransformer(base=line_transformer)
+            return TruncateTransformer(
+                base=line_transformer,
+                default=LineConfig(max_length=settings.console_truncate),
+            )
         else:
             return line_transformer

@@ -43,7 +43,8 @@ from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import (
-    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown, StreamerOffline,
+    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown,
+    StreamerOffline,
     StreamerOnline, WatchStreakMissing,
     WatchStreakProgress, WatchStreakRecovery, WeeklyRewardsUpdate
 )
@@ -966,8 +967,26 @@ class Twitch(object):
                                                     combined_message, Events.DROP_STATUS
                                                 )
 
-                    except requests.exceptions.ConnectionError as e:
-                        logger.error(f"Error while trying to send minute watched: {e}")
+                    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                        # Attempt to reduce the URL length for max retry errors
+                        # NOTE: this is fragile as it's based on __str__ of a lib class not changing
+                        max_url_path_length = 20
+                        error_str = str(e)
+                        max_retry_start_anchor = "Max retries exceeded with url: "
+                        max_retry_end_anchor = " (Caused by "  # (Caused by {reason!r})
+                        if (
+                            Settings.logger.less
+                            and max_retry_start_anchor in error_str
+                            and max_retry_end_anchor in error_str
+                        ):
+                            # Partition error into (before url, url, after url)
+                            start_index = error_str.index(max_retry_start_anchor) + len(max_retry_start_anchor)
+                            end_index = error_str.index(max_retry_end_anchor)
+                            before_url = error_str[:start_index]
+                            url = error_str[start_index:end_index]
+                            after_url = error_str[end_index:]
+                            error_str = f"{before_url}{url[:max_url_path_length]}...{after_url}"
+                        logger.error(f"Error while trying to send minute watched: {error_str}")
                         self.event_manager.manage(
                             Error(
                                 context="Twitch API",
@@ -976,15 +995,6 @@ class Twitch(object):
                             )
                         )
                         self.__check_connection_handler(chunk_size)
-                    except requests.exceptions.Timeout as e:
-                        logger.error(f"Error while trying to send minute watched: {e}")
-                        self.event_manager.manage(
-                            Error(
-                                context="Twitch API",
-                                message=f"Error while trying to send minute watched",
-                                error=e,
-                            )
-                        )
 
                     self.__chuncked_sleep(
                         next_iteration - time.time(), chunk_size=chunk_size

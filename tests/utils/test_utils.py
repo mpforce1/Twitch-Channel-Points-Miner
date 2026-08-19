@@ -9,6 +9,7 @@ from TwitchChannelPointsMiner.utils.Utils import (
     interruptible_sleep,
     ordinal,
     oxford_comma_list,
+    truncate_url_path_query,
 )
 
 test_interruptible_sleep_uninterrupted_data = [
@@ -278,3 +279,39 @@ test_ordinal_data = [
 @pytest.mark.parametrize("value,expected", test_ordinal_data)
 def test_ordinal(value, expected):
     assert ordinal(value) == expected
+
+
+test_truncate_url_path_query_data = [
+    # No path
+    ("https://example.com/", 0, "https://example.com"),
+    ("https://example.com/", 10, "https://example.com/"),
+    # Some path
+    ("https://example.com/path/segments/", 0, "https://example.com"),
+    ("https://example.com/path/segments/", 5, "https://example.com/path"),
+    ("https://example.com/path/segments/", 10, "https://example.com/path/segm"),
+    # Query
+    ("https://example.com/?param=arg&param=arg", 0, "https://example.com"),
+    ("https://example.com/?param=arg&param=arg", 5, "https://example.com/?para"),
+    ("https://example.com/?param=arg&param=arg", 10, "https://example.com/?param=arg"),
+    # Path and query
+    (
+        "https://example.com/path/segments/?param=arg&param=arg",
+        0,
+        "https://example.com",
+    ),
+    (
+        "https://example.com/path/segments/?param=arg&param=arg",
+        5,
+        "https://example.com/path",
+    ),
+    (
+        "https://example.com/path/segments/?param=arg&param=arg",
+        10,
+        "https://example.com/path/segm",
+    ),
+]
+
+
+@pytest.mark.parametrize("url,length,expected", test_truncate_url_path_query_data)
+def test_truncate_url_path_query(url: str, length: int, expected: str):
+    assert truncate_url_path_query(url, length) == expected
