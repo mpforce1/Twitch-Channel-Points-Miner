@@ -60,7 +60,11 @@ class DefaultTransformerFactory(EventTransformerFactory):
             # Pad right with 2 spaces
             transformers.append(StaticStringTransformer("  "))
         # Add the message
-        transformers.append(TranslatorTransformer(translator=settings.translator))
+        transformers.append(
+            TranslatorTransformer(
+                translator=settings.translator, account_username=settings.username
+            )
+        )
         line_transformer = MultiTransformer(*transformers)
         # Optionally truncate the line
         if settings.console_truncate is not False:

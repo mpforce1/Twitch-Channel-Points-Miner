@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import TypedDict
 
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
-from TwitchChannelPointsMiner.classes.entities.GiftSub import Gifter
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.events.Events import Events
 
@@ -78,10 +77,13 @@ class ArgErrorCode(TypedDict):
 class ArgDrop(TypedDict):
     drop: Drop
 
+@dataclass(kw_only=True)
+class ArgRecipient(TypedDict):
+    recipient: str
 
 @dataclass(kw_only=True)
 class ArgValue(TypedDict):
-    value: Gifter
+    value: str
 
 
 @dataclass(kw_only=True)
@@ -189,6 +191,7 @@ class ArgDropWithStreamer(TypedDict):
 
 @dataclass(kw_only=True)
 class ArgGiftSubReceived(ArgStreamer, TypedDict):
+    recipient: str
     tier: int
     gifter: str
     ends_at: datetime
@@ -328,6 +331,7 @@ class Drops:
 
 @dataclass(kw_only=True)
 class GiftSubReceived:
+    recipient: Optional[ArgRecipient]
     gifter: Optional[ArgValue]
     days: Pluralizable[ArgCount]
     main: Requires[ArgGiftSubReceived]
