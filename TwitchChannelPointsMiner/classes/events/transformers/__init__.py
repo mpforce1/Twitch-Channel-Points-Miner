@@ -22,7 +22,7 @@ class DefaultTransformerFactory(EventTransformerFactory):
     emoji and the event's date time.
     """
 
-    def create(self, settings: LoggerSettings):
+    def create(self, settings: LoggerSettings, account_username: str):
         """
         Creates strings in this format:
 
@@ -62,7 +62,7 @@ class DefaultTransformerFactory(EventTransformerFactory):
         # Add the message
         transformers.append(
             TranslatorTransformer(
-                translator=settings.translator, account_username=settings.username
+                translator=settings.translator, account_username=account_username
             )
         )
         line_transformer = MultiTransformer(*transformers)

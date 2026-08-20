@@ -51,6 +51,7 @@ class DefaultEventManagerFactory(EventManagerFactory):
         self,
         config: EventManagerConfiguration | Literal[True] | None,
         settings: LoggerSettings,
+        account_username: str,
         background_tasks: list[Thread],
     ) -> EventManager:
         logger.info(f"Creating event manager")
@@ -113,7 +114,9 @@ class DefaultEventManagerFactory(EventManagerFactory):
             priority_manager.set_priority_handler(
                 ConsoleHandler(
                     events=Events.reduce(config.events),
-                    transformer=transformer_factory.create(settings=settings),
+                    transformer=transformer_factory.create(
+                        settings=settings, account_username=account_username
+                    ),
                 )
             )
             manager.set_manager(priority_manager)
@@ -123,9 +126,10 @@ class DefaultEventManagerFactory(EventManagerFactory):
         self,
         config: EventManagerConfiguration | Literal[True] | None,
         settings: LoggerSettings,
+        account_username: str,
         background_tasks: list[Thread],
     ):
         # By default, use a singleton manager
         if self._manager is None:
-            self._manager = self._create(config, settings, background_tasks)
+            self._manager = self._create(config, settings, account_username, background_tasks)
         return self._manager

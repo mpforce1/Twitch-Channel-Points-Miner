@@ -18,7 +18,7 @@ from TwitchChannelPointsMiner.logger import LoggerSettings
 class DefaultEventTransformerFactory(EventTransformerFactory[str]):
     """Creates a Transformer that produces emoji prepended human-readable strings."""
 
-    def create(self, settings: LoggerSettings) -> EventTransformer[str]:
+    def create(self, settings: LoggerSettings, account_username: str) -> EventTransformer[str]:
         """
         Creates strings in this format:
 
@@ -56,7 +56,7 @@ class DefaultEventTransformerFactory(EventTransformerFactory[str]):
         # Add the message
         transformers.append(
             TranslatorTransformer(
-                translator=settings.translator, account_username=settings.username
+                translator=settings.translator, account_username=account_username
             )
         )
         return CodeblockTransformer(base=MultiTransformer(*transformers))

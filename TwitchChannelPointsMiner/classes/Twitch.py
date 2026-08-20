@@ -1854,7 +1854,7 @@ class Twitch(object):
             else:
                 if send_event:
                     extra["event"] = Events.GIFT_SUB_RECEIVED
-                logger.info(gift_sub.describe(), extra=extra)
+                logger.info(f"[{self.client_session.login.username}] {gift_sub.describe()}", extra=extra)
                 if isinstance(gift_sub.tier, int) and send_event:
                     # ignore non-standard gift subs like Turbo
                     self.event_manager.manage(

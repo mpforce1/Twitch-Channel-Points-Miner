@@ -331,7 +331,6 @@ class Drops:
 
 @dataclass(kw_only=True)
 class GiftSubReceived:
-    recipient: Optional[ArgRecipient]
     gifter: Optional[ArgValue]
     days: Pluralizable[ArgCount]
     main: Requires[ArgGiftSubReceived]

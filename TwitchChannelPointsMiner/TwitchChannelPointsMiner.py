@@ -41,7 +41,6 @@ from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandle
 from TwitchChannelPointsMiner.classes.events.handlers.Hook import EventHookAdapter
 from TwitchChannelPointsMiner.classes.events.managers import DefaultEventManagerFactory
 from TwitchChannelPointsMiner.classes.events.managers.Factory import EventManagerConfiguration, EventManagerFactory
-from TwitchChannelPointsMiner.classes.events.transformers import DefaultTransformerFactory
 from TwitchChannelPointsMiner.classes.events.transformers.hooks import DefaultEventTransformerFactory
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
 from TwitchChannelPointsMiner.classes.websocket.Factory import DefaultWebSocketPoolFactory
@@ -281,12 +280,15 @@ class TwitchChannelPointsMiner:
         factories = factories if factories is not None else Factories()
 
         # Default event transformer
-        default_event_transformer = factories.default_event_transformer.create(logger_settings)
+        default_event_transformer = factories.default_event_transformer.create(
+            logger_settings, self.username
+        )
 
         # Set up event manager
         self.event_manager = factories.event_manager.create(
             config=event_manager,
             settings=logger_settings,
+            account_username=self.username,
             background_tasks=self.background_tasks,
         )
 
