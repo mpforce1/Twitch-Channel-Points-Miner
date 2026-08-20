@@ -166,10 +166,12 @@ class TranslatorTransformer(EventTransformer[str]):
     def __init__(
         self,
         translator: Translator,
+        account_username: str | None,
         locale: str | None = None,
         to_strs: dict[Events, Callable] | None = None,
     ):
         self.translator = translator
+        self.account_username = account_username
         self.locale = locale
         # Set up defaults
         self.to_strs: dict[Events, Callable] = {
@@ -421,10 +423,17 @@ class TranslatorTransformer(EventTransformer[str]):
         ends_at = gift_sub.ends_at.astimezone(datetime.datetime.now().tzinfo)
         days = (gift_sub.ends_at - datetime.datetime.now(tz=datetime.timezone.utc)).days
 
+        recipient_str = self.translator.translate_optional(
+            lambda t: t.gift_sub_received.recipient,
+            self.account_username,
+            get_args=lambda u: {"recipient": u},
+            locale=self.locale,
+        )
+
         gifter_display_name_str = self.translator.translate_optional(
             lambda t: t.gift_sub_received.gifter,
             gift_sub.gifter,
-            get_args=lambda g: {"value": g},
+            get_args=lambda g: {"value": g.display_name},
             locale=self.locale,
         )
 
@@ -436,6 +445,7 @@ class TranslatorTransformer(EventTransformer[str]):
             lambda t: t.gift_sub_received.main,
             locale=self.locale,
             arg={
+                "recipient": recipient_str,
                 "tier": gift_sub.tier,
                 "gifter": gifter_display_name_str,
                 "streamer": streamer,

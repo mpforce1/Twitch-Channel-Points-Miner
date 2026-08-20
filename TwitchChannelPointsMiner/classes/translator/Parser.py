@@ -31,6 +31,7 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     ArgPredictionMade,
     ArgPredictionResult,
     ArgReason,
+    ArgRecipient,
     ArgStake,
     ArgStatus,
     ArgStreamer,
@@ -337,6 +338,7 @@ def drops_parser(value):
 def gift_sub_received_parser(value):
     value = expect_dict(value)
     return GiftSubReceived(
+        recipient=parse_expected_value(value, "recipient", optional_parser(ArgRecipient)),
         gifter=parse_expected_value(value, "gifter", optional_parser(ArgValue)),
         days=parse_expected_value(value, "days", pluralizable_parser(ArgCount)),
         main=parse_expected_value(value, "main", requires_parser(ArgGiftSubReceived)),

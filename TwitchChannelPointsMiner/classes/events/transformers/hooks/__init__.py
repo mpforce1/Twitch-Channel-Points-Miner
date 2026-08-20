@@ -54,5 +54,9 @@ class DefaultEventTransformerFactory(EventTransformerFactory[str]):
             )
         )
         # Add the message
-        transformers.append(TranslatorTransformer(translator=settings.translator))
+        transformers.append(
+            TranslatorTransformer(
+                translator=settings.translator, account_username=settings.username
+            )
+        )
         return CodeblockTransformer(base=MultiTransformer(*transformers))
