@@ -124,10 +124,6 @@
   },
   "chat_mention": "{actor} wrote at {streamer} wrote: {message}",
   "gift_sub_received": {
-    "recipient": {
-      "some": "[{recipient}] ",
-      "none": ""
-    },
     "gifter": {
       "some": "{value}",
       "none": "Anonymous"
@@ -136,7 +132,7 @@
       "singular": "{count} day)",
       "plural": "{count} days"
     },
-    "main": "{recipient}Tier-{tier} Gift Sub from {gifter} for {streamer}, ends at {ends_at} (in {days})"
+    "main": "[{recipient}] Tier-{tier} Gift Sub from {gifter} for {streamer}, ends at {ends_at} (in {days})"
   },
   "join_raid": "Joining raid from {streamer} to {target}!",
   "bonus_points_claim": "Claiming the bonus for {streamer}!",

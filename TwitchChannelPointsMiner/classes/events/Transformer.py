@@ -19,5 +19,5 @@ class EventTransformer[Result](abc.ABC):
 
 class EventTransformerFactory[Result](abc.ABC):
     @abc.abstractmethod
-    def create(self, settings: LoggerSettings) -> EventTransformer[Result]:
+    def create(self, settings: LoggerSettings, account_username: str) -> EventTransformer[Result]:
         pass

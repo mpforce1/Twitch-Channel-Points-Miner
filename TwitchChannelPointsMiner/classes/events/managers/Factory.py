@@ -22,6 +22,7 @@ class EventManagerFactory(abc.ABC):
         self,
         config: EventManagerConfiguration | Literal[True] | None,
         settings: LoggerSettings,
+        account_username: str,
         background_tasks: list[Thread],
     ) -> EventManager:
         """
@@ -29,7 +30,6 @@ class EventManagerFactory(abc.ABC):
         :param config: If not None, an EventManager will be created, otherwise Events will be ignored.
         :param settings: The logger settings for the application.
         :param background_tasks: A list of tasks that can be appended to.
-        :param streamers: The list of Streamers managed by the miner.
-        :param prediction_events: The Prediction Events managed by the miner.
+        :param account_username: The username of the account running the miner.
         """
         pass

@@ -53,12 +53,11 @@ class GiftSub:
             if self.gifter is not None
             else "Anonymous"
         )
-        username = f"[{Settings.logger.username}] " if Settings.logger.username is not None else ""
         if self.target is None:
-            return f"{username}{self.display_name} Gift Sub from {gifter}, ends at {ends_at} (in {days}) {days_plural}"
+            return f"{self.display_name} Gift Sub from {gifter}, ends at {ends_at} (in {days}) {days_plural}"
         else:
             target = Settings.logger.anonymiser.username(self.target.display_name)
-            return f"{username}Tier-{self.tier} Gift Sub from {gifter} for {target}, ends at {ends_at} (in {days} {days_plural})"
+            return f"Tier-{self.tier} Gift Sub from {gifter} for {target}, ends at {ends_at} (in {days} {days_plural})"
 
     def __eq__(self, value: object):
         if not isinstance(value, GiftSub):
