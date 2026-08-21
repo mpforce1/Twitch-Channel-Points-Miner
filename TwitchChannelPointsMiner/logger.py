@@ -241,9 +241,6 @@ class GlobalFormatter(logging.Formatter):
             record.msg = f"{self.settings.username} {record.msg}"
 
         if hasattr(record, "event"):
-            for hook in self.settings.hooks:
-                hook.validate_and_send(record)
-
             if self.settings.colored is True:
                 record.msg = (
                     f"{self.settings.color_palette.get(record.event.name)}{record.msg}"
