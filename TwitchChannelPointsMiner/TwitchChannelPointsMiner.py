@@ -16,7 +16,6 @@ from secrets import token_hex
 from typing import Literal
 
 from TwitchChannelPointsMiner.classes import WatchStreakRecovery, WeeklyRewardsProgressor
-from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
@@ -28,6 +27,7 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
+from TwitchChannelPointsMiner.classes.chat.Manager import ChatManagerFactory, chat_manager_factory
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
@@ -107,6 +107,7 @@ class Factories:
         default_event_transformer: EventTransformerFactory[str] | None = None,
         event_manager_runner: SlottedTaskRunnerFactory | None = None,
         event_manager: EventManagerFactory | None = None,
+        chat_manager: ChatManagerFactory | None = None,
     ):
         # Setup defaults for any None value
         self.streamer_selector = (
@@ -153,6 +154,9 @@ class Factories:
             )
         )
         """Factory that produces EventManagers"""
+        self.chat_manager = (
+            chat_manager if chat_manager is not None else chat_manager_factory
+        )
 
 
 class TwitchChannelPointsMiner:
@@ -165,6 +169,7 @@ class TwitchChannelPointsMiner:
         "disable_ssl_cert_verification",
         "disable_at_in_nickname",
         "streamer_selector",
+        "chat_manager",
         "streamers",
         "prediction_events",
         "background_tasks",
@@ -362,6 +367,15 @@ class TwitchChannelPointsMiner:
         # Streamer Selector
         self.streamer_selector = factories.streamer_selector.create(priority)
 
+        # Chat manager
+        self.chat_manager = factories.chat_manager(
+            self.username,
+            self.streamers,
+            self.background_tasks,
+            self.event_manager,
+            client_session.login.get_auth_token(),
+        )
+
         # Remaining state
         self.session_id = str(uuid.uuid4())
         self.running = False
@@ -534,12 +548,6 @@ class TwitchChannelPointsMiner:
                 streamer.settings.bet = set_default_settings(
                     streamer.settings.bet, Settings.streamer_settings.bet
                 )
-                if streamer.settings.chat != ChatPresence.NEVER:
-                    streamer.irc_chat = ThreadChat(
-                        self.username,
-                        self.twitch.client_session.login.get_auth_token(),
-                        streamer.username,
-                    )
                 return streamer
 
             streamers_loaded: list[None | Streamer] = [None] * len(streamers_pre_loaded)
@@ -883,13 +891,9 @@ class TwitchChannelPointsMiner:
 
         self.event_manager.manage(Shutdown(reason=reason))
 
-        for streamer in self.streamers:
-            if streamer.irc_chat is not None and streamer.settings.chat != ChatPresence.NEVER:
-                streamer.leave_chat()
-                if streamer.irc_chat.is_alive() is True:
-                    streamer.irc_chat.join()
-
         self.running = self.twitch.running = False
+        self.chat_manager.stop()
+        self.event_manager.shutdown()
 
         for task in self.background_tasks:
             task.join()

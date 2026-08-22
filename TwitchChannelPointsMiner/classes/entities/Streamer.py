@@ -7,7 +7,7 @@ from datetime import datetime
 from threading import Lock
 from typing import Literal
 
-from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
+from TwitchChannelPointsMiner.classes.Chat import ChatPresence
 from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
@@ -215,8 +215,6 @@ class Streamer(object):
             self.offline_at = time.time()
             self.is_online = False
 
-        self.toggle_chat()
-
         logger.info(
             f"{self} is Offline!",
             extra={
@@ -229,8 +227,6 @@ class Streamer(object):
         if self.is_online is False:
             self.online_at = time.time()
             self.is_online = True
-
-        self.toggle_chat()
 
         logger.info(
             f"{self} is Online!",
@@ -356,38 +352,6 @@ class Streamer(object):
 
             # Replace the original file with the temporary file
             os.replace(temp_fname, fname)
-
-    def leave_chat(self):
-        if self.irc_chat is not None:
-            self.irc_chat.stop()
-
-            # Recreate a new thread to start again
-            # raise RuntimeError("threads can only be started once")
-            self.irc_chat = ThreadChat(
-                self.irc_chat.username,
-                self.irc_chat.token,
-                self.username,
-            )
-
-    def __join_chat(self):
-        if self.irc_chat is not None:
-            if self.irc_chat.is_alive() is False:
-                self.irc_chat.start()
-
-    def toggle_chat(self):
-        if self.settings.chat == ChatPresence.ALWAYS:
-            self.__join_chat()
-        elif self.settings.chat != ChatPresence.NEVER:
-            if self.is_online is True:
-                if self.settings.chat == ChatPresence.ONLINE:
-                    self.__join_chat()
-                elif self.settings.chat == ChatPresence.OFFLINE:
-                    self.leave_chat()
-            else:
-                if self.settings.chat == ChatPresence.ONLINE:
-                    self.leave_chat()
-                elif self.settings.chat == ChatPresence.OFFLINE:
-                    self.__join_chat()
 
     def update_community_goal(self, community_goal):
         self.community_goals[community_goal.goal_id] = community_goal
