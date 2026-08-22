@@ -213,11 +213,11 @@ class SlottedTaskRunnerThread[Context, Result](
                     duration=self.loop_interval_seconds,
                 )
         finally:
-            logger.debug("SlottedTaskRunner Stopping")
+            logger.debug(f"{self.name}: Shutting Down")
             # Wait for any running tasks to finish
             # they should be implemented in a way that periodically checks if they need to end early
             self._executor.shutdown(wait=True, cancel_futures=True)
-            logger.debug("SlottedTaskRunner Stopped")
+            logger.debug(f"{self.name}: Shut Down")
 
     def stop(self):
         self.running = False

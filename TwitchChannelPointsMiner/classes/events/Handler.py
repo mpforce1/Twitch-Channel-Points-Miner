@@ -19,3 +19,9 @@ class EventHandler(abc.ABC):
         :param event: The event to handle.
         """
         pass
+
+    def shutdown(self):
+        """
+        Gracefully shuts down this event handler.
+        """
+        pass

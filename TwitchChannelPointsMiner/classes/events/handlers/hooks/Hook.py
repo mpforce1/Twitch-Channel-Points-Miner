@@ -137,3 +137,6 @@ class WebhookHandler(EventHandler):
 
     def handle(self, event: Event):
         self.runner.enqueue(event)
+
+    def shutdown(self):
+        self.runner.shutdown()

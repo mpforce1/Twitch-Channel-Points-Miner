@@ -21,4 +21,8 @@ class EventManager(abc.ABC):
         """
         pass
 
-
+    def shutdown(self):
+        """
+        Gracefully shuts this event manager down.
+        """
+        pass

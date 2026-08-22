@@ -891,18 +891,23 @@ class TwitchChannelPointsMiner:
 
         self.event_manager.manage(Shutdown(reason=reason))
 
+        logger.info("Shutting down services")
         self.running = self.twitch.running = False
         self.chat_manager.stop()
         self.event_manager.shutdown()
 
+        logger.info("Shutting down background tasks")
         for task in self.background_tasks:
+            logger.info(f"Shutting down {task.name}")
             task.join()
 
+        logger.info("Shutting down websocket pool")
         if self.ws_pool is not None:
             self.ws_pool.end()
 
         # Check if all the mutex are unlocked.
         # Prevent breaks of .json file
+        logger.info("Preparing streamer json files")
         for streamer in self.streamers:
             if streamer.mutex.locked():
                 streamer.mutex.acquire()
@@ -911,8 +916,9 @@ class TwitchChannelPointsMiner:
         self.__print_report()
 
         # Stop the queue listener to make sure all messages have been logged
+        logger.info("Closing logger")
         self.queue_listener.stop()
-
+        print("Miner shut down")
         sys.exit(0)
 
     def __print_report(self):
