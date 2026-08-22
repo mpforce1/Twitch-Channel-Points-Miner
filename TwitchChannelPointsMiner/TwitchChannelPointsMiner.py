@@ -373,7 +373,7 @@ class TwitchChannelPointsMiner:
             self.streamers,
             self.background_tasks,
             self.event_manager,
-            client_session.login.get_auth_token(),
+            self.twitch.client_session,
         )
 
         # Remaining state

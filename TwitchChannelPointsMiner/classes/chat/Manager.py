@@ -1,11 +1,12 @@
 import logging
 import time
-from threading import Thread
+from threading import Lock, Thread
 from typing import Protocol
 
 from irc.bot import SingleServerIRCBot
 
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence
+from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Settings import Events, Settings
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.events.Event import ChatMention
@@ -36,6 +37,10 @@ class ClientIRC(SingleServerIRCBot):
     def on_welcome(self, client, event):
         client.join(self.channel)
 
+    def _on_disconnect(self, connection, event):
+        logger.debug(f"ClientIRC: {self.streamer}: disconnected")
+        super()._on_disconnect(connection, event)
+
     def start(self):
         self.__active = True
         self._connect()
@@ -53,11 +58,6 @@ class ClientIRC(SingleServerIRCBot):
         self.__active = False
         time.sleep(0.3)
         self.connection.disconnect(msg)
-
-    """
-    def on_join(self, connection, event):
-        logger.info(f"Event: {event}", extra={"emoji": ":speech_balloon:"})
-    """
 
     # """
     def on_pubmsg(self, connection, event):
@@ -106,6 +106,7 @@ class ThreadChat(Thread):
 
         self.chat_irc = None
         self.running = True
+        self._lock = Lock()
 
     def connected(self) -> bool:
         return self.chat_irc is not None
@@ -114,13 +115,14 @@ class ThreadChat(Thread):
         """
         Disconnects the client.
         """
-        if self.chat_irc is not None:
-            logger.info(
-                f"Leave IRC Chat: {Settings.logger.anonymiser.username(self.channel.username)}",
-                extra={"emoji": ":speech_balloon:"},
-            )
-            self.chat_irc.die()
-            self.chat_irc = None
+        with self._lock:
+            if self.chat_irc is not None:
+                logger.info(
+                    f"Leave IRC Chat: {Settings.logger.anonymiser.username(self.channel.username)}",
+                    extra={"emoji": ":speech_balloon:"},
+                )
+                self.chat_irc.die()
+                self.chat_irc = None
 
     def connect(self):
         """
@@ -159,6 +161,7 @@ class ThreadChat(Thread):
         Stops this thread by setting its `running` flag to False, the Thread should shut down soon after.
         """
         self.running = False
+        self.disconnect()
 
 
 class ChatManager(Thread):
@@ -169,13 +172,13 @@ class ChatManager(Thread):
         account_username: str,
         streamers: list[Streamer],
         event_manager: EventManager,
-        token: str,
+        client_session: ClientSession,
     ):
         super().__init__(name="Chat Manager", daemon=True)
         self.account_username = account_username
         self.streamers = streamers
         self.event_manager = event_manager
-        self.token = token
+        self.client_session = client_session
         self.chats = dict[str, ThreadChat]()
         self.running = True
 
@@ -186,9 +189,12 @@ class ChatManager(Thread):
         """
         # Get or create the streamer's chat
         chat = self.chats.get(streamer.channel_id, None)
-        if chat is None:
+        if chat is None or not chat.is_alive():
             chat = ThreadChat(
-                self.event_manager, self.account_username, self.token, streamer
+                self.event_manager,
+                self.account_username,
+                self.client_session.login.get_auth_token(),
+                streamer,
             )
             chat.start()
             self.chats[streamer.channel_id] = chat
@@ -239,7 +245,7 @@ class ChatManagerFactory(Protocol):
         streamers: list[Streamer],
         background_tasks: list[Thread],
         event_manager: EventManager,
-        token: str,
+        client_session: ClientSession,
     ) -> ChatManager: ...
 
 
@@ -248,13 +254,13 @@ def chat_manager_factory(
     streamers: list[Streamer],
     background_tasks: list[Thread],
     event_manager: EventManager,
-    token: str,
+    client_session: ClientSession,
 ):
     manager = ChatManager(
         account_username=account_username,
         streamers=streamers,
         event_manager=event_manager,
-        token=token,
+        client_session=client_session,
     )
     manager.start()
     background_tasks.append(manager)
