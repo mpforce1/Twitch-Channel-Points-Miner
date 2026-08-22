@@ -58,24 +58,30 @@ def pushover(
         raise ValueError(
             f"token '{token} is from the example, please provide your own'"
         )
-    return lambda default_transformer: WebhookHandler(
-        name=name,
-        webhook_api_url=webhook_api_url,
-        events=events,
-        transformer=(
-            transformer
-            if transformer is not None
-            else PushoverTransformer(
-                userkey=userkey,
-                token=token,
-                priority=priority,
-                sound=sound,
-                title=title,
-                get_message=(
-                    get_message if get_message is not None else default_transformer
-                ),
-            )
-        ),
-        attempt_strategy=attempt_strategy,
-        timeout=timeout,
-    )
+
+    def factory(background_tasks, default_transformer, account_name):
+        handler = WebhookHandler(
+            name=name,
+            webhook_api_url=webhook_api_url,
+            events=events,
+            transformer=(
+                transformer
+                if transformer is not None
+                else PushoverTransformer(
+                    userkey=userkey,
+                    token=token,
+                    priority=priority,
+                    sound=sound,
+                    title=title,
+                    get_message=(
+                        get_message if get_message is not None else default_transformer
+                    ),
+                )
+            ),
+            attempt_strategy=attempt_strategy,
+            timeout=timeout,
+        )
+        background_tasks.append(handler.runner)
+        return handler
+
+    return factory
