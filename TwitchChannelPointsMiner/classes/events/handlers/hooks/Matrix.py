@@ -45,17 +45,22 @@ def matrix(
 
     webhook_api_url = f"https://{homeserver}/_matrix/client/r0/rooms/{room_id}/send/m.room.message?access_token={access_token}"
 
-    return lambda default_transformer: WebhookHandler(
-        name=name,
-        webhook_api_url=webhook_api_url,
-        events=events,
-        transformer=(
-            transformer
-            if transformer is not None
-            else MatrixTransformer(
-                get_body=get_body if get_body is not None else default_transformer
-            )
-        ),
-        attempt_strategy=attempt_strategy,
-        timeout=timeout,
-    )
+    def factory(background_tasks, default_transformer, account_name):
+        handler = WebhookHandler(
+            name=name,
+            webhook_api_url=webhook_api_url,
+            events=events,
+            transformer=(
+                transformer
+                if transformer is not None
+                else MatrixTransformer(
+                    get_body=get_body if get_body is not None else default_transformer
+                )
+            ),
+            attempt_strategy=attempt_strategy,
+            timeout=timeout,
+        )
+        background_tasks.append(handler.runner)
+        return handler
+
+    return factory

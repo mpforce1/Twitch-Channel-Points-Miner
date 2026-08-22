@@ -140,6 +140,8 @@ class Events(Flag):
             & ~Events.PREDICTION_EVENT_UPDATE
             # Happens a little bit too often
             & ~Events.CHANGING_WATCH_SLOTS
+            # This is always followed by a GAIN_FOR_CLAIM
+            & ~Events.BONUS_CLAIM
         )
 
     @staticmethod

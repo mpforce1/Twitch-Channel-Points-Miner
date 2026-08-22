@@ -46,24 +46,29 @@ def webhook(
     attempt_strategy: AttemptStrategy | None = None,
     timeout: float | tuple[float, float] | None = None,
 ) -> EventHandlerFactory:
-    return lambda default_transformer: GenericWebhook(
-        name=name,
-        webhook_api_url=webhook_api_url,
-        method=method,
-        use_json=use_json,
-        events=events,
-        transformer=(
-            transformer
-            if transformer is not None
-            else WebhookTransformer(
-                get_message=(
-                    get_message if get_message is not None else default_transformer
+    def factory(background_tasks, default_transformer, account_name):
+        handler = GenericWebhook(
+            name=name,
+            webhook_api_url=webhook_api_url,
+            method=method,
+            use_json=use_json,
+            events=events,
+            transformer=(
+                transformer
+                if transformer is not None
+                else WebhookTransformer(
+                    get_message=(
+                        get_message if get_message is not None else default_transformer
+                    )
                 )
-            )
-        ),
-        attempt_strategy=attempt_strategy,
-        timeout=timeout,
-    )
+            ),
+            attempt_strategy=attempt_strategy,
+            timeout=timeout,
+        )
+        background_tasks.append(handler.runner)
+        return handler
+
+    return factory
 
 
 class GenericWebhook(WebhookHandler):

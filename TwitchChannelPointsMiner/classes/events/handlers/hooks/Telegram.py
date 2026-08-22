@@ -49,20 +49,26 @@ def telegram(
     if token == "123456789:shfuihreuifheuifhiu34578347":
         raise ValueError(f"token ({token}) is from the example, please use your own")
     webhook_api_url = f"https://api.telegram.org/bot{token}/sendMessage"
-    return lambda default_transformer: WebhookHandler(
-        name=name,
-        webhook_api_url=webhook_api_url,
-        events=events,
-        transformer=(
-            transformer
-            if transformer is not None
-            else TelegramTransformer(
-                chat_id=chat_id,
-                token=token,
-                disable_notification=disable_notification,
-                get_text=get_text if get_text is not None else default_transformer,
-            )
-        ),
-        attempt_strategy=attempt_strategy,
-        timeout=timeout,
-    )
+
+    def factory(background_tasks, default_transformer, account_name):
+        handler = WebhookHandler(
+            name=name,
+            webhook_api_url=webhook_api_url,
+            events=events,
+            transformer=(
+                transformer
+                if transformer is not None
+                else TelegramTransformer(
+                    chat_id=chat_id,
+                    token=token,
+                    disable_notification=disable_notification,
+                    get_text=get_text if get_text is not None else default_transformer,
+                )
+            ),
+            attempt_strategy=attempt_strategy,
+            timeout=timeout,
+        )
+        background_tasks.append(handler.runner)
+        return handler
+
+    return factory

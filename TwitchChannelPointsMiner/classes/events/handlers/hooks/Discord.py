@@ -1,6 +1,6 @@
+from threading import Thread
 from urllib.parse import parse_qs, urlparse, urlunparse
 
-from TwitchChannelPointsMiner.classes.events.Event import Event
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Transformer import (
     EventTransformer,
@@ -9,34 +9,17 @@ from TwitchChannelPointsMiner.classes.events.handlers.Factory import EventHandle
 from TwitchChannelPointsMiner.classes.events.handlers.hooks.Hook import (
     WebhookHandler,
 )
+from TwitchChannelPointsMiner.classes.events.transformers.hooks.Discord import (
+    DiscordEitherTransformer,
+    DiscordEmbedTransformer,
+    DiscordContentTransformer,
+)
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
 __invalid_urls = {
     "https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J",
     "https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde",
 }
-
-
-class DiscordTransformer(EventTransformer[dict]):
-    """Transformer that produces post data compatible with Discord's Incoming Webhook API"""
-
-    def __init__(
-        self,
-        get_content: EventTransformer[str],
-        username: str | None = "Twitch Channel Points Miner",
-        avatar_url: str | None = "https://i.imgur.com/X9fEkhT.png",
-    ) -> None:
-        self.username = username
-        self.avatar_url = avatar_url
-        self.get_content = get_content
-
-    def transform(self, event: Event) -> dict[str, str]:
-        data = {"content": self.get_content.transform(event)}
-        if self.username is not None:
-            data["username"] = self.username
-        if self.avatar_url is not None:
-            data["avatar_url"] = self.avatar_url
-        return data
 
 
 def add_wait_to_url(url: str):
@@ -59,6 +42,7 @@ def discord(
     events: list[Events] | Events | None = None,
     username: str | None = "Twitch Channel Points Miner",
     avatar_url: str | None = "https://i.imgur.com/X9fEkhT.png",
+    use_embeds: bool = True,
     transformer: EventTransformer[dict] | None = None,
     get_content: EventTransformer[str] | None = None,
     attempt_strategy: AttemptStrategy | None = None,
@@ -74,21 +58,41 @@ def discord(
 
     webhook_api_url = add_wait_to_url(webhook_api_url)
 
-    return lambda default_transformer: WebhookHandler(
-        name=name,
-        webhook_api_url=webhook_api_url,
-        events=events,
-        transformer=(
-            transformer
-            if transformer is not None
-            else DiscordTransformer(
+    def factory(
+        background_tasks: list[Thread],
+        default_transformer: EventTransformer[str],
+        account_name: str,
+    ):
+        nonlocal transformer
+        # If the transformer is set, assume they're providing everything
+        if transformer is None:
+            transformer = DiscordContentTransformer(
                 username=username,
                 avatar_url=avatar_url,
                 get_content=(
                     get_content if get_content is not None else default_transformer
                 ),
             )
-        ),
-        attempt_strategy=attempt_strategy,
-        timeout=timeout,
-    )
+            if use_embeds:
+                transformer = DiscordEitherTransformer(
+                    base=transformer,
+                    embed=DiscordEmbedTransformer(
+                        account_name=account_name,
+                        username=username,
+                        avatar_url=avatar_url,
+                    ),
+                )
+
+        handler = WebhookHandler(
+            name=name,
+            webhook_api_url=webhook_api_url,
+            events=events,
+            use_json=True,
+            transformer=transformer,
+            attempt_strategy=attempt_strategy,
+            timeout=timeout,
+        )
+        background_tasks.append(handler.runner)
+        return handler
+
+    return factory
