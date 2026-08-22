@@ -12,3 +12,4 @@ services:
       - ./run.py:/usr/src/app/run.py:ro
     ports:
       - "5000:5000"
+    stop_grace_period: 30s
