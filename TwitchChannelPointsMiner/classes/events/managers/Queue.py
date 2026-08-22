@@ -71,6 +71,9 @@ class QueueManager(Thread, EventManager):
     def manage(self, event: Event):
         self.queue.put_nowait(event)
 
+    def shutdown(self):
+        self.running = False
+
     def run(self):
         while self.running:
             # Process all events in the queue
@@ -83,4 +86,8 @@ class QueueManager(Thread, EventManager):
                     break
             # Once all events that can be processed
             interruptible_sleep(lambda: self.running, self.loop_sleep_seconds)
+        logger.debug(f"{self.name}: Shutting Down")
         self.runner.stop()
+        for handler in self.handlers:
+            handler.shutdown()
+        logger.debug(f"{self.name}: Shut Down")

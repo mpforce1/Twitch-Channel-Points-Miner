@@ -36,3 +36,7 @@ class DelegatingManager(EventManager):
             logger.warning(
                 f"Delegating Manager cannot manage event, a delegate hasn't yet been set: {type(event).__name__}"
             )
+
+    def shutdown(self):
+        if self.manager is not None:
+            self.manager.shutdown()

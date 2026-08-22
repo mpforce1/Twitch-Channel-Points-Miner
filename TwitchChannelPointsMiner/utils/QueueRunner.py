@@ -31,6 +31,7 @@ class QueueRunner[Item](Thread):
         """The underlying queue"""
         self._lock = Lock()
         """Concurrency lock"""
+        self.running = False
 
     def enqueue(self, item: Item):
         """
@@ -41,9 +42,10 @@ class QueueRunner[Item](Thread):
             self.queue.append(item)
 
     def run(self):
-        while True:
+        self.running = True
+        while self.running:
             # Process all items until the queue is empty
-            while True:
+            while self.running:
                 with self._lock:
                     has_item = len(self.queue) > 0
                 # drop the lock early to avoid holding it for too long
@@ -57,3 +59,6 @@ class QueueRunner[Item](Thread):
                 else:
                     break
             time.sleep(self.sleep_interval_seconds)
+
+    def shutdown(self):
+        self.running = False
