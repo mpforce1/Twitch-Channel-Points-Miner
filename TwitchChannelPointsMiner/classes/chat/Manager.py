@@ -1,7 +1,7 @@
 import logging
 import time
 from threading import Lock, Thread
-from typing import Protocol
+from typing import Literal, Protocol
 
 from irc.bot import SingleServerIRCBot
 
@@ -17,6 +17,11 @@ from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
 logger = logging.getLogger(__name__)
 
 
+ClientIRCState = Literal[
+    "uninitialised", "unwelcomed", "welcomed", "reconnecting", "done"
+]
+
+
 class ClientIRC(SingleServerIRCBot):
     def __init__(
         self, event_manager: EventManager, username: str, token: str, channel: Streamer
@@ -25,37 +30,44 @@ class ClientIRC(SingleServerIRCBot):
         self.token = token
         self.streamer = channel
         self.channel = "#" + channel.username
-        self.__active = False
+        self.state: ClientIRCState = "uninitialised"
 
         super(ClientIRC, self).__init__(
             [(IRC, IRC_PORT, f"oauth:{token}")], username, username
         )
 
-    def connected(self) -> bool:
-        return self.__active
-
     def on_welcome(self, client, event):
+        # Only info log during reconnects, debug otherwise
+        log_type = (
+            logger.info if self.state in {"welcomed", "reconnecting"} else logger.debug
+        )
+        log_type(f"ClientIRC: {self.streamer}: connected")
+        self.state = "welcomed"
         client.join(self.channel)
 
     def _on_disconnect(self, connection, event):
-        logger.debug(f"ClientIRC: {self.streamer}: disconnected")
+        # Debug log if this is a planned disconnect, info otherwise
+        if self.state != "done":
+            self.state = "reconnecting"
+            log_type = logger.info
+        else:
+            log_type = logger.debug
+        log_type(f"ClientIRC: {self.streamer}: disconnected")
         super()._on_disconnect(connection, event)
 
     def start(self):
-        self.__active = True
         self._connect()
-        while self.__active:
+        self.state = "unwelcomed"
+        while self.state != "done":
             try:
                 self.reactor.process_once(timeout=0.2)
                 time.sleep(0.01)
             except Exception as e:
-                logger.error(
-                    f"Exception raised: {e}. Thread is active: {self.__active}"
-                )
+                logger.error(f"Exception raised: {e}. State: {self.state}")
 
     def die(self, msg="Bye, cruel world!"):
-        # Set to inactive and allow time for the main thread to stop
-        self.__active = False
+        # Set to done and allow time for the main thread to stop
+        self.state = "done"
         time.sleep(0.3)
         self.connection.disconnect(msg)
 
@@ -121,8 +133,10 @@ class ThreadChat(Thread):
                     f"Leave IRC Chat: {Settings.logger.anonymiser.username(self.channel.username)}",
                     extra={"emoji": ":speech_balloon:"},
                 )
-                self.chat_irc.die()
+                # Set to none first to prevent `run` calling `start` again
+                old_irc = self.chat_irc
                 self.chat_irc = None
+                old_irc.die()
 
     def connect(self):
         """
