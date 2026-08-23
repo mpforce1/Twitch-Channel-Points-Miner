@@ -122,7 +122,7 @@
     "claim_available": "Drop claim available for {drop}{with_streamer}",
     "claim": "Claiming drop \"{drop}\""
   },
-  "chat_mention": "{actor} wrote at {streamer} wrote: {message}",
+  "chat_mention": "{actor} at {streamer} wrote: {message}",
   "gift_sub_received": {
     "gifter": {
       "some": "{value}",
