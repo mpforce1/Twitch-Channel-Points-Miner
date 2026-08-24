@@ -262,12 +262,20 @@ class TranslatorTransformer(EventTransformer[str]):
         )
 
     def gain_points(self, event: GainPoints):
+        # Only shows the reason if the reason is unknown
+        reason = event.reason if event.type == Events.GAIN_FOR_OTHER else None
+        reason_str = self.translator.translate_optional(
+            lambda t: t.gain_points.reason,
+            reason,
+            locale=self.locale,
+            get_args=lambda r: {"reason": r},
+        )
         return self.translator.translate(
-            lambda t: t.gain_points,
+            lambda t: t.gain_points.main,
             locale=self.locale,
             arg={
+                "reason": reason_str,
                 "amount": event.amount,
-                "reason": event.reason,
                 "streamer": event.streamer,
             },
         )
@@ -434,12 +442,18 @@ class TranslatorTransformer(EventTransformer[str]):
             lambda t: t.gift_sub_received.days, locale=self.locale, arg={"count": days}
         )
 
+        tier_str = self.translator.translate(
+            lambda t: t.gift_sub_received.tier,
+            locale=self.locale,
+            arg={"tier": gift_sub.tier},
+        )
+
         return self.translator.translate(
             lambda t: t.gift_sub_received.main,
             locale=self.locale,
             arg={
                 "recipient": self.account_username,
-                "tier": gift_sub.tier,
+                "tier": tier_str,
                 "gifter": gifter_display_name_str,
                 "streamer": streamer,
                 "ends_at": ends_at,
@@ -494,7 +508,6 @@ class TranslatorTransformer(EventTransformer[str]):
             locale=self.locale,
             get_args=lambda p: {"total_points": p},
         )
-
 
         return self.translator.translate(
             lambda t: t.predictions.prediction_made.main,

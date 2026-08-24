@@ -1,4 +1,5 @@
 from typing import Callable, get_type_hints, is_typeddict
+
 from TwitchChannelPointsMiner.JsonParser import (
     InvalidJsonShapeError,
     JsonParentContext,
@@ -28,15 +29,16 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     ArgNotEnoughPoints,
     ArgOutcome,
     ArgPoints,
+    ArgPrediction,
     ArgPredictionMade,
     ArgPredictionResult,
     ArgReason,
-    ArgRecipient,
     ArgStake,
     ArgStatus,
     ArgStreamer,
     ArgStreamerAndCount,
     ArgStreamers,
+    ArgTier,
     ArgTime,
     ArgTitle,
     ArgTotalPoints,
@@ -50,6 +52,7 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     Drops,
     Error,
     Filters,
+    GainPoints,
     General,
     GiftSubReceived,
     Optional,
@@ -190,7 +193,13 @@ def pluralizable_parser[TArg: ArgCount](
 #  General
 def general_parser(value) -> General:
     value = expect_dict(value)
-    return General(account=parse_expected_value(value, "account", expect_str))
+    return General(
+        account=parse_expected_value(value, "account", expect_str),
+        channel=parse_expected_value(value, "channel", expect_str),
+        title=parse_expected_value(value, "title", expect_str),
+        window=parse_expected_value(value, "window", expect_str),
+        outcomes=parse_expected_value(value, "outcomes", expect_str),
+    )
 
 
 #  Names
@@ -212,6 +221,15 @@ def names_parser(value) -> dict[Events, str]:
         raise InvalidJsonShapeError(
             [], f"Missing Events enum(s): {missing_events.name}"
         )
+
+
+# Gain points
+def gain_points_parser(value):
+    value = expect_dict(value)
+    return GainPoints(
+        reason=parse_expected_value(value, "reason", optional_parser(ArgReason)),
+        main=parse_expected_value(value, "main", requires_parser(ArgGainPoints)),
+    )
 
 
 #  Predictions
@@ -286,6 +304,9 @@ def predictions_parser(value):
             value, "outcome_simple", requires_parser(ArgTitle)
         ),
         outcome=parse_expected_value(value, "outcome", requires_parser(ArgOutcome)),
+        outcome_multiline=parse_expected_value(
+            value, "outcome_multiline", requires_parser(ArgOutcome)
+        ),
         event_created=parse_expected_value(
             value, "event_created", requires_parser(ArgEventCreated)
         ),
@@ -302,6 +323,13 @@ def predictions_parser(value):
         prediction_failed=parse_expected_value(
             value, "prediction_failed", requires_parser(ArgErrorCode)
         ),
+        your_prediction=parse_expected_value(value, "your_prediction", expect_str),
+        prediction_multiline=parse_expected_value(
+            value, "prediction_multiline", requires_parser(ArgPrediction)
+        ),
+        winning_outcome=parse_expected_value(value, "winning_outcome", expect_str),
+        result=parse_expected_value(value, "result", expect_str),
+        profit_loss=parse_expected_value(value, "profit_loss", expect_str),
     )
 
 
@@ -338,6 +366,11 @@ def drops_parser(value):
 def gift_sub_received_parser(value):
     value = expect_dict(value)
     return GiftSubReceived(
+        from_=parse_expected_value(value, "from", expect_str),
+        subscription=parse_expected_value(value, "subscription", expect_str),
+        ends_at=parse_expected_value(value, "ends_at", expect_str),
+        duration=parse_expected_value(value, "duration", expect_str),
+        tier=parse_expected_value(value, "tier", requires_parser(ArgTier)),
         gifter=parse_expected_value(value, "gifter", optional_parser(ArgValue)),
         days=parse_expected_value(value, "days", pluralizable_parser(ArgCount)),
         main=parse_expected_value(value, "main", requires_parser(ArgGiftSubReceived)),
@@ -402,9 +435,7 @@ def translation_parser(root):
         bonus_points_available=parse_expected_value(
             root, "bonus_points_available", requires_parser(ArgStreamer)
         ),
-        gain_points=parse_expected_value(
-            root, "gain_points", requires_parser(ArgGainPoints)
-        ),
+        gain_points=parse_expected_value(root, "gain_points", gain_points_parser),
         points_spent=parse_expected_value(
             root,
             "points_spent",

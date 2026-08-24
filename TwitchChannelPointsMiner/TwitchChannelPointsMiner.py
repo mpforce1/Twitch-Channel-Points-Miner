@@ -301,7 +301,12 @@ class TwitchChannelPointsMiner:
         if handlers is not None:
             for handler in handlers:
                 if isinstance(handler, EventHandlerFactory):
-                    handler = handler(self.background_tasks, default_event_transformer, self.username)
+                    handler = handler(
+                        logger_settings,
+                        self.background_tasks,
+                        default_event_transformer,
+                        self.username,
+                    )
                 self.event_manager.add_handler(handler)
 
         # Add hooks to event manager

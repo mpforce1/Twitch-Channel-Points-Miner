@@ -1,6 +1,10 @@
 {
   "general": {
-    "account": "Account"
+    "account": "Account",
+    "channel": "Channel",
+    "title": "Title",
+    "window": "Window",
+    "outcomes": "Outcomes"
   },
   "names": {
     "STREAM_UP": "Stream Up",
@@ -54,7 +58,13 @@
   "streamer_online": "{streamer} is Online!",
   "streamer_offline": "{streamer} is Offline!",
   "bonus_points_available": "Bonus Claim available for {streamer}",
-  "gain_points": "+{amount} → {streamer} - Reason: {reason}",
+  "gain_points": {
+    "reason": {
+      "some": " - Reason {reason}",
+      "none": ""
+    },
+    "main": "+{amount} → {streamer}{reason}"
+  },
   "points_spent": {
     "singular": "{count} point spent for {streamer}",
     "plural": "{count} points spent for {streamer}"
@@ -72,6 +82,7 @@
   "predictions": {
     "outcome_simple": "【{title}】",
     "outcome": "【{title}: Odds {odds}】",
+    "outcome_multiline": "{title}\nOdds: {odds}",
     "event_created": "Prediction event started for {streamer} ({prediction_window_seconds}s): \"{title}\": [{outcomes}]",
     "prediction_made": {
       "points": {
@@ -109,7 +120,12 @@
       },
       "main": "Prediction event resulted for {streamer}: \"{title}\": {winning_outcome}\n\t{user_prediction}\n\t{user_result}\n\t{points}"
     },
-    "prediction_failed": "Failed to place bet, error: {error_code}"
+    "prediction_failed": "Failed to place bet, error: {error_code}",
+    "your_prediction": "Your Prediction",
+    "prediction_multiline": "{title}\nOdds: {odds}\nPoints Placed: {points}",
+    "winning_outcome":"Winning Outcome",
+    "result": "Result",
+    "profit_loss": "Profit/Loss"
   },
   "moment_claim_available": "Moment claim available for {streamer}",
   "drops": {
@@ -124,6 +140,11 @@
   },
   "chat_mention": "{actor} at {streamer} wrote: {message}",
   "gift_sub_received": {
+    "from": "From",
+    "subscription": "Subscription",
+    "ends_at": "Ends At",
+    "duration": "Duration",
+    "tier": "Tier-{tier}",
     "gifter": {
       "some": "{value}",
       "none": "Anonymous"
@@ -132,7 +153,7 @@
       "singular": "{count} day)",
       "plural": "{count} days"
     },
-    "main": "[{recipient}] Tier-{tier} Gift Sub from {gifter} for {streamer}, ends at {ends_at} (in {days})"
+    "main": "[{recipient}] {tier} Gift Sub from {gifter} for {streamer}, ends at {ends_at} (in {days})"
   },
   "join_raid": "Joining raid from {streamer} to {target}!",
   "bonus_points_claim": "Claiming the bonus for {streamer}!",

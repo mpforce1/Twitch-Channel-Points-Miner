@@ -32,7 +32,7 @@ def gotify(
             f"URL ({webhook_api_url}) is from the example, please use your own"
         )
 
-    def factory(background_tasks, default_transformer, account_name):
+    def factory(logger_settings, background_tasks, default_transformer, account_name):
         handler = WebhookHandler(
             name=name,
             webhook_api_url=webhook_api_url,

@@ -46,7 +46,7 @@ def webhook(
     attempt_strategy: AttemptStrategy | None = None,
     timeout: float | tuple[float, float] | None = None,
 ) -> EventHandlerFactory:
-    def factory(background_tasks, default_transformer, account_name):
+    def factory(logger_settings, background_tasks, default_transformer, account_name):
         handler = GenericWebhook(
             name=name,
             webhook_api_url=webhook_api_url,
