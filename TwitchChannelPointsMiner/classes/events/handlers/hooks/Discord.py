@@ -14,6 +14,7 @@ from TwitchChannelPointsMiner.classes.events.transformers.hooks.Discord import (
     DiscordEmbedTransformer,
     DiscordContentTransformer,
 )
+from TwitchChannelPointsMiner.logger import LoggerSettings
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
 __invalid_urls = {
@@ -59,6 +60,7 @@ def discord(
     webhook_api_url = add_wait_to_url(webhook_api_url)
 
     def factory(
+        logger_settings: LoggerSettings,
         background_tasks: list[Thread],
         default_transformer: EventTransformer[str],
         account_name: str,
@@ -77,6 +79,7 @@ def discord(
                 transformer = DiscordEitherTransformer(
                     base=transformer,
                     embed=DiscordEmbedTransformer(
+                        translator=logger_settings.translator,
                         account_name=account_name,
                         username=username,
                         avatar_url=avatar_url,

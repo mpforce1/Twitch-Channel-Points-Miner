@@ -107,6 +107,13 @@ class Translator:
     ) -> str:
         return get_value(self.get_translation(locale)).format(arg)
 
+    def translate_str(
+        self,
+        get_value: Callable[[Translation], str],
+        locale: str | None = None,
+    ) -> str:
+        return get_value(self.get_translation(locale))
+
     def translate_plural[TArg: ArgCount](
         self,
         get_pluralizable: Callable[[Translation], Pluralizable[TArg]],

@@ -50,7 +50,7 @@ def telegram(
         raise ValueError(f"token ({token}) is from the example, please use your own")
     webhook_api_url = f"https://api.telegram.org/bot{token}/sendMessage"
 
-    def factory(background_tasks, default_transformer, account_name):
+    def factory(logger_settings, background_tasks, default_transformer, account_name):
         handler = WebhookHandler(
             name=name,
             webhook_api_url=webhook_api_url,

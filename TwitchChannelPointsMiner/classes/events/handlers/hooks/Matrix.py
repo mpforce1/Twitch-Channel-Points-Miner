@@ -45,7 +45,7 @@ def matrix(
 
     webhook_api_url = f"https://{homeserver}/_matrix/client/r0/rooms/{room_id}/send/m.room.message?access_token={access_token}"
 
-    def factory(background_tasks, default_transformer, account_name):
+    def factory(logger_settings, background_tasks, default_transformer, account_name):
         handler = WebhookHandler(
             name=name,
             webhook_api_url=webhook_api_url,

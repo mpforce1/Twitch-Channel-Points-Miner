@@ -74,12 +74,21 @@ class ArgErrorCode(TypedDict):
 
 
 @dataclass(kw_only=True)
+class ArgPrediction(TypedDict):
+    title: str
+    odds: float | int
+    points: int
+
+
+@dataclass(kw_only=True)
 class ArgDrop(TypedDict):
     drop: Drop
+
 
 @dataclass(kw_only=True)
 class ArgRecipient(TypedDict):
     recipient: str
+
 
 @dataclass(kw_only=True)
 class ArgValue(TypedDict):
@@ -190,9 +199,14 @@ class ArgDropWithStreamer(TypedDict):
 
 
 @dataclass(kw_only=True)
+class ArgTier(TypedDict):
+    tier: int
+
+
+@dataclass(kw_only=True)
 class ArgGiftSubReceived(ArgStreamer, TypedDict):
     recipient: str
-    tier: int
+    tier: str
     gifter: str
     ends_at: datetime
     days: str
@@ -262,6 +276,16 @@ class Optional[TArg]:
 @dataclass(kw_only=True)
 class General:
     account: str
+    channel: str
+    title: str
+    window: str
+    outcomes: str
+
+
+@dataclass(kw_only=True)
+class GainPoints:
+    reason: Optional[ArgReason]
+    main: Requires[ArgGainPoints]
 
 
 @dataclass(kw_only=True)
@@ -312,12 +336,18 @@ class PredictionResult:
 class Predictions:
     outcome_simple: Requires[ArgTitle]
     outcome: Requires[ArgOutcome]
+    outcome_multiline: Requires[ArgOutcome]
     event_created: Requires[ArgEventCreated]
     prediction_made: PredictionMade
     filters: Filters
     event_update: Requires[ArgEventUpdated]
     prediction_result: PredictionResult
     prediction_failed: Requires[ArgErrorCode]
+    your_prediction: str
+    prediction_multiline: Requires[ArgPrediction]
+    winning_outcome: str
+    result: str
+    profit_loss: str
 
 
 @dataclass(kw_only=True)
@@ -331,6 +361,11 @@ class Drops:
 
 @dataclass(kw_only=True)
 class GiftSubReceived:
+    from_: str
+    subscription: str
+    ends_at: str
+    duration: str
+    tier: Requires[ArgTier]
     gifter: Optional[ArgValue]
     days: Pluralizable[ArgCount]
     main: Requires[ArgGiftSubReceived]
@@ -367,7 +402,7 @@ class Translation:
     streamer_online: Requires[ArgStreamer]
     streamer_offline: Requires[ArgStreamer]
     bonus_points_available: Requires[ArgStreamer]
-    gain_points: Requires[ArgGainPoints]
+    gain_points: GainPoints
     points_spent: Pluralizable[ArgStreamerAndCount]
     watch_streak_progress: Requires[ArgStreamer]
     watch_streak_missing: Requires[ArgStreamer]

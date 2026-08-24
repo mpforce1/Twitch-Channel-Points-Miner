@@ -1,10 +1,15 @@
 import datetime
 from typing import NotRequired, TypedDict
 
+from TwitchChannelPointsMiner.classes.Translator import Translator
+from TwitchChannelPointsMiner.classes.entities.predictions.Outcome import Outcome
+from TwitchChannelPointsMiner.classes.entities.predictions.Prediction import Prediction
 from TwitchChannelPointsMiner.classes.events.Event import (
+    ChannelEvent,
     Event,
     GiftSubReceived,
     PredictionEventCreated,
+    PredictionEventEvent,
     PredictionMade,
     PredictionResult,
 )
@@ -65,81 +70,97 @@ def index_to_emoji(index: int) -> str:
 class DiscordEmbedTransformer(EventTransformer[dict | None]):
     def __init__(
         self,
+        translator: Translator,
         account_name: str,
         username: str | None = "Twitch Channel Points Miner",
         avatar_url: str | None = "https://i.imgur.com/X9fEkhT.png",
+        locale: str | None = None,
     ):
+        self.translator = translator
         self.account_name = account_name
         self.username = username
         self.avatar_url = avatar_url
+        self.locale = locale
+
+    def event_name(self, event: Event):
+        return self.translator.translate_str(lambda t: t.names[event.type], self.locale)
+
+    def account_field(self) -> Field:
+        return {
+            "name": f"👤 {self.translator.translate_str(lambda t: t.general.account, self.locale)}",
+            "value": self.account_name,
+        }
+
+    def channel_field(self, event: ChannelEvent) -> Field:
+        return {
+            "name": f"📺 {self.translator.translate_str(lambda t: t.general.channel, self.locale)}",
+            "value": event.streamer.username,
+        }
+
+    def title_field(self, event: PredictionEventEvent) -> Field:
+        return {
+            "name": f"🎯 {self.translator.translate_str(lambda t: t.general.title, self.locale)}",
+            "value": event.prediction_event.title,
+        }
+
+    def outcome_field(self, index: int, outcome: Outcome) -> Field:
+        return {
+            "name": f"{index_to_emoji(index)}",
+            "value": outcome.title,
+            "inline": True,
+        }
+
+    def your_prediction_field(self, prediction: Prediction, outcome: Outcome) -> Field:
+        return {
+            "name": f"🔮 {self.translator.translate_str(lambda t: t.predictions.your_prediction, self.locale)}",
+            "value": self.translator.translate(
+                lambda t: t.predictions.prediction_multiline,
+                arg={
+                    "title": outcome.title,
+                    "odds": outcome.odds,
+                    "points": prediction.points,
+                },
+            ),
+        }
 
     def prediction_event_created(self, event: PredictionEventCreated) -> Embed:
         fields: list[Field] = [
+            self.account_field(),
+            self.channel_field(event),
+            self.title_field(event),
             {
-                "name": "👤 Account",
-                "value": self.account_name,
-            },
-            {
-                "name": "📺 Channel",
-                "value": event.streamer.username,
-            },
-            {
-                "name": "🎯 Title",
-                "value": event.prediction_event.title,
-                "inline": True,
-            },
-            {
-                "name": "🪟 Window",
+                "name": f"🪟 {self.translator.translate_str(lambda t: t.general.window, self.locale)}",
                 "value": f"{event.prediction_event.prediction_window_seconds}s",
                 "inline": True,
             },
             {
-                "name": "🎫 Outcomes:",
+                "name": f"🎫 {self.translator.translate_str(lambda t: t.general.outcomes, self.locale)}:",
                 "value": "\n",
             },
         ]
         fields.extend(
             [
-                {
-                    "name": f"{index_to_emoji(index)}",
-                    "value": outcome.title,
-                    "inline": True,
-                }
+                self.outcome_field(index, outcome)
                 for index, outcome in enumerate(event.prediction_event.outcomes)
             ]
         )
         return {
             "color": 16711680,
-            "title": "🍀 Prediction Event Started",
+            "title": f"🍀 {self.event_name(event)}",
             "fields": fields,
         }
 
     def prediction_made(self, event: PredictionMade) -> Embed:
-        # 🍀  Prediction made for lacy (13.79k points) on 'Does he win?' - 725 points on 'Yes'
         user_prediction = event.prediction
         user_outcome = event.prediction_event.outcome(user_prediction.outcome_id)
         return {
             "color": 654321,
-            "title": "🍀 Prediction Made",
+            "title": f"🍀 {self.event_name(event)}",
             "fields": [
-                {
-                    "name": "👤 Account",
-                    "value": self.account_name,
-                },
-                {
-                    "name": "📺 Channel",
-                    "value": event.streamer.username,
-                },
-                {
-                    "name": "🎯 Title",
-                    "value": event.prediction_event.title,
-                },
-                {
-                    "name": "🔮 Your Prediction",
-                    "value": f"{user_outcome.title}\n"
-                    f"`Odds: {user_outcome.odds}`\n"
-                    f"`Points Placed: {user_prediction.points}`",
-                },
+                self.account_field(),
+                self.channel_field(event),
+                self.title_field(event),
+                self.your_prediction_field(user_prediction, user_outcome),
             ],
         }
 
@@ -161,43 +182,34 @@ class DiscordEmbedTransformer(EventTransformer[dict | None]):
             net = 0
         winning_outcome = event.prediction_event.winning_outcome()
         fields: list[Field] = [
-            {
-                "name": "👤 Account",
-                "value": self.account_name,
-            },
-            {
-                "name": "📺 Channel",
-                "value": event.streamer.username,
-            },
-            {
-                "name": "🎯 Title",
-                "value": event.prediction_event.title,
-            },
+            self.account_field(),
+            self.channel_field(event),
+            self.title_field(event),
         ]
         if winning_outcome is not None:
             fields.append(
                 {
-                    "name": "🏆 Winning Outcome",
-                    "value": f"{winning_outcome.title}\n"
-                    f"`Odds: {winning_outcome.odds}`\n",
+                    "name": f"🏆 {self.translator.translate_str(lambda t: t.predictions.winning_outcome, self.locale)}",
+                    "value": self.translator.translate(
+                        lambda t: t.predictions.outcome_multiline,
+                        arg={
+                            "title": winning_outcome.title,
+                            "odds": winning_outcome.odds,
+                        },
+                        locale=self.locale,
+                    ),
                     "inline": True,
                 }
             )
         fields.extend(
             [
+                self.your_prediction_field(user_prediction, user_outcome),
                 {
-                    "name": "🔮 Your Prediction",
-                    "value": f"{user_outcome.title}\n"
-                    f"`Odds: {user_outcome.odds}`\n"
-                    f"`Points Placed: {user_prediction.points}`",
-                    "inline": True,
-                },
-                {
-                    "name": "📩 Result",
+                    "name": f"📩 {self.translator.translate_str(lambda t: t.predictions.result, self.locale)}",
                     "value": user_result.type,
                 },
                 {
-                    "name": "📊 Profit/Loss",
+                    "name": f"📊 {self.translator.translate_str(lambda t: t.predictions.profit_loss, self.locale)}",
                     "value": f"{net}",
                 },
             ]
@@ -205,7 +217,7 @@ class DiscordEmbedTransformer(EventTransformer[dict | None]):
 
         return {
             "color": 16711680,
-            "title": "🍀 Prediction Result",
+            "title": f"🍀 {self.event_name(event)}",
             "fields": fields,
         }
 
@@ -213,40 +225,48 @@ class DiscordEmbedTransformer(EventTransformer[dict | None]):
         gift_sub = event.streamer.gift_sub
         if gift_sub is None:
             raise ValueError("Gift sib received event but there's no gift sub")
-        gifter = (
-            gift_sub.gifter.display_name if gift_sub.gifter is not None else "Anonymous"
+        gifter = self.translator.translate_optional(
+            lambda t: t.gift_sub_received.gifter,
+            gift_sub.gifter,
+            lambda g: {"value": g.display_name},
+            locale=self.locale,
         )
-        sub_name = (
-            f"Tier-{gift_sub.tier}" if isinstance(gift_sub.tier, int) else gift_sub.tier
-        )
+        if isinstance(gift_sub.tier, int):
+            sub_name = self.translator.translate(
+                lambda t: t.gift_sub_received.tier,
+                arg={"tier": gift_sub.tier},
+                locale=self.locale,
+            )
+        else:
+            sub_name = gift_sub.tier
         ends_at = gift_sub.ends_at.astimezone(datetime.datetime.now().tzinfo)
         days = (gift_sub.ends_at - datetime.datetime.now(tz=datetime.timezone.utc)).days
         return {
             "color": 7798955,
-            "title": "🎁 Gift Sub Received",
+            "title": f"🎁 {self.event_name(event)}",
             "fields": [
+                self.account_field(),
                 {
-                    "name": "👤 Account",
-                    "value": self.account_name,
-                    "inline": True,
-                },
-                {
-                    "name": "🎅 From",
+                    "name": f"🎅 {self.translator.translate_str(lambda t: t.gift_sub_received.from_, self.locale)}",
                     "value": gifter,
                     "inline": True,
                 },
                 {
-                    "name": "👑 Subscription",
+                    "name": f"👑 {self.translator.translate_str(lambda t: t.gift_sub_received.subscription, self.locale)}",
                     "value": sub_name,
                 },
                 {
-                    "name": "📅 Ends At",
+                    "name": f"📅 {self.translator.translate_str(lambda t: t.gift_sub_received.ends_at, self.locale)}",
                     "value": f"{ends_at}",
                     "inline": True,
                 },
                 {
-                    "name": "🕒 Duration",
-                    "value": f"{days} Days",
+                    "name": f"🕒 {self.translator.translate_str(lambda t: t.gift_sub_received.duration, self.locale)}",
+                    "value": self.translator.translate_plural(
+                        lambda t: t.gift_sub_received.days,
+                        arg={"count": days},
+                        locale=self.locale,
+                    ),
                     "inline": True,
                 },
             ],
