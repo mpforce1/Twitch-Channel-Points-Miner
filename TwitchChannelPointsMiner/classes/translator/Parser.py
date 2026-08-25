@@ -33,6 +33,7 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     ArgPredictionMade,
     ArgPredictionResult,
     ArgReason,
+    ArgResultWin,
     ArgStake,
     ArgStatus,
     ArgStreamer,
@@ -57,7 +58,6 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     GiftSubReceived,
     Optional,
     Pluralizable,
-    Points,
     PredictionMade,
     PredictionResult,
     Predictions,
@@ -65,6 +65,7 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     Requires,
     StaticString,
     Translation,
+    UserResult,
     WeeklyRewardsUpdate,
 )
 
@@ -271,12 +272,13 @@ def filters_parser(value):
     )
 
 
-def points_parser(value):
+def user_result_parser(value):
     value = expect_dict(value)
-    return Points(
-        win=parse_expected_value(value, "win", requires_parser(ArgPoints)),
+    return UserResult(
+        win=parse_expected_value(value, "win", requires_parser(ArgResultWin)),
         lose=parse_expected_value(value, "lose", requires_parser(ArgPoints)),
-        refund=parse_expected_value(value, "refund", requires_parser(ArgPoints)),
+        refund=parse_expected_value(value, "refund", expect_str),
+        main=parse_expected_value(value, "main", requires_parser(ArgType))
     )
 
 
@@ -290,9 +292,8 @@ def prediction_result_parser(value):
             value, "user_prediction", requires_parser(ArgUserPrediction)
         ),
         user_result=parse_expected_value(
-            value, "user_result", requires_parser(ArgType)
+            value, "user_result", user_result_parser,
         ),
-        points=parse_expected_value(value, "points", points_parser),
         main=parse_expected_value(value, "main", requires_parser(ArgPredictionResult)),
     )
 

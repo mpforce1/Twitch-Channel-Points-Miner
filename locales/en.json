@@ -111,14 +111,14 @@
         "some": "\n\tWinning outcome: {outcome}",
         "none": ""
       },
-      "user_prediction": "User prediction: {outcome}",
-      "user_result": "User Result: \"{type}\"",
-      "points": {
-        "win": "Points gained: {points}",
-        "lose": "Points lost: {points}",
-        "refund": "Refunded: {points}"
+      "user_prediction": "User prediction: 【{outcome_title}, Odds: {outcome_odds}, Stake: {stake}】",
+      "user_result": {
+        "win": "Won +{points} (profit +{profit})",
+        "lose": "Lost -{points}",
+        "refund": "Refund",
+        "main": "User Result: {type}"
       },
-      "main": "Prediction event resulted for {streamer}: \"{title}\": {winning_outcome}\n\t{user_prediction}\n\t{user_result}\n\t{points}"
+      "main": "Prediction event resulted for {streamer}: \"{title}\": {winning_outcome}\n\t{user_prediction}\n\t{user_result}"
     },
     "prediction_failed": "Failed to place bet, error: {error_code}",
     "your_prediction": "Your Prediction",
