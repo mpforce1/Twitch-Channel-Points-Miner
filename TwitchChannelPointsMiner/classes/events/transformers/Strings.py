@@ -723,35 +723,41 @@ class TranslatorTransformer(EventTransformer[str]):
             lambda t: t.predictions.prediction_result.user_prediction,
             locale=self.locale,
             arg={
-                "outcome": self.translator.translate(
-                    lambda t: t.predictions.outcome,
-                    locale=self.locale,
-                    arg={"title": user_outcome.title, "odds": user_outcome.odds},
-                )
+                "outcome_title": user_outcome.title,
+                "outcome_odds": user_outcome.odds,
+                "stake": data.prediction.points,
             },
-        )
-
-        user_result_str = self.translator.translate(
-            lambda t: t.predictions.prediction_result.user_result,
-            locale=self.locale,
-            arg={"type": result.type},
         )
 
         get_value: Callable[[Translation], Requires[ArgPoints]]
         amount: int
         if result.type == "WIN":
-            get_value = lambda t: t.predictions.prediction_result.points.win
             if data.prediction.result.points_won is None:
                 raise ValueError(f"Prediction WIN Result doesn't contain points won")
             amount = data.prediction.result.points_won
+            result_type_str = self.translator.translate(
+                lambda t: t.predictions.prediction_result.user_result.win,
+                locale=self.locale,
+                arg={
+                    "points": amount,
+                    "profit": amount - data.prediction.points
+                }
+            )
         elif result.type == "LOSE":
-            get_value = lambda t: t.predictions.prediction_result.points.lose
-            amount = data.prediction.points
+            result_type_str = self.translator.translate(
+                lambda t: t.predictions.prediction_result.user_result.lose,
+                locale=self.locale,
+                arg={"points": data.prediction.points},
+            )
         else:
-            get_value = lambda t: t.predictions.prediction_result.points.refund
-            amount = data.prediction.points
-        points_str = self.translator.translate(
-            get_value, locale=self.locale, arg={"points": amount}
+            result_type_str = self.translator.translate_str(
+                lambda t: t.predictions.prediction_result.user_result.refund,
+                locale=self.locale,
+            )
+        user_result_str = self.translator.translate(
+            lambda t: t.predictions.prediction_result.user_result.main,
+            locale=self.locale,
+            arg={"type": result_type_str},
         )
 
         return self.translator.translate(
@@ -763,7 +769,6 @@ class TranslatorTransformer(EventTransformer[str]):
                 "winning_outcome": winning_outcome_str,
                 "user_prediction": user_prediction_str,
                 "user_result": user_result_str,
-                "points": points_str,
             },
         )
 

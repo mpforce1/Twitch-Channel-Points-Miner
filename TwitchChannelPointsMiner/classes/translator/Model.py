@@ -35,7 +35,9 @@ class ArgOutcome(ArgTitle):
 
 @dataclass(kw_only=True)
 class ArgUserPrediction(TypedDict):
-    outcome: str
+    outcome_title: str
+    outcome_odds: int | float
+    stake: int
 
 
 @dataclass(kw_only=True)
@@ -67,6 +69,9 @@ class ArgConditional(TypedDict):
 class ArgPoints(TypedDict):
     points: int
 
+@dataclass(kw_only=True)
+class ArgResultWin(ArgPoints):
+    profit: int
 
 @dataclass(kw_only=True)
 class ArgErrorCode(TypedDict):
@@ -189,7 +194,6 @@ class ArgPredictionResult(ArgStreamer, ArgTitle):
     winning_outcome: str
     user_prediction: str
     user_result: str
-    points: str
 
 
 @dataclass(kw_only=True)
@@ -317,18 +321,18 @@ class Filters:
 
 
 @dataclass(kw_only=True)
-class Points:
-    win: Requires[ArgPoints]
+class UserResult:
+    win: Requires[ArgResultWin]
     lose: Requires[ArgPoints]
-    refund: Requires[ArgPoints]
+    refund: str
+    main: Requires[ArgType]
 
 
 @dataclass(kw_only=True)
 class PredictionResult:
     winning_outcome: Optional[ArgWinningOutcome]
     user_prediction: Requires[ArgUserPrediction]
-    user_result: Requires[ArgType]
-    points: Points
+    user_result: UserResult
     main: Requires[ArgPredictionResult]
 
 
