@@ -3,7 +3,7 @@ import time
 from threading import Lock, Thread
 from typing import Literal, Protocol
 
-from irc.bot import SingleServerIRCBot
+from irc.bot import ReconnectStrategy, SingleServerIRCBot
 
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
@@ -17,9 +17,13 @@ from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
 logger = logging.getLogger(__name__)
 
 
-ClientIRCState = Literal[
-    "uninitialised", "unwelcomed", "welcomed", "reconnecting", "done"
-]
+ClientIRCState = Literal["uninitialised", "unwelcomed", "welcomed", "done"]
+
+
+class NoReconnection(ReconnectStrategy):
+    def run(self, bot: SingleServerIRCBot):
+        # Ensure the connection is closed
+        bot.connection.close()
 
 
 class ClientIRC(SingleServerIRCBot):
@@ -33,26 +37,23 @@ class ClientIRC(SingleServerIRCBot):
         self.state: ClientIRCState = "uninitialised"
 
         super(ClientIRC, self).__init__(
-            [(IRC, IRC_PORT, f"oauth:{token}")], username, username
+            [(IRC, IRC_PORT, f"oauth:{token}")],
+            username,
+            username,
+            recon=NoReconnection(),  # pyright: ignore [reportArgumentType]
+            # This is actually fine because the implementation only relies on the base class
         )
 
     def on_welcome(self, client, event):
-        # Only info log during reconnects, debug otherwise
-        log_type = (
-            logger.info if self.state in {"welcomed", "reconnecting"} else logger.debug
-        )
-        log_type(f"ClientIRC: {self.streamer}: connected")
+        logger.debug(f"ClientIRC: {self.streamer}: connected: {self.state}")
         self.state = "welcomed"
         client.join(self.channel)
 
     def _on_disconnect(self, connection, event):
         # Debug log if this is a planned disconnect, info otherwise
-        if self.state != "done":
-            self.state = "reconnecting"
-            log_type = logger.info
-        else:
-            log_type = logger.debug
-        log_type(f"ClientIRC: {self.streamer}: disconnected")
+        log_type = logger.debug if self.state == "done" else logger.info
+        self.state = "done"
+        log_type(f"ClientIRC: {self.streamer}: disconnected: {self.state}")
         super()._on_disconnect(connection, event)
 
     def start(self):
@@ -64,6 +65,7 @@ class ClientIRC(SingleServerIRCBot):
                 time.sleep(0.01)
             except Exception as e:
                 logger.error(f"Exception raised: {e}. State: {self.state}")
+        self.state = "done"
 
     def die(self, msg="Bye, cruel world!"):
         # Set to done and allow time for the main thread to stop
