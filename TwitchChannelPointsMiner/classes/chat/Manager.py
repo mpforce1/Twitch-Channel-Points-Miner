@@ -4,6 +4,7 @@ from threading import Lock, Thread
 from typing import Literal, Protocol
 
 from irc.bot import ReconnectStrategy, SingleServerIRCBot
+from irc.client import ServerNotConnectedError
 
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
@@ -45,24 +46,31 @@ class ClientIRC(SingleServerIRCBot):
         )
 
     def on_welcome(self, client, event):
-        logger.debug(f"ClientIRC: {self.streamer}: connected: {self.state}")
+        logger.debug(f"ClientIRC: {self.streamer}: on_welcome: {self.state}")
         self.state = "welcomed"
         client.join(self.channel)
 
     def _on_disconnect(self, connection, event):
         # Debug log if this is a planned disconnect, info otherwise
         log_type = logger.debug if self.state == "done" else logger.info
+        log_type(f"ClientIRC: {self.streamer}: _on_disconnect: {self.state}")
         self.state = "done"
-        log_type(f"ClientIRC: {self.streamer}: disconnected: {self.state}")
         super()._on_disconnect(connection, event)
 
     def start(self):
+        logger.debug(f"ClientIRC: {self.streamer}: start::")
         self._connect()
+        # Set a keepalive to avoid hanging after a long disconnect
+        self.connection.set_keepalive(interval=60)
         self.state = "unwelcomed"
+        logger.debug(f"ClientIRC: {self.streamer}: start:: after connect: {self.state}")
         while self.state != "done":
             try:
                 self.reactor.process_once(timeout=0.2)
                 time.sleep(0.01)
+            except ServerNotConnectedError:
+                logger.error(f"Exception raised: ServerNotConnectedError. State: {self.state}")
+                break
             except Exception as e:
                 logger.error(f"Exception raised: {e}. State: {self.state}")
         self.state = "done"
@@ -118,12 +126,28 @@ class ThreadChat(Thread):
         self.token = token
         self.channel = channel
 
+        self.state: Literal["connected", "disconnected", "shutdown"] = "disconnected"
         self.chat_irc = None
         self.running = True
         self._lock = Lock()
 
     def connected(self) -> bool:
-        return self.chat_irc is not None
+        return self.state == "connected"
+
+    def _disconnect(self):
+        if self.chat_irc is not None:
+            # Set to none first to prevent `run` calling `start` again
+            old_irc = self.chat_irc
+            self.chat_irc = None
+            old_irc.die()
+
+    def _connect(self):
+        self.chat_irc = ClientIRC(
+            self.event_manager,
+            self.username,
+            self.token,
+            self.channel,
+        )
 
     def disconnect(self):
         """
@@ -135,22 +159,17 @@ class ThreadChat(Thread):
                     f"Leave IRC Chat: {Settings.logger.anonymiser.username(self.channel.username)}",
                     extra={"emoji": ":speech_balloon:"},
                 )
-                # Set to none first to prevent `run` calling `start` again
-                old_irc = self.chat_irc
-                self.chat_irc = None
-                old_irc.die()
+                self.state = "disconnected"
+                self._disconnect()
 
     def connect(self):
         """
         Connects or reconnects the chat client.
         """
-        self.disconnect()
-        self.chat_irc = ClientIRC(
-            self.event_manager,
-            self.username,
-            self.token,
-            self.channel,
-        )
+        with self._lock:
+            self._disconnect()
+            self._connect()
+            self.state = "connected"
         logger.info(
             f"Join IRC Chat: {Settings.logger.anonymiser.username(self.channel.username)}",
             extra={"emoji": ":speech_balloon:"},
@@ -158,14 +177,32 @@ class ThreadChat(Thread):
 
     def run(self):
         while self.running:
-            if self.chat_irc is not None:
+            if self.state == "connected":
+                # First recreate/connect the bot if required
+                with self._lock:
+                    if self.chat_irc is None:
+                        logger.debug(f"ThreadChat: {self.channel}: run:: Connecting")
+                        self._connect()
+                    elif self.chat_irc.state == "done":
+                        logger.info(f"ThreadChat: {self.channel}: run:: Reconnecting")
+                        self._disconnect()
+                        self._connect()
                 try:
+                    if self.chat_irc is None:
+                        raise ValueError(f"chat_irc should not be None at this point")
                     # The actual run loop happens in here
                     self.chat_irc.start()
                 except Exception as e:
                     logger.error(f"Error processing chat for {self.channel}: {e}")
+
+            elif self.state == "disconnected":
+                with self._lock:
+                    if self.chat_irc is not None:
+                        logger.debug(f"ThreadChat: {self.channel}: run:: Disconnecting")
+                        self._disconnect()
+                interruptible_sleep(lambda: self.running, 5)
             else:
-                interruptible_sleep(lambda: self.running, 0.1)
+                break
 
         # Shutdown
         logger.debug(f"{self.name}: Shutting Down")
@@ -177,6 +214,7 @@ class ThreadChat(Thread):
         Stops this thread by setting its `running` flag to False, the Thread should shut down soon after.
         """
         self.running = False
+        self.state = "shutdown"
         self.disconnect()
 
 
@@ -237,7 +275,7 @@ class ChatManager(Thread):
                 except Exception as e:
                     logger.error(f"Error while processing chat for {streamer}: {e}")
 
-            interruptible_sleep(lambda: self.running, 0.1)
+            interruptible_sleep(lambda: self.running, 5)
 
         # Shutdown
         logger.debug(f"{self.name}: Shutting Down")
