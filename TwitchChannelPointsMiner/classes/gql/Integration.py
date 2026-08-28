@@ -6,7 +6,7 @@ from typing import Callable, Any, Literal, Protocol
 import requests
 from requests import Response
 
-from TwitchChannelPointsMiner.JsonParser import InvalidJsonShapeError, JsonParserError
+from TwitchChannelPointsMiner.JsonParser import InvalidJsonShapeError
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Settings
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
@@ -85,12 +85,7 @@ def error_context(e: Exception) -> str | None:
     :param e: The Exception to check.
     :return: The context string, or None if no context is needed.
     """
-    if not isinstance(e, GQLError) and not isinstance(e, JsonParserError):
-        return Settings.logger.anonymiser.format_exception(
-            (type(e), e, e.__traceback__)
-        )
-    else:
-        return None
+    return None
 
 
 def parse_list[T](parse: Callable[[Any], T], value: Any) -> list[T]:

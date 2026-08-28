@@ -41,7 +41,13 @@ class RetryError(GQLError):
         """The list of errors that occurred."""
 
     def __str__(self):
-        return f"GQL Operation '{self.operation_name}' failed all {len(self.errors)} attempts, errors:\n{self.errors}"
+        error = self.errors[0]
+        all_errors_same_type = True
+        for other_error in self.errors[1:]:
+            if type(error) != type(other_error):
+                all_errors_same_type = False
+        errors = f" * {len(self.errors)}:\n{error}" if all_errors_same_type else f"\n{self.errors}"
+        return f"GQL Operation '{self.operation_name}' failed all {len(self.errors)} attempts, errors:{errors}"
 
     def __repr__(self):
         return str(self)
