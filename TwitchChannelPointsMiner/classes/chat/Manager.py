@@ -51,9 +51,7 @@ class ClientIRC(SingleServerIRCBot):
         client.join(self.channel)
 
     def _on_disconnect(self, connection, event):
-        # Debug log if this is a planned disconnect, info otherwise
-        log_type = logger.debug if self.state == "done" else logger.info
-        log_type(f"ClientIRC: {self.streamer}: _on_disconnect: {self.state}")
+        logger.debug(f"ClientIRC: {self.streamer}: _on_disconnect: {self.state}")
         self.state = "done"
         super()._on_disconnect(connection, event)
 
@@ -184,7 +182,7 @@ class ThreadChat(Thread):
                         logger.debug(f"ThreadChat: {self.channel}: run:: Connecting")
                         self._connect()
                     elif self.chat_irc.state == "done":
-                        logger.info(f"ThreadChat: {self.channel}: run:: Reconnecting")
+                        logger.debug(f"ThreadChat: {self.channel}: run:: Reconnecting")
                         self._disconnect()
                         self._connect()
                 try:
