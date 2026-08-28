@@ -1,6 +1,5 @@
 import time
 from concurrent import futures
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,6 +9,7 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
     SlottedTaskRunnerThread,
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import (
     VideoEdge,
@@ -37,10 +37,10 @@ test_has_free_slot_data = [
 @pytest.mark.parametrize("slots,expected", test_has_free_slot_data)
 def test_has_free_slot(slots, expected):
     runner = SlottedTaskRunnerThread(
-        twitch=MagicMock(),
         max_concurrent=len(slots),
         loop_interval_seconds=1,
         name="Test",
+        event_manager=MagicMock(spec=EventManager),
     )
     runner._slots = slots
 
@@ -70,10 +70,10 @@ test_has_context_data = [
 @pytest.mark.parametrize("slots,context,expected", test_has_context_data)
 def test_has_context(slots: list, context, expected):
     runner = SlottedTaskRunnerThread(
-        twitch=MagicMock(),
         max_concurrent=len(slots),
         loop_interval_seconds=1,
         name="Test",
+        event_manager=MagicMock(spec=EventManager),
     )
     runner._slots = [
         Slot(
@@ -208,9 +208,11 @@ test_manage_slots_data = [
     test_manage_slots_data,
 )
 def test_manage_slots(slots: list[SlotConfig | None], current_time):
-    twitch: Any = MockTwitch(clip=False, running=True, vod=False, running_2=False)
     runner = SlottedTaskRunnerThread(
-        twitch=twitch, max_concurrent=len(slots), loop_interval_seconds=0, name="Test"
+        max_concurrent=len(slots),
+        loop_interval_seconds=0,
+        name="Test",
+        event_manager=MagicMock(spec=EventManager),
     )
 
     mock_slots = [slot.as_magic_mock() if slot is not None else None for slot in slots]

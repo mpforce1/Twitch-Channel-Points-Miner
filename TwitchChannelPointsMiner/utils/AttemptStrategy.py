@@ -2,7 +2,6 @@ import logging
 import time
 from typing import Callable
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -19,11 +18,11 @@ class ExceptionContext:
         else:
             return f"{self.exception}"
 
-    def __eq__(self, other):
+    def __eq__(self, value: object):
         return (
-            isinstance(other, ExceptionContext)
-            and self.exception == other.exception
-            and self.stack_trace == other.stack_trace
+            isinstance(value, ExceptionContext)
+            and self.exception == value.exception
+            and self.stack_trace == value.stack_trace
         )
 
 
@@ -44,12 +43,12 @@ class SuccessResult[TResult]:
     def __repr__(self):
         return f"SuccessResult({self.__dict__})"
 
-    def __eq__(self, other):
-        if isinstance(other, SuccessResult) and len(self.errors) == len(other.errors):
+    def __eq__(self, value: object):
+        if isinstance(value, SuccessResult) and len(self.errors) == len(value.errors):
             for index in range(len(self.errors)):
-                if self.errors[index] != other.errors[index]:
+                if self.errors[index] != value.errors[index]:
                     return False
-            return self.result == other.result
+            return self.result == value.result
         return False
 
 
@@ -66,12 +65,25 @@ class ErrorResult:
         return len(self.errors)
 
     def __repr__(self):
-        return f"ErrorResult({self.__dict__})"
+        if len(self.errors) > 1:
+            # Group errors of the same type
+            error_types = dict[str, tuple[int, str]]()
+            for error in self.errors:
+                if type(error).__name__ not in error_types:
+                    error_types[type(error).__name__] = (1, repr(error))
+                else:
+                    count, value = error_types[type(error).__name__]
+                    error_types[type(error).__name__] = (count + 1, value)
+            errors = f"[{', '.join((f'{count} * {e}' for count, e in error_types.values()))}]"
+        else:
+            errors = f"[{', '.join((repr(e) for e in self.errors))}]"
 
-    def __eq__(self, other):
-        if isinstance(other, ErrorResult) and len(self.errors) == len(other.errors):
+        return f"ErrorResult({errors})"
+
+    def __eq__(self, value: object):
+        if isinstance(value, ErrorResult) and len(self.errors) == len(value.errors):
             for index in range(len(self.errors)):
-                if self.errors[index] != other.errors[index]:
+                if self.errors[index] != value.errors[index]:
                     return False
             return True
         return False

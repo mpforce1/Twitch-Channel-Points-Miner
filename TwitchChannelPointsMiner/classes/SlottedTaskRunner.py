@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from threading import Lock, Thread
 from typing import Callable
 
-from TwitchChannelPointsMiner.classes.Twitch import Twitch
+from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.utils import interruptible_sleep
 
 logger = logging.getLogger(__name__)
@@ -23,12 +24,13 @@ class Slot[Context, Result]:
     """The time the task was started."""
     timeout_seconds: float
     """The amount of seconds the task is allowed to run."""
-    on_complete: Callable[[Context, Result], None]
+    on_complete: Callable[[Context, Result], None] | None
     """A callback that will be called upon task completion."""
 
 
 class SlottedTaskRunner[Context, Result](abc.ABC):
     """Runs tasks in a given number of "Slots" that can only be occupied by 1 task at a time."""
+
     @abc.abstractmethod
     def has_free_slot(self) -> bool:
         """
@@ -52,7 +54,7 @@ class SlottedTaskRunner[Context, Result](abc.ABC):
         context: Context,
         task: Callable[[], Result],
         timeout_seconds: float,
-        on_complete: Callable[[Context, Result], None],
+        on_complete: Callable[[Context, Result], None] | None,
     ) -> bool:
         """
         Runs the given task if there's a free slot.
@@ -64,6 +66,13 @@ class SlottedTaskRunner[Context, Result](abc.ABC):
         """
         pass
 
+    def stop(self):
+        """
+        Stops this runner and any remaining tasks.
+        :return:
+        """
+        pass
+
 
 class SlottedTaskRunnerThread[Context, Result](
     SlottedTaskRunner[Context, Result], Thread
@@ -71,15 +80,14 @@ class SlottedTaskRunnerThread[Context, Result](
 
     def __init__(
         self,
-        twitch: Twitch,
         name: str,
-        max_concurrent: int = 2,
+        event_manager: EventManager,
+        max_concurrent: int | None = 2,
         loop_interval_seconds: float = 20,
     ):
         super().__init__(name=f"{name} Runner", daemon=True)
-        self.twitch = twitch
-        """ The Twitch API instance. """
-        if max_concurrent <= 0:
+        self.event_manager = event_manager
+        if max_concurrent is not None and max_concurrent <= 0:
             raise ValueError(f"max_concurrent must be greater than 0: {max_concurrent}")
         self.max_concurrent = max_concurrent
         """ The maximum amount of tasks to run concurrently. """
@@ -89,9 +97,13 @@ class SlottedTaskRunnerThread[Context, Result](
             max_workers=self.max_concurrent,
             thread_name_prefix="weekly_reawrds_watcher",
         )
-        self._slots: list[Slot[Context, Result] | None] = [
-            None for _ in range(max_concurrent)
-        ]
+        if max_concurrent is None:
+            self._slots = list[Slot[Context, Result] | None]()
+        else:
+            self._slots: list[Slot[Context, Result] | None] = [
+                None for _ in range(max_concurrent)
+            ]
+        self.running = False
         self._lock = Lock()
 
     def has_free_slot(self) -> bool:
@@ -100,14 +112,16 @@ class SlottedTaskRunnerThread[Context, Result](
 
     def has_context(self, context: Context):
         with self._lock:
-            return any(slot.context == context for slot in self._slots if slot is not None)
+            return any(
+                slot.context == context for slot in self._slots if slot is not None
+            )
 
     def start_task(
         self,
         context: Context,
         task: Callable[[], Result],
         timeout_seconds: float,
-        on_complete: Callable[[Context, Result], None],
+        on_complete: Callable[[Context, Result], None] | None,
     ) -> bool:
         with self._lock:
             for index, slot in enumerate(self._slots):
@@ -144,11 +158,25 @@ class SlottedTaskRunnerThread[Context, Result](
                             logger.debug(
                                 f"{self.name}: Slot {slot_index} timed out: {slot.context}"
                             )
+                            self.event_manager.manage(
+                                Error(
+                                    context=self.name,
+                                    message=f"Slot {slot_index} timed out for {slot.context}",
+                                    error=None,
+                                )
+                            )
                             self._slots[slot_index] = None
                             done = True
                     except Exception as e:
                         logger.error(
                             f"{self.name}: Slot {slot_index} for: {slot.context}: error: {e}"
+                        )
+                        self.event_manager.manage(
+                            Error(
+                                context=self.name,
+                                message=f"Error processing slot {slot_index} for {slot.context}",
+                                error=e,
+                            )
                         )
                         self._slots[slot_index] = None
                         done = True
@@ -157,37 +185,51 @@ class SlottedTaskRunnerThread[Context, Result](
                             result = next(
                                 futures.as_completed([slot.future], timeout=0)
                             ).result(timeout=0)
-                            slot.on_complete(slot.context, result)
+                            if slot.on_complete is not None:
+                                slot.on_complete(slot.context, result)
                         except TimeoutError:
                             pass
                         except Exception as e:
                             logger.error(f"Exception processing result: {e}")
+                            self.event_manager.manage(
+                                Error(
+                                    context=self.name,
+                                    message=f"Exception processing result for {slot.context}",
+                                    error=e,
+                                )
+                            )
 
     def run(self):
         """
         Periodically checks all Streamers weekly reward status and attempts to watch Clips/VODs for those that haven't
         yet advanced theirs today/this week.
         """
+        self.running = True
         try:
-            while self.twitch.running:
+            while self.running:
                 self.manage_slots()
                 interruptible_sleep(
-                    running_flag=lambda: self.twitch.running,
+                    running_flag=lambda: self.running,
                     duration=self.loop_interval_seconds,
                 )
         finally:
-            logger.debug("SlottedTaskRunner Stopping")
+            logger.debug(f"{self.name}: Shutting Down")
             # Wait for any running tasks to finish
             # they should be implemented in a way that periodically checks if they need to end early
             self._executor.shutdown(wait=True, cancel_futures=True)
-            logger.debug("SlottedTaskRunner Stopped")
+            logger.debug(f"{self.name}: Shut Down")
+
+    def stop(self):
+        self.running = False
 
 
 class SlottedTaskRunnerFactory(abc.ABC):
     @abc.abstractmethod
     def create[Context, Result](
-        self, twitch: Twitch, name: str
-    ) -> SlottedTaskRunner[Context, Result]:  # pyright: ignore [reportInvalidTypeVarUse]
+        self, name: str, event_manager: EventManager
+    ) -> SlottedTaskRunner[
+        Context, Result
+    ]:  # pyright: ignore [reportInvalidTypeVarUse]
         pass
 
 
@@ -197,11 +239,13 @@ class SlottedTaskRunnerThreadFactory(SlottedTaskRunnerFactory):
         self.loop_interval_seconds = loop_interval_seconds
 
     def create[Context, Result](
-        self, twitch: Twitch, name: str
-    ) -> SlottedTaskRunner[Context, Result]:  # pyright: ignore [reportInvalidTypeVarUse]
+        self, name: str, event_manager: EventManager
+    ) -> SlottedTaskRunner[
+        Context, Result
+    ]:  # pyright: ignore [reportInvalidTypeVarUse]
         runner = SlottedTaskRunnerThread[Context, Result](
-            twitch=twitch,
             name=name,
+            event_manager=event_manager,
             max_concurrent=self.max_concurrent,
             loop_interval_seconds=self.loop_interval_seconds,
         )

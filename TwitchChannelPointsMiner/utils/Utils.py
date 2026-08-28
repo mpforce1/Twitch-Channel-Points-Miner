@@ -1,4 +1,3 @@
-import abc
 import json
 import random
 import re
@@ -9,16 +8,17 @@ import time
 import uuid
 from base64 import b64encode
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from os import path
 from random import randrange
 from typing import Sequence, TypeVar, Iterable, Callable
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from millify import millify as package_millify
 
-from TwitchChannelPointsMiner.constants import USER_AGENTS, GITHUB_url
 from TwitchChannelPointsMiner import __version__
+from TwitchChannelPointsMiner.constants import USER_AGENTS, GITHUB_url
 
 
 def millify(input, precision=2):
@@ -40,9 +40,7 @@ def float_round(number, ndigits=2):
 
 def server_time(message_data):
     return (
-        datetime.fromtimestamp(
-            message_data["server_time"], timezone.utc
-        ).isoformat()
+        datetime.fromtimestamp(message_data["server_time"], timezone.utc).isoformat()
         + "Z"
         if message_data is not None and "server_time" in message_data
         else datetime.fromtimestamp(time.time(), timezone.utc).isoformat() + "Z"
@@ -80,20 +78,20 @@ def get_user_agent(browser: str) -> str:
 def remove_emoji(string: str) -> str:
     emoji_pattern = re.compile(
         "["
-        "\U0001F600-\U0001F64F"  # emoticons
-        "\U0001F300-\U0001F5FF"  # symbols & pictographs
-        "\U0001F680-\U0001F6FF"  # transport & map symbols
-        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U0001f600-\U0001f64f"  # emoticons
+        "\U0001f300-\U0001f5ff"  # symbols & pictographs
+        "\U0001f680-\U0001f6ff"  # transport & map symbols
+        "\U0001f1e0-\U0001f1ff"  # flags (iOS)
         "\U00002500-\U00002587"  # chinese char
-        "\U00002589-\U00002BEF"  # I need Unicode Character “█” (U+2588)
-        "\U00002702-\U000027B0"
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U00002587"
-        "\U00002589-\U0001F251"
+        "\U00002589-\U00002bef"  # I need Unicode Character “█” (U+2588)
+        "\U00002702-\U000027b0"
+        "\U00002702-\U000027b0"
+        "\U000024c2-\U00002587"
+        "\U00002589-\U0001f251"
         "\U0001f926-\U0001f937"
         "\U00010000-\U0010ffff"
         "\u2640-\u2642"
-        "\u2600-\u2B55"
+        "\u2600-\u2b55"
         "\u200d"
         "\u23cf"
         "\u23e9"
@@ -131,7 +129,7 @@ def copy_values_if_none(settings, defaults):
     values = list(
         filter(
             lambda x: x.startswith("__") is False
-                      and callable(getattr(settings, x)) is False,
+            and callable(getattr(settings, x)) is False,
             dir(settings),
         )
     )
@@ -153,10 +151,6 @@ def set_default_settings(settings, defaults):
     )
 
 
-'''def char_decision_as_index(char):
-    return 0 if char == "A" else 1'''
-
-
 def internet_connection_available(host="8.8.8.8", port=53, timeout=3):
     try:
         socket.setdefaulttimeout(timeout)
@@ -171,7 +165,7 @@ def percentage(a, b):
 
 
 def create_chunks(lst, n):
-    return [lst[i: (i + n)] for i in range(0, len(lst), n)]  # noqa: E203
+    return [lst[i : (i + n)] for i in range(0, len(lst), n)]  # noqa: E203
 
 
 def download_file(name, fpath):
@@ -220,7 +214,7 @@ def check_versions():
     return current_version, github_version
 
 
-_alphabet_base_36 = '0123456789abcdefghijklmnopqrstuvwxyz'
+_alphabet_base_36 = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 
 def create_random_id(length: int) -> str:
@@ -280,7 +274,9 @@ def format_timestamp(timestamp: datetime) -> str:
     return f"{timestamp:%Y-%m-%dT%H:%M:%S}.{timestamp.microsecond // 1000:03d}Z"
 
 
-def interruptible_sleep(running_flag: Callable[[], bool], duration: float, step=1.0) -> bool:
+def interruptible_sleep(
+    running_flag: Callable[[], bool], duration: float, step=1.0
+) -> bool:
     """
     Sleeps for the given amount of time or until `running_flag` returns False.
     :param running_flag: A function that returns True while we should continue sleeping.
@@ -289,7 +285,7 @@ def interruptible_sleep(running_flag: Callable[[], bool], duration: float, step=
     :return: True if the sleep was uninterrupted, False otherwise.
     """
     target = time.time() + duration
-    while (last_flag:=running_flag()) and time.time() < target:
+    while (last_flag := running_flag()) and time.time() < target:
         time.sleep(max(0.0, min(step, target - time.time())))
     return last_flag
 
@@ -328,6 +324,7 @@ def interruptible_repeating_task(
             next_sleep_duration = max(0.0, next_run_time - time.time())
         else:
             break
+
 
 def oxford_comma_list(items: Sequence[str]) -> str:
     """
@@ -388,6 +385,7 @@ def ordinal(value: int):
         suffix = ["th", "st", "nd", "rd", "th"][min(value % 10, 4)]
     return f"{value}{suffix}"
 
+
 def encode_payload(payload: list) -> dict:
     """
     Encodes a Twitch spade events payload.
@@ -397,11 +395,12 @@ def encode_payload(payload: list) -> dict:
     json_event = json.dumps(payload, separators=(",", ":"))
     return {"data": (b64encode(json_event.encode("utf-8"))).decode("utf-8")}
 
+
 def create_random_alphanumeric_id(length: int) -> str:
     return "".join(
-        random.choice(string.ascii_lowercase + string.digits)
-        for _ in range(length)
+        random.choice(string.ascii_lowercase + string.digits) for _ in range(length)
     )
+
 
 def normalise_username(username: str):
     """
@@ -410,3 +409,17 @@ def normalise_username(username: str):
     :return: The normalised username.
     """
     return username.lower().strip().replace(" ", "")
+
+
+def truncate_url_path_query(url: str, length: int = 10):
+    """
+    Truncates the given URL's path and query segments to the given length.
+    Useful when reducing request error log length.
+    :param url: The URL to truncate.
+    :param length: The max length of the resultant segments.
+    :return: The truncated URL.
+    """
+    scheme, netloc, path, query, fragment = urlsplit(url)
+    query = query[: max(0, length - len(path))]
+    path = path[:length]
+    return urlunsplit((scheme, netloc, path, query, fragment))

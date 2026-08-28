@@ -14,24 +14,26 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import SlottedTaskRunner
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import (
     VideoEdge,
 )
 
 
-class TestingClipVodWatcher(BasicClipVodWatcher):
+class MockClipVodWatcher(BasicClipVodWatcher):
     def __init__(
         self,
         twitch: Twitch,
         streamers: list[Streamer],
         runner: SlottedTaskRunner,
+        event_manager: EventManager,
         config: BasicConfiguration | None = None,
         get_clip: Callable[[Streamer], Clip | None] | None = None,
         get_vod: Callable[[Streamer], Video | None] | None = None,
         can_watch: Callable[[Streamer], bool] | None = None,
     ):
-        super().__init__(twitch, streamers, runner, config)
+        super().__init__(twitch, streamers, runner, event_manager, config)
         self._get_clip = get_clip if get_clip else lambda s: None
         self._get_vod = get_vod if get_vod else lambda s: None
         self._can_watch = can_watch if can_watch else lambda s: True
@@ -171,10 +173,13 @@ def test_select_streamers(
     twitch = MagicMock()
     twitch.vod_viewable = lambda s, v: True
 
-    watcher = TestingClipVodWatcher(
+    event_manager = MagicMock(spec=EventManager)
+
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=streamers,
         runner=runner,
+        event_manager=event_manager,
         get_clip=lambda s: s.clips.last_day[0] if len(s.clips.last_day) > 0 else None,
         get_vod=lambda s: s.vods[0] if len(s.vods) > 0 else None,
     )
@@ -210,10 +215,11 @@ def test_watch_clip(
     twitch = MagicMock()
     twitch.simulate_clip_playback.return_value = watch_result
 
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
     watcher.get_clip = lambda streamer: clip
 
@@ -236,10 +242,11 @@ def test_watch_vod(
     twitch = MagicMock()
     twitch.simulate_vod_playback.return_value = watch_result
 
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
     watcher.get_vod = lambda streamer: vod
 
@@ -307,10 +314,11 @@ def test_watch(
     expected: Result,
 ):
     twitch: Any = MockTwitch(first_running + second_running)
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
     watcher.watch_clip = lambda streamer: clip_result
     watcher.watch_vod = lambda streamer: vod_result
@@ -349,10 +357,11 @@ def test_update_failures(
     expected_failures: dict[str, int],
     expected_cooldowns: dict[str, float],
 ):
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
         config=BasicConfiguration(
             max_failures_per_streamer=max_failures_per_streamer,
         ),
@@ -385,10 +394,11 @@ def test_process_result(
     expect_pop_failures: bool,
     expect_pop_cooldowns: bool,
 ):
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
     watcher.update_failures = MagicMock()
     watcher._failures = MagicMock()
@@ -450,10 +460,11 @@ def test_manage_cooldowns(
     failure_cooldown_seconds: float,
     expected_cooldowns: dict[str, float],
 ):
-    watcher = TestingClipVodWatcher(
+    watcher = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
         config=BasicConfiguration(failure_cooldown_seconds=failure_cooldown_seconds),
     )
     watcher._cooldowns = cooldowns
@@ -473,13 +484,14 @@ test_enqueue_data = [
 
 @pytest.mark.parametrize("in_queue,streamer,expect_queued", test_enqueue_data)
 def test_enqueue(in_queue, streamer, expect_queued):
-    recovery = TestingClipVodWatcher(
+    recovery = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         config=BasicConfiguration(
             max_clip_watch_seconds=1,
             max_vod_watch_seconds=1,
         ),
+        event_manager=MagicMock(spec=EventManager),
         runner=MagicMock(),
     )
     recovery._queued = MagicMock()
@@ -512,13 +524,14 @@ test_dequeue_data = [
 
 @pytest.mark.parametrize("streamers,expected", test_dequeue_data)
 def test_dequeue(streamers: list[Streamer], expected):
-    recovery = TestingClipVodWatcher(
+    recovery = MockClipVodWatcher(
         twitch=MagicMock(),
         streamers=[],
         config=BasicConfiguration(
             max_clip_watch_seconds=1,
             max_vod_watch_seconds=1,
         ),
+        event_manager=MagicMock(spec=EventManager),
         runner=MagicMock(),
     )
     for streamer in streamers:
@@ -553,7 +566,12 @@ def test__run(
     runner.has_free_slot.side_effect = [True for _ in range(free_slots)] + [False]
     runner.start_task.side_effect = [True for _ in range(free_slots)] + [False]
 
-    recovery = TestingClipVodWatcher(twitch=MagicMock(), streamers=[], runner=runner)
+    recovery = MockClipVodWatcher(
+        twitch=MagicMock(),
+        streamers=[],
+        runner=runner,
+        event_manager=MagicMock(spec=EventManager),
+    )
     recovery.select_streamers = MagicMock()
     recovery.select_streamers.return_value = (s for s in selected)
     recovery.enqueue = MagicMock()
@@ -570,13 +588,14 @@ def test__run(
 
 def test_run():
     twitch: Any = MockTwitch(4)
-    recovery = TestingClipVodWatcher(
+    recovery = MockClipVodWatcher(
         twitch=twitch,
         streamers=[],
         config=BasicConfiguration(
             max_clip_watch_seconds=1, max_vod_watch_seconds=1, interval_seconds=0
         ),
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
     recovery._run = MagicMock()
 

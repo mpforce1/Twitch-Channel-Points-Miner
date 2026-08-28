@@ -8,11 +8,9 @@ import logging
 import os
 import random
 import re
-import string
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
-from secrets import choice, token_hex
 from typing import Callable
 
 import requests
@@ -33,7 +31,6 @@ from TwitchChannelPointsMiner.classes.Settings import (
     Settings,
 )
 from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
-from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
@@ -43,8 +40,17 @@ from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
 )
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer, Clips
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
+from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
+from TwitchChannelPointsMiner.classes.events.Event import (
+    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown,
+    StreamerOffline,
+    StreamerOnline, WatchStreakMissing,
+    WatchStreakProgress, WatchStreakRecovery, WeeklyRewardsUpdate
+)
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
-from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
+from TwitchChannelPointsMiner.classes.gql.Integration import GQL
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropCampaignInProgress,
@@ -55,15 +61,13 @@ from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower imp
 from TwitchChannelPointsMiner.classes.gql.data.response.RewardList import RewardListResponse
 from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.constants import (
-    CLIENT_ID,
-    CLIENT_VERSION,
     URL,
 )
 from TwitchChannelPointsMiner.utils import (
-    millify,
     internet_connection_available,
     interruptible_sleep,
 )
+from TwitchChannelPointsMiner.utils.Entities import find_streamer
 from TwitchChannelPointsMiner.utils.Utils import create_random_alphanumeric_id, encode_payload
 
 logger = logging.getLogger(__name__)
@@ -74,6 +78,7 @@ CLIENT_WATCH_SECONDS = 20
 
 class Twitch(object):
     __slots__ = [
+        "event_manager",
         "cookies_file",
         "running",
         "client_session",
@@ -83,34 +88,20 @@ class Twitch(object):
 
     def __init__(
         self,
-        username,
-        user_agent,
-        password=None,
-        gql_factory: GQLFactory | None = None,
+        event_manager: EventManager,
+        username: str,
+        client_session: ClientSession,
+        gql: GQL,
     ):
+        self.event_manager = event_manager
         cookies_path = os.path.join(Path().absolute(), "cookies")
         Path(cookies_path).mkdir(parents=True, exist_ok=True)
         self.cookies_file = os.path.join(cookies_path, f"{username}.pkl")
         self.twilight_build_id_pattern = re.compile(
             r'window\.__twilightBuildID\s*=\s*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"'
         )
-        device_id = "".join(
-            choice(string.ascii_letters + string.digits) for _ in range(32)
-        )
-        twitch_login = TwitchLogin(
-            CLIENT_ID, device_id, username, user_agent, password=password
-        )
-        client_session_id = token_hex(16)
-        self.client_session = ClientSession(
-            login=twitch_login,
-            user_agent=user_agent,
-            version=CLIENT_VERSION,
-            device_id=device_id,
-            session_id=client_session_id,
-            version_outdated=True,
-        )
-        gql_factory = gql_factory if gql_factory is not None else GQLFactory()
-        self.gql = gql_factory.create(self.client_session)
+        self.client_session = client_session
+        self.gql = gql
         self.running = True
 
     def login(self):
@@ -151,11 +142,14 @@ class Twitch(object):
                 )
                 if streak_was_missing and not streamer.stream.watch_streak_missing:
                     logger.info(
-                        f"Detected WATCH_STREAK for {streamer}",
+                        f"Detected Watch Streak for {streamer}",
                         extra={
                             "emoji": ":rocket:",
-                            "event": Events.get("WATCH_STREAK_PROGRESS"),
+                            "event": Events.WATCH_STREAK_PROGRESS,
                         },
+                    )
+                    self.event_manager.manage(
+                        WatchStreakProgress(streamer=streamer)
                     )
 
                 event_properties = {
@@ -204,6 +198,13 @@ class Twitch(object):
             streamer.stream.spade_url = re.search(regex_spade, response).group(1)
         except requests.exceptions.RequestException as e:
             logger.error(f"Something went wrong during extraction of 'spade_url': {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Something went wrong during extraction of 'spade_url'",
+                    error=e,
+                )
+            )
 
     def get_vod_playback_access_token(self, streamer: Streamer, vod_id: str):
         try:
@@ -215,6 +216,13 @@ class Twitch(object):
         except RetryError as e:
             logger.error(
                 f"Unable to get VOD PlaybackAccessToken for {streamer.username}: {e}"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to get VOD PlaybackAccessToken for {streamer.username}",
+                    error=e,
+                )
             )
             return None
 
@@ -285,13 +293,22 @@ class Twitch(object):
                     f"Watch Streak recovered for {streamer}",
                     extra={
                         "emoji": ":ambulance:",
-                        "event": Events.get("WATCH_STREAK_RECOVERY"),
+                        "event": Events.WATCH_STREAK_RECOVERY,
                     },
+                )
+                self.event_manager.manage(
+                    WatchStreakRecovery(streamer=streamer)
                 )
             if not had_missed_streams and len(streamer.watch_streak_missed_streams) > 0:
                 logger.info(
                     f"Missing Watch Streak for {streamer}",
-                    extra={"emoji": ":red_question_mark:"},
+                    extra={
+                        "emoji": ":red_question_mark:",
+                        "event": Events.WATCH_STREAK_MISSING,
+                    },
+                )
+                self.event_manager.manage(
+                    WatchStreakMissing(streamer=streamer)
                 )
 
     def get_streamer_info(self, streamer: Streamer):
@@ -340,6 +357,13 @@ class Twitch(object):
 
         except RetryError as e:
             logger.error(f"Error while syncing state for {streamer}: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while syncing state for {streamer}",
+                    error=e,
+                )
+            )
 
     def get_stream_info(self, streamer: Streamer):
         """
@@ -384,16 +408,35 @@ class Twitch(object):
                 self.update_stream(streamer)
             except StreamerIsOfflineException:
                 streamer.set_offline()
-            except RetryError:
-                pass
+                self.event_manager.manage(StreamDown(streamer=streamer))
+                self.event_manager.manage(StreamerOffline(streamer=streamer))
+            except RetryError as e:
+                logger.error(f"Error while checking if {streamer} is online: {e}")
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Error while checking if {streamer} is online",
+                        error=e,
+                    )
+                )
             else:
                 streamer.set_online()
+                self.event_manager.manage(StreamerOnline(streamer=streamer))
         else:
             try:
                 self.update_stream(streamer)
             except StreamerIsOfflineException:
                 streamer.set_offline()
-            except RetryError:
+                self.event_manager.manage(StreamDown(streamer=streamer))
+                self.event_manager.manage(StreamerOffline(streamer=streamer))
+            except RetryError as e:
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Error while checking if {streamer} is online",
+                        error=e,
+                    )
+                )
                 pass
 
     def get_channel_id(self, streamer_username: str) -> str:
@@ -415,6 +458,13 @@ class Twitch(object):
             logger.error(
                 f"Error getting channel id for {Settings.logger.anonymiser.username(streamer_username)}: {e}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error getting channel id for {streamer_username}",
+                    error=e,
+                )
+            )
             raise StreamerDoesNotExistException
 
     def get_followers(
@@ -430,22 +480,16 @@ class Twitch(object):
             return self.gql.channel_follows(limit, order)
         except RetryError as e:
             logger.error(
-                f"Error getting user's followers. Limit: {limit}, order: '{order}: {e}'"
+                f"Error getting user's followers. Limit: {limit}, order: '{order}': {e}"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error getting user's followers. Limit: {limit}, order: '{order}'",
+                    error=e,
+                )
             )
             return []
-
-    def update_raid(self, streamer, raid):
-        if streamer.raid != raid:
-            streamer.raid = raid
-            target = Settings.logger.anonymiser.username(raid.target_login)
-            try:
-                self.gql.join_raid(raid.raid_id)
-                logger.info(
-                    f"Joining raid from {streamer} to {target}!",
-                    extra={"emoji": ":performing_arts:", "event": Events.JOIN_RAID},
-                )
-            except RetryError as e:
-                logger.error(f"Error joining raid from {streamer} to {target}: {e}")
 
     # === 'GLOBALS' METHODS === #
     # Create chunk of sleep of speed-up the break loop after CTRL+C
@@ -454,12 +498,20 @@ class Twitch(object):
         interruptible_sleep(lambda: self.running, seconds, step=step)
 
     def __check_connection_handler(self, chunk_size):
+        # TODO this should be moved to a dedicated object that checks it in a thread and can be queried
         # The success rate It's very high usually. Why we have failed?
         # Check internet connection ...
         while internet_connection_available() is False:
             random_sleep = random.randint(1, 3)
             logger.warning(
                 f"No internet connection available! Retry after {random_sleep}m"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"No internet connection available! Retry after {random_sleep}m",
+                    error=None,
+                )
             )
             self.__chuncked_sleep(random_sleep * 60, chunk_size=chunk_size)
 
@@ -528,16 +580,37 @@ class Twitch(object):
                 logger.debug(
                     f"Error with update_client_version: {response.status_code}"
                 )
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Error with update_client_version: {response.status_code}",
+                        error=None,
+                    )
+                )
                 return self.client_session.version
             matcher = re.search(self.twilight_build_id_pattern, response.text)
             if not matcher:
                 logger.debug("Error with update_client_version: no match")
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message="Error with update_client_version: no match",
+                        error=None,
+                    )
+                )
                 return self.client_session.version
             self.client_session.version = matcher.group(1)
             logger.debug(f"Client version: {self.client_session.version}")
             return self.client_session.version
         except requests.exceptions.RequestException as e:
             logger.error(f"Error with update_client_version: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error with update_client_version",
+                    error=e,
+                )
+            )
             return self.client_session.version
 
     def get_or_update_playback_access_token(
@@ -573,6 +646,13 @@ class Twitch(object):
             except RetryError as e:
                 logger.error(
                     f"Unable to get PlaybackAccessToken for {streamer.username}: {e}"
+                )
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Unable to get PlaybackAccessToken for {streamer.username}",
+                        error=e,
+                    )
                 )
                 return None
         return streamer.stream.playback_access_token
@@ -613,6 +693,13 @@ class Twitch(object):
             logger.debug(
                 f"Unable to request master playlist for {streamer}, Status: {master_playlist_response.status_code}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to request master playlist for {streamer}, Status: {master_playlist_response.status_code}",
+                    error=None,
+                )
+            )
             return None
 
         broadcast_qualities_urls = master_playlist_response.text
@@ -622,6 +709,13 @@ class Twitch(object):
         if not validators.url(lowest_quality_playlist_url):
             logger.debug(
                 f"Unable to parse URL from master playlist response, URL: {lowest_quality_playlist_url}"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to parse URL from master playlist response, URL: {lowest_quality_playlist_url}",
+                    error=None,
+                )
             )
             return None
         streamer.stream.hls_url = lowest_quality_playlist_url
@@ -667,6 +761,13 @@ class Twitch(object):
             logger.debug(
                 f"Unable to get stream playlist, Status: {stream_playlist_response.status_code}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to get stream playlist, Status: {stream_playlist_response.status_code}",
+                    error=None,
+                )
+            )
             return False
         stream_playlist_text = stream_playlist_response.text
 
@@ -675,6 +776,13 @@ class Twitch(object):
         if not validators.url(stream_segment_url):
             logger.debug(
                 f"Unable to parse latest segment URL from stream playlist, URL: {stream_segment_url}"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to parse latest segment URL from stream playlist, URL: {stream_segment_url}",
+                    error=None,
+                )
             )
             return False
 
@@ -713,6 +821,13 @@ class Twitch(object):
             return response.status_code == 204
         except requests.exceptions.RequestException as e:
             logger.debug(f"Unable to send spade {name} for {streamer}: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to send spade {name} for {streamer}",
+                    error=e,
+                )
+            )
             return False
 
     def send_spade_minute_watched_event(self, streamer: Streamer) -> bool:
@@ -732,14 +847,6 @@ class Twitch(object):
         streamer_selector: StreamerSelector,
         chunk_size=3,
     ):
-        def find_streamer(channel_id: str) -> Streamer:
-            for streamer in streamers:
-                if streamer.channel_id == channel_id:
-                    return streamer
-            raise KeyError(
-                f"Streamer with channel_id ({channel_id}) not found in streamer list."
-            )
-
         watched_previous_iteration = set()
         watched_this_iteration = set()
 
@@ -761,22 +868,34 @@ class Twitch(object):
 
                 selected_streamer_ids = streamer_selector.select(online_streamers, 2)
                 streamers_watching = [
-                    find_streamer(streamer_id) for streamer_id in selected_streamer_ids
+                    find_streamer(streamers, streamer_id) for streamer_id in selected_streamer_ids
                 ]
 
                 # Log the difference, if any
                 selected_set = set(selected_streamer_ids)
                 if watched_previous_iteration != selected_set:
+                    dropping_ids = list(watched_previous_iteration - selected_set)
                     dropping = list(
-                        str(find_streamer(channel_id))
-                        for channel_id in watched_previous_iteration - selected_set
+                        find_streamer(streamers, channel_id)
+                        for channel_id in dropping_ids
                     )
+                    adding_ids = list(selected_set - watched_previous_iteration)
                     adding = list(
-                        str(find_streamer(channel_id))
-                        for channel_id in selected_set - watched_previous_iteration
+                        find_streamer(streamers, channel_id)
+                        for channel_id in adding_ids
                     )
                     logger.debug(
-                        f"Changing watch slots: Adding {adding}, Dropping {dropping}"
+                        f"Changing watch slots: Adding {[str(s) for s in adding]}, Dropping {[str(s) for s in dropping]}",
+                        extra={
+                            "emoji": ":eyes:",
+                            "event": Events.CHANGING_WATCH_SLOTS,
+                        }
+                    )
+                    self.event_manager.manage(
+                        ChangingWatchSlots(
+                            adding=adding,
+                            dropping=dropping,
+                        )
                     )
 
                 # Update the watch session state before starting the watch loop
@@ -848,11 +967,34 @@ class Twitch(object):
                                                     combined_message, Events.DROP_STATUS
                                                 )
 
-                    except requests.exceptions.ConnectionError as e:
-                        logger.error(f"Error while trying to send minute watched: {e}")
+                    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                        # Attempt to reduce the URL length for max retry errors
+                        # NOTE: this is fragile as it's based on __str__ of a lib class not changing
+                        max_url_path_length = 20
+                        error_str = str(e)
+                        max_retry_start_anchor = "Max retries exceeded with url: "
+                        max_retry_end_anchor = " (Caused by "  # (Caused by {reason!r})
+                        if (
+                            Settings.logger.less
+                            and max_retry_start_anchor in error_str
+                            and max_retry_end_anchor in error_str
+                        ):
+                            # Partition error into (before url, url, after url)
+                            start_index = error_str.index(max_retry_start_anchor) + len(max_retry_start_anchor)
+                            end_index = error_str.index(max_retry_end_anchor)
+                            before_url = error_str[:start_index]
+                            url = error_str[start_index:end_index]
+                            after_url = error_str[end_index:]
+                            error_str = f"{before_url}{url[:max_url_path_length]}...{after_url}"
+                        logger.error(f"Error while trying to send minute watched: {error_str}")
+                        self.event_manager.manage(
+                            Error(
+                                context="Twitch API",
+                                message=f"Error while trying to send minute watched",
+                                error=e,
+                            )
+                        )
                         self.__check_connection_handler(chunk_size)
-                    except requests.exceptions.Timeout as e:
-                        logger.error(f"Error while trying to send minute watched: {e}")
 
                     self.__chuncked_sleep(
                         next_iteration - time.time(), chunk_size=chunk_size
@@ -864,12 +1006,19 @@ class Twitch(object):
                 )
                 if len(streamers_watching) == 0 or time_remaining > 0.01:
                     self.__chuncked_sleep(time_remaining, chunk_size=chunk_size)
-            except Exception:
+            except Exception as e:
                 logger.error("Exception raised in send minute watched", exc_info=True)
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message="Exception raised in send minute watched",
+                        error=e,
+                    )
+                )
                 # Do a short sleep to avoid error log spam
                 time.sleep(1)
             watched_previous_iteration = watched_this_iteration
-            watched_this_iteration = set()
+            watched_this_iteration = set[str]()
 
     def send_clip_video_play(
         self, streamer: Streamer, clip: Clip, play_session_id: str
@@ -971,6 +1120,13 @@ class Twitch(object):
             self.get_spade_url(streamer)
         if streamer.stream.spade_url is None:
             logger.debug(f"Unable to get Spade URL for {streamer}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to get Spade URL for {streamer}",
+                    error=None,
+                )
+            )
             return False
 
         # Watch the clip in 5s chunks
@@ -1041,6 +1197,13 @@ class Twitch(object):
             self.get_spade_url(streamer)
         if streamer.stream.spade_url is None:
             logger.debug(f"Unable to get Spade URL for {streamer}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to get Spade URL for {streamer}",
+                    error=None,
+                )
+            )
             return False
 
         # Watch the VOD
@@ -1076,6 +1239,13 @@ class Twitch(object):
         if streamer.weekly_rewards is None:
             logger.error(
                 f"Unable to update weekly reward for {streamer}, no existing reward found"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to update weekly reward for {streamer}, no existing reward found",
+                    error=None,
+                )
             )
             return
         # TODO new Events type for this?
@@ -1124,6 +1294,13 @@ class Twitch(object):
         streamer.weekly_rewards.event_config.days_required_per_week = (
             notification.event_config.days_required_per_week
         )
+        self.event_manager.manage(
+            WeeklyRewardsUpdate(
+                streamer=streamer,
+                update_type=notification.notification_type,
+                weekly_rewards=streamer.weekly_rewards,
+            )
+        )
 
     def get_weekly_reward(self, streamer: Streamer):
         if streamer.settings.weekly_rewards:
@@ -1133,6 +1310,13 @@ class Twitch(object):
                 logger.error(
                     f"Error while trying to sync weekly rewards for {streamer}: {e}"
                 )
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Error while trying to sync weekly rewards for {streamer}",
+                        error=e,
+                    )
+                )
 
     # === CHANNEL POINTS / PREDICTION === #
     # Load the amount of current points for a channel, check if a bonus is available
@@ -1141,6 +1325,13 @@ class Twitch(object):
             response = self.gql.get_channel_points_context(streamer.username)
         except RetryError as e:
             logger.error(f"Error while trying to load channel points context: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while trying to load channel points context",
+                    error=e,
+                )
+            )
             return
         if response.community is None:
             raise StreamerDoesNotExistException
@@ -1157,7 +1348,7 @@ class Twitch(object):
             }
 
         if community_points.available_claim is not None:
-            self.claim_bonus(streamer, community_points.available_claim.id)
+            self.gql.claim_community_points(streamer.channel_id, community_points.available_claim.id)
 
         if streamer.settings.community_goals is True:
             self.contribute_to_community_goals(streamer)
@@ -1202,16 +1393,30 @@ class Twitch(object):
                             f"Streamer {Settings.logger.anonymiser.streamer_username(streamer)} does not exist",
                             extra={"emoji": ":cry:"},
                         )
-                    except Exception:
+                    except Exception as e:
                         failed_streamers.add(streamer.username)
                         logger.error(
                             f"Failed to initialize streamer {Settings.logger.anonymiser.streamer_username(streamer)}",
                             exc_info=True,
                         )
+                        self.event_manager.manage(
+                            Error(
+                                context="Twitch API",
+                                message=f"Failed to initialize streamer {streamer}",
+                                error=e,
+                            )
+                        )
             except TimeoutError:
                 logger.error(
                     "Timed out while initializing streamers after %s seconds.",
                     timeout_seconds,
+                )
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Timed out while initializing streamers after {timeout_seconds} seconds.",
+                        error=None,
+                    )
                 )
                 for future, streamer in futures.items():
                     if not future.done():
@@ -1228,113 +1433,59 @@ class Twitch(object):
                 try:
                     self.load_channel_points_context(streamer)
                 except StreamerDoesNotExistException:
+                    # TODO automatically remove
                     logger.warning(
                         f"Detected that Streamer '{Settings.logger.anonymiser.streamer_username(streamer)}' no longer exists."
+                    )
+                    self.event_manager.manage(
+                        Error(
+                            context="Twitch API",
+                            message=f"Detected that Streamer '{streamer}' no longer exists.",
+                            error=None,
+                        )
                     )
                     pass
                 time.sleep(random.uniform(0.1, 1))
                 if not self.running:
                     return
 
-    def make_predictions(self, event):
-        decision = event.bet.calculate(event.streamer.channel_points)
-        # selector_index = 0 if decision["choice"] == "A" else 1
-
-        logger.info(
-            f"Going to complete bet for {event}",
-            extra={
-                "emoji": ":four_leaf_clover:",
-                "event": Events.BET_GENERAL,
-            },
-        )
-        if event.status == "ACTIVE":
-            skip, compared_value = event.bet.skip()
-            if skip is True:
-                logger.info(
-                    f"Skip betting for the event {event}",
-                    extra={
-                        "emoji": ":pushpin:",
-                        "event": Events.BET_FILTERS,
-                    },
+    def make_prediction(self, streamer: Streamer, event: PredictionEvent, bet: Bet):
+        """
+        Places a prediction on a prediction event.
+        :param streamer: The Streamer hosting the event.
+        :param event: The event.
+        :param bet: The prediction to make.
+        """
+        try:
+            response = self.gql.make_prediction(
+                event.event_id, bet.outcome_id, bet.points
+            )
+        except RetryError as e:
+            logger.error(f"Error while trying to make prediction: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while trying to make prediction",
+                    error=e,
                 )
-                logger.info(
-                    f"Skip settings {event.bet.settings.filter_condition}, current value is: {compared_value}",
-                    extra={
-                        "emoji": ":pushpin:",
-                        "event": Events.BET_FILTERS,
-                    },
-                )
-            else:
-                if decision["amount"] >= 10:
-                    logger.info(
-                        # f"Place {millify(decision['amount'])} channel points on: {event.bet.get_outcome(selector_index)}",
-                        f"Place {millify(decision['amount'])} channel points on: {event.bet.get_outcome(decision['choice'])}",
-                        extra={
-                            "emoji": ":four_leaf_clover:",
-                            "event": Events.BET_GENERAL,
-                        },
-                    )
+            )
+            return
 
-                    try:
-                        response = self.gql.make_prediction(
-                            event.event_id, decision["id"], decision["amount"]
-                        )
-                    except RetryError as e:
-                        logger.error(f"Error while trying to make prediction: {e}")
-                        return
-
-                    if response.error is not None:
-                        error_code = response.error.code
-                        logger.error(
-                            f"Failed to place bet, error: {error_code}",
-                            extra={
-                                "emoji": ":four_leaf_clover:",
-                                "event": Events.BET_FAILED,
-                            },
-                        )
-                else:
-                    logger.info(
-                        f"Bet won't be placed as the amount {millify(decision['amount'])} is less than the minimum required 10",
-                        extra={
-                            "emoji": ":four_leaf_clover:",
-                            "event": Events.BET_GENERAL,
-                        },
-                    )
-        else:
-            logger.info(
-                f"Oh no! The event is not active anymore! Current status: {event.status}",
+        if response.error is not None:
+            error_code = response.error.code
+            logger.error(
+                f"Failed to place bet, error: {error_code}",
                 extra={
-                    "emoji": ":disappointed_relieved:",
-                    "event": Events.BET_FAILED,
+                    "emoji": ":four_leaf_clover:",
+                    "event": Events.PREDICTIONS,
                 },
             )
-
-    def claim_bonus(self, streamer: Streamer, claim_id: str):
-        if Settings.logger.less is False:
-            logger.info(
-                f"Claiming the bonus for {streamer}!",
-                extra={"emoji": ":gift:", "event": Events.BONUS_CLAIM},
-            )
-        try:
-            self.gql.claim_community_points(streamer.channel_id, claim_id)
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to claim bonus for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
-            )
-
-    # === MOMENTS === #
-    def claim_moment(self, streamer: Streamer, moment_id: str):
-        if Settings.logger.less is False:
-            logger.info(
-                f"Claiming the moment for {streamer}!",
-                extra={"emoji": ":video_camera:", "event": Events.MOMENT_CLAIM},
-            )
-
-        try:
-            self.gql.claim_moment(moment_id)
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to claim moment with id {moment_id} for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}",
+            self.event_manager.manage(
+                PredictionFailed(
+                    streamer=streamer,
+                    prediction_event=event,
+                    error_code=error_code
+                )
             )
 
     # === CAMPAIGNS / DROPS / INVENTORY === #
@@ -1345,6 +1496,13 @@ class Twitch(object):
             logger.error(
                 f"Error while trying to get drops campaign ids for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while trying to get drops campaign ids for {streamer}",
+                    error=e,
+                )
+            )
             return []
 
     def __get_inventory(self):
@@ -1352,6 +1510,13 @@ class Twitch(object):
             return self.gql.get_inventory()
         except RetryError as e:
             logger.error(f"Error while trying to get user inventory: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while trying to get user inventory",
+                    error=e,
+                )
+            )
             return None
 
     def __get_drops_dashboard(
@@ -1367,6 +1532,13 @@ class Twitch(object):
             return campaigns
         except RetryError as e:
             logger.error(f"Error while trying to get viewer drops dashboard: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while trying to get viewer drops dashboard",
+                    error=e,
+                )
+            )
             return []
 
     def __get_campaigns_details(
@@ -1381,6 +1553,13 @@ class Twitch(object):
         except RetryError as e:
             logger.error(
                 f"Error while trying to get campaigns details for campaigns: {campaign_ids}: {e}"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while trying to get campaigns details for campaigns: {campaign_ids}",
+                    error=e,
+                )
             )
             return []
 
@@ -1406,12 +1585,25 @@ class Twitch(object):
                         break
         return campaigns
 
-    def claim_drop(self, drop: Drop):
+    def claim_drop(self, drop: Drop, streamer: Streamer | None = None):
         if drop.drop_instance_id is None:
             logger.debug(f"Unable to claim drop '{drop.id}', no instance id'")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to claim drop '{drop.id}', no instance id'",
+                    error=None,
+                )
+            )
             return False
         logger.info(
             f"Claim {drop}", extra={"emoji": ":package:", "event": Events.DROP_CLAIM}
+        )
+        self.event_manager.manage(
+            DropClaim(
+                streamer=streamer,
+                drop=drop,
+            )
         )
         try:
             response = self.gql.claim_drop_rewards(drop.drop_instance_id)
@@ -1419,12 +1611,26 @@ class Twitch(object):
             logger.error(
                 f"Error while trying to claim drop with id '{drop.drop_instance_id}': {e}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while trying to claim drop with id '{drop.drop_instance_id}'",
+                    error=e,
+                )
+            )
             return False
         if response.status is None:
             return False
         if response.errors is not None and len(response.errors) > 0:
             logger.error(
                 f"Errors while trying to claim drop with id '{drop.drop_instance_id}': {response.errors}"
+            )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Errors while trying to claim drop with id '{drop.drop_instance_id}': {response.errors}",
+                    error=None,
+                )
             )
             return False
         if response.status in ["ELIGIBLE_FOR_ALL", "DROP_INSTANCE_ALREADY_CLAIMED"]:
@@ -1507,6 +1713,13 @@ class Twitch(object):
                 RetryError,
             ) as e:
                 logger.error(f"Error while syncing inventory: {e}")
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Error while syncing inventory",
+                        error=None,
+                    )
+                )
                 campaigns = []
                 self.__check_connection_handler(chunk_size)
 
@@ -1522,6 +1735,13 @@ class Twitch(object):
                 response = self.gql.get_user_points_contribution(streamer.username)
             except RetryError as e:
                 logger.error(f"Error while trying to get user points contribution: {e}")
+                self.event_manager.manage(
+                    Error(
+                        context="Twitch API",
+                        message=f"Error while trying to get user points contribution",
+                        error=e,
+                    )
+                )
                 return
             user_goal_contributions = response.goal_contributions
             logger.debug(
@@ -1534,6 +1754,13 @@ class Twitch(object):
                     # TODO should this trigger a new load context request
                     logger.error(
                         f"Unable to find context data for {Settings.logger.anonymiser.streamer_username(streamer)}'s community goal {goal_id}"
+                    )
+                    self.event_manager.manage(
+                        Error(
+                            context="Twitch API",
+                            message=f"Unable to find context data for {streamer} community goal {goal_id}",
+                            error=None,
+                        )
                     )
                 else:
                     user_stream_contribution = (
@@ -1568,20 +1795,45 @@ class Twitch(object):
             logger.error(
                 f"Error while contributing to channel {Settings.logger.anonymiser.streamer_username(streamer)}'s community goal '{title}', amount {amount}: {e}",
             )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while contributing to {streamer} community goal '{title}', amount {amount}",
+                    error=e,
+                )
+            )
             return
         if response.error is not None:
             logger.error(
                 f"Unable to contribute channel points to {Settings.logger.anonymiser.streamer_username(streamer)}'s community goal '{title}', reason '{response.error}'"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Unable to contribute channel points to {Settings.logger.anonymiser.streamer_username(streamer)}'s community goal '{title}', reason '{response.error}'",
+                    error=None,
+                )
+            )
         else:
             logger.info(
-                f"Contributed {amount} channel points to community goal '{title}'"
+                f"Contributed {amount} channel points to community goal '{title}'",
+                extra={"emoji": ":goal_net:"},
             )
             streamer.channel_points -= amount
+            goal = streamer.community_goals.get(goal_id, None)
+            if goal is None:
+                logger.warning(f"Contributed to unmanaged Community Goal {goal_id}")
+            else:
+                self.event_manager.manage(
+                    CommunityGoalContribution(
+                        streamer=streamer,
+                        goal=goal,
+                        amount=amount,
+                    )
+                )
 
-    @staticmethod
     def update_gift_sub(
-        streamer: Streamer, gift_sub: GiftSub | None, send_event: bool = True
+        self, streamer: Streamer, gift_sub: GiftSub | None, send_event: bool = True
     ):
         """
         Updates the given Streamer with the given gift-sub, logs an Event if it has changed and `send_event` is True.
@@ -1602,7 +1854,14 @@ class Twitch(object):
             else:
                 if send_event:
                     extra["event"] = Events.GIFT_SUB_RECEIVED
-                logger.info(gift_sub.describe(), extra=extra)
+                logger.info(f"[{self.client_session.login.username}] {gift_sub.describe()}", extra=extra)
+                if isinstance(gift_sub.tier, int) and send_event:
+                    # ignore non-standard gift subs like Turbo
+                    self.event_manager.manage(
+                        GiftSubReceived(
+                            streamer=streamer,
+                        )
+                    )
 
     def check_gift_sub(self, streamer: Streamer, send_event: bool = True):
         """
@@ -1615,6 +1874,13 @@ class Twitch(object):
             gift_subs = self.gql.gift_subs()
         except RetryError as e:
             logger.error(f"Error while syncing gift subs: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while syncing gift subs",
+                    error=e,
+                )
+            )
             return
 
         for gift_sub in gift_subs:
@@ -1633,6 +1899,13 @@ class Twitch(object):
             gift_subs = self.gql.gift_subs()
         except RetryError as e:
             logger.error(f"Error while syncing gift subs: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Twitch API",
+                    message=f"Error while syncing gift subs",
+                    error=e,
+                )
+            )
             return
 
         for gift_sub in gift_subs:

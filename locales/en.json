@@ -1,0 +1,188 @@
+{
+  "general": {
+    "account": "Account",
+    "channel": "Channel",
+    "title": "Title",
+    "window": "Window",
+    "outcomes": "Outcomes"
+  },
+  "names": {
+    "STREAM_UP": "Stream Up",
+    "STREAM_DOWN": "Stream Down",
+    "STREAMER_ONLINE": "Streamer Online",
+    "STREAMER_OFFLINE": "Streamer Offline",
+    "STREAM_VIEW_COUNT": "Stream View Count",
+    "BONUS_POINTS_AVAILABLE": "Bonus Points Available",
+    "GAIN_FOR_RAID": "Gain For Raid",
+    "GAIN_FOR_CLAIM": "Gain For Claim",
+    "GAIN_FOR_WATCH": "Gain For Watch",
+    "GAIN_FOR_WATCH_STREAK": "Gain For Watch Streak",
+    "GAIN_FOR_WEEKLY_REWARDS": "Gain For Weekly Rewards",
+    "GAIN_FOR_PREDICTION": "Gain For Prediction",
+    "GAIN_FOR_REFUND": "Gain For Refund",
+    "GAIN_FOR_OTHER": "Gain For Other",
+    "POINTS_SPENT": "Points Spent",
+    "WATCH_STREAK_PROGRESS": "Watch Streak Progress",
+    "WATCH_STREAK_MISSING": "Watch Streak Missing",
+    "WATCH_STREAK_RECOVERY": "Watch Streak Recovery",
+    "WEEKLY_REWARDS_UPDATE": "Weekly Rewards Update",
+    "PREDICTION_EVENT_START": "Prediction Started",
+    "PREDICTION_EVENT_UPDATE": "Prediction Updated",
+    "PREDICTION_EVENT_CLOSED": "Prediction Closed",
+    "PREDICTION_WIN": "Prediction Won",
+    "PREDICTION_LOSE": "Prediction Lost",
+    "PREDICTION_REFUND": "Prediction Refunded",
+    "PREDICTION_FAILED": "Failed To Place Prediction",
+    "MOMENT_CLAIM_AVAILABLE": "Moment Claim Available",
+    "DROP_STATUS": "Drop Status Updated",
+    "DROP_CLAIM_AVAILABLE": "Drop Claim Available",
+    "CHAT_MENTION": "Chat Mention",
+    "GIFT_SUB_RECEIVED": "Gift Sub Received",
+    "JOIN_RAID": "Joining Raid",
+    "BONUS_CLAIM": "Claiming Bonus",
+    "MOMENT_CLAIM": "Claiming Moment",
+    "DROP_CLAIM": "Claiming Drop",
+    "PREDICTION_MADE": "Making Prediction",
+    "PREDICTION_FILTERS": "Prediction Filtered",
+    "CHANGING_WATCH_SLOTS": "Changing Watch Slots",
+    "COMMUNITY_GOAL_CONTRIBUTION": "Contributing To Community Goal",
+    "SHUTDOWN": "Miner Shutdown",
+    "ERROR": "Miner Error"
+  },
+  "stream_up": "{streamer}: Stream is Up!",
+  "stream_down": "{streamer}: Stream is Down!",
+  "stream_view_count": {
+    "singular": "{streamer} has {count} viewer",
+    "plural": "{streamer} has {count} viewers"
+  },
+  "streamer_online": "{streamer} is Online!",
+  "streamer_offline": "{streamer} is Offline!",
+  "bonus_points_available": "Bonus Claim available for {streamer}",
+  "gain_points": {
+    "reason": {
+      "some": " - Reason {reason}",
+      "none": ""
+    },
+    "main": "+{amount} → {streamer}{reason}"
+  },
+  "points_spent": {
+    "singular": "{count} point spent for {streamer}",
+    "plural": "{count} points spent for {streamer}"
+  },
+  "watch_streak_progress": "Detected Watch Streak for {streamer}",
+  "watch_streak_missing": "Missing Watch Streak for {streamer}",
+  "watch_streak_recovery": "Watch Streak recovered for {streamer}",
+  "weekly_rewards_update": {
+    "days": {
+      "singular": "{count} day",
+      "plural": "{count} days"
+    },
+    "main": "Weekly Reward update for {streamer}: {update_type}. {days_visited_this_week}/{days} visited this week."
+  },
+  "predictions": {
+    "outcome_simple": "【{title}】",
+    "outcome": "【{title}: Odds {odds}】",
+    "outcome_multiline": "{title}\nOdds: {odds}",
+    "event_created": "Prediction event started for {streamer} ({prediction_window_seconds}s): \"{title}\": [{outcomes}]",
+    "prediction_made": {
+      "points": {
+        "singular": "{count} channel point",
+        "plural": "{count} channel points"
+      },
+      "total_update": {
+        "some": ", Total points placed: {total_points}",
+        "none": ""
+      },
+      "main": "Prediction made for \"{title}\": Placed {points} on \"{outcome_title}\"{total_update}"
+    },
+    "filters": {
+      "reasons": {
+        "too_short": "Chosen prediction time is in the past: {time}",
+        "not_enough_points": "You don't have enough channel points: {channel_points} < {minimum_points}",
+        "not_active": "Event is not longer active: {status}",
+        "below_minimum": "Chosen stake ({stake}) is less than 0",
+        "settings": "Filtered by your bet settings: {conditional}"
+      },
+      "main": "Not placing a prediction on \"{title}\" for {streamer}: {reason}"
+    },
+    "event_update": "Prediction event updated for {streamer} {remaining}s: \"{title}\", status \"{status}\"{outcomes}",
+    "prediction_result": {
+      "winning_outcome": {
+        "some": "\n\tWinning outcome: {outcome}",
+        "none": ""
+      },
+      "user_prediction": "User prediction: 【{outcome_title}, Odds: {outcome_odds}, Stake: {stake}】",
+      "user_result": {
+        "win": "Won +{points} (profit +{profit})",
+        "lose": "Lost -{points}",
+        "refund": "Refund",
+        "main": "User Result: {type}"
+      },
+      "main": "Prediction event resulted for {streamer}: \"{title}\": {winning_outcome}\n\t{user_prediction}\n\t{user_result}"
+    },
+    "prediction_failed": "Failed to place bet, error: {error_code}",
+    "your_prediction": "Your Prediction",
+    "prediction_multiline": "{title}\nOdds: {odds}\nPoints Placed: {points}",
+    "winning_outcome":"Winning Outcome",
+    "result": "Result",
+    "profit_loss": "Profit/Loss"
+  },
+  "moment_claim_available": "Moment claim available for {streamer}",
+  "drops": {
+    "drop": "{name} ({benefit}) {current_minutes_watched}/{minutes_required} ({percentage_progress}%)",
+    "progress": "Drop progress for {drop}{with_streamer}",
+    "with_streamer": {
+      "some": " for {streamer}",
+      "none": ""
+    },
+    "claim_available": "Drop claim available for {drop}{with_streamer}",
+    "claim": "Claiming drop \"{drop}\""
+  },
+  "chat_mention": "{actor} at {streamer} wrote: {message}",
+  "gift_sub_received": {
+    "from": "From",
+    "subscription": "Subscription",
+    "ends_at": "Ends At",
+    "duration": "Duration",
+    "tier": "Tier-{tier}",
+    "gifter": {
+      "some": "{value}",
+      "none": "Anonymous"
+    },
+    "days": {
+      "singular": "{count} day)",
+      "plural": "{count} days"
+    },
+    "main": "[{recipient}] {tier} Gift Sub from {gifter} for {streamer}, ends at {ends_at} (in {days})"
+  },
+  "join_raid": "Joining raid from {streamer} to {target}!",
+  "bonus_points_claim": "Claiming the bonus for {streamer}!",
+  "moment_claim": "Claiming the moment for {streamer}!",
+  "changing_watch_slots": {
+    "streamer": "{streamer}",
+    "adding": {
+      "some": " Adding {streamers}.",
+      "none": ""
+    },
+    "dropping": {
+      "some": " Dropping {streamers}.",
+      "none": ""
+    },
+    "main": "Changing watch slots:{adding}{dropping}"
+  },
+  "community_goal_contribution": {
+    "points": {
+      "singular": "{count} point",
+      "plural": "{count} points"
+    },
+    "main": "Contributed {points} to {streamer}'s community goal \"{title}\""
+  },
+  "shutdown": "Miner stopping: {reason}",
+  "error": {
+    "error_str": {
+      "some": ": {error}",
+      "none": ""
+    },
+    "occurred": "Error occurred: {context}: {message}{error_str}"
+  }
+}

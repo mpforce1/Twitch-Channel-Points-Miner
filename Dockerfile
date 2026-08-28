@@ -35,6 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy the project files over
 COPY TwitchChannelPointsMiner ./TwitchChannelPointsMiner
 COPY tests ./tests
+COPY locales ./locales
 COPY pyproject.toml uv.lock ./
 
 # Now install the project
@@ -65,6 +66,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy the project files over
 COPY TwitchChannelPointsMiner ./TwitchChannelPointsMiner
 COPY assets ./assets
+COPY locales ./locales
 COPY pyproject.toml uv.lock ./
 
 # Now tnstall the project

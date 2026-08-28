@@ -2,10 +2,13 @@ import logging
 import os
 import platform
 import queue
+import shutil
 import sys
 from datetime import datetime
+from logging import LogRecord
 from logging.handlers import QueueHandler, QueueListener, TimedRotatingFileHandler
 from pathlib import Path
+from typing import Literal
 
 import emoji
 import pytz
@@ -19,6 +22,7 @@ from TwitchChannelPointsMiner.classes.Matrix import Matrix
 from TwitchChannelPointsMiner.classes.Pushover import Pushover
 from TwitchChannelPointsMiner.classes.Settings import Events
 from TwitchChannelPointsMiner.classes.Telegram import Telegram
+from TwitchChannelPointsMiner.classes.Translator import Translator
 from TwitchChannelPointsMiner.classes.Webhook import Webhook
 from TwitchChannelPointsMiner.utils import remove_emoji
 
@@ -29,7 +33,8 @@ class ColorPalette(object):
         # Init with default values RESET for all and GREEN and RED only for WIN and LOSE bet
         # Then set args from kwargs
         for k in Events:
-            setattr(self, str(k), Fore.RESET)
+            if k.name is not None:
+                setattr(self, k.name, Fore.RESET)
         setattr(self, "BET_WIN", Fore.GREEN)
         setattr(self, "BET_LOSE", Fore.RED)
 
@@ -60,6 +65,7 @@ class ColorPalette(object):
                 ]:
                     setattr(self, k.upper(), getattr(Fore, kwargs[k].upper()))
 
+
     def get(self, key):
         color = getattr(self, str(key)) if str(key) in dir(self) else None
         return Fore.RESET if color is None else color
@@ -69,8 +75,10 @@ class LoggerSettings:
     __slots__ = [
         "save",
         "less",
+        "console_enabled",
         "console_level",
         "console_username",
+        "console_truncate",
         "time_zone",
         "file_level",
         "emoji",
@@ -87,14 +95,17 @@ class LoggerSettings:
         "username",
         "redact_secrets",
         "anonymiser",
+        "translator",
     ]
 
     def __init__(
         self,
         save: bool = True,
         less: bool = False,
+        console_enabled: bool = True,
         console_level: int = logging.INFO,
         console_username: bool = False,
+        console_truncate: int | Literal["console", False] = False,
         time_zone: str | None = None,
         file_level: int = logging.DEBUG,
         emoji: bool = platform.system() != "Windows",
@@ -110,12 +121,16 @@ class LoggerSettings:
         hooks: list[EventHook] | None = None,
         username: str | None = None,
         redact_secrets: bool = False,
-        anonymiser: Anonymiser | bool | None = None
+        anonymiser: Anonymiser | bool | None = None,
+        translator: Translator | None = None,
+        locale: str | None = None,
     ):
         self.save = save
         self.less = less
+        self.console_enabled = console_enabled
         self.console_level = console_level
         self.console_username = console_username
+        self.console_truncate: int | Literal["console", False] = console_truncate
         self.time_zone = time_zone
         self.file_level = file_level
         self.emoji = emoji
@@ -140,6 +155,7 @@ class LoggerSettings:
             self.anonymiser: Anonymiser = ConsistentAnonymiser()
         else:
             self.anonymiser: Anonymiser = anonymiser
+        self.translator = translator if translator is not None else Translator("locales", locale)
 
 
 class ExceptionFormatter(logging.Formatter):
@@ -221,20 +237,32 @@ class GlobalFormatter(logging.Formatter):
             # Full remove using a method from utils.
             record.msg = remove_emoji(record.msg)
 
-        record.msg = self.settings.username + record.msg
+        if self.settings.username is not None:
+            record.msg = f"{self.settings.username} {record.msg}"
 
         if hasattr(record, "event"):
-            for hook in self.settings.hooks:
-                hook.validate_and_send(record)
-
             if self.settings.colored is True:
                 record.msg = (
-                    f"{self.settings.color_palette.get(record.event)}{record.msg}"
+                    f"{self.settings.color_palette.get(record.event.name)}{record.msg}"
                 )
-        return super().format(record)
+        # Truncate if required
+        base_formatted = super().format(record)
+        if self.settings.console_truncate is False:
+            return base_formatted
+        max_length = (
+            shutil.get_terminal_size()[0]
+            if self.settings.console_truncate == "console"
+            else self.settings.console_truncate
+        )
+        return base_formatted[:max_length]
+
+class LimitedConsoleHandler(logging.StreamHandler):
+    def emit(self, record: LogRecord) -> None:
+        if hasattr(record, "force_console"):
+            super().emit(record)
 
 
-def configure_loggers(username, settings):
+def configure_loggers(username, settings: LoggerSettings):
     if settings.colored is True:
         init(autoreset=True)
 
@@ -248,27 +276,36 @@ def configure_loggers(username, settings):
     # Send log messages to another thread through the queue
     root_logger.addHandler(queue_handler)
 
-    # Adding a username to the format based on settings
-    console_username = "" if settings.console_username is False else f"[{username}] "
-
-    settings.username = console_username
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(settings.console_level)
-    console_handler.setFormatter(
-        GlobalFormatter(
-            fmt=(
-                "%(asctime)s - %(levelname)s - [%(funcName)s]: %(message)s"
-                if settings.less is False
-                else "%(asctime)s - %(message)s"
-            ),
-            datefmt=(
-                "%d/%m/%y %H:%M:%S" if settings.less is False else "%d/%m %H:%M:%S"
-            ),
-            settings=settings,
-        )
+    global_formatter = GlobalFormatter(
+        fmt=(
+            "%(asctime)s - %(levelname)s - [%(funcName)s]: %(message)s"
+            if settings.less is False
+            else "%(asctime)s - %(message)s"
+        ),
+        datefmt=(
+            "%d/%m/%y %H:%M:%S" if settings.less is False else "%d/%m %H:%M:%S"
+        ),
+        settings=settings,
     )
 
+    handlers = []
+
+    if settings.console_enabled:
+        # Adding a username to the format based on settings
+        console_username = "" if settings.console_username is False else f"[{username}] "
+        settings.username = console_username
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(settings.console_level)
+        console_handler.setFormatter(global_formatter)
+        handlers.append(console_handler)
+    else:
+        # We still want top level messages to log to the console
+        console_handler = LimitedConsoleHandler(sys.stdout)
+        console_handler.setLevel(settings.console_level)
+        console_handler.setFormatter(global_formatter)
+        handlers.append(console_handler)
+
+    logs_file = None
     if settings.save is True:
         logs_path = os.path.join(Path().absolute(), "logs")
         Path(logs_path).mkdir(parents=True, exist_ok=True)
@@ -286,8 +323,8 @@ def configure_loggers(username, settings):
                 delay=False,
             )
         else:
-            # Getting time zone from the console_handler's formatter since they are the same
-            tz = "" if console_handler.formatter.timezone is False else console_handler.formatter.timezone
+            # Getting time zone from the global formatter
+            tz = "" if global_formatter.timezone is False else global_formatter.timezone
             logs_file = os.path.join(
                 logs_path,
                 f"{username}.{datetime.now(tz).strftime('%Y%m%d-%H%M%S')}.log",
@@ -303,15 +340,11 @@ def configure_loggers(username, settings):
         )
         file_handler.setLevel(settings.file_level)
 
-        # Add logger handlers to the logger queue and start the process
-        queue_listener = QueueListener(
-            logger_queue, file_handler, console_handler, respect_handler_level=True
-        )
-        queue_listener.start()
-        return logs_file, queue_listener
-    else:
-        queue_listener = QueueListener(
-            logger_queue, console_handler, respect_handler_level=True
-        )
-        queue_listener.start()
-        return None, queue_listener
+        handlers.append(file_handler)
+
+    # Add logger handlers to the logger queue and start the process
+    queue_listener = QueueListener(
+        logger_queue, *handlers, respect_handler_level=True
+    )
+    queue_listener.start()
+    return logs_file, queue_listener

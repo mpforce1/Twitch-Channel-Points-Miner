@@ -1,39 +1,45 @@
-import json
+from typing import get_args
 from unittest.mock import MagicMock
 
+import pytest
+
+from TwitchChannelPointsMiner.classes import PubSub
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
-from TwitchChannelPointsMiner.classes.entities.Message import Message
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
-from TwitchChannelPointsMiner.classes.websocket.data.UserSubscribeEvents import (
-    UserSubscribed,
-)
+from TwitchChannelPointsMiner.classes.websocket.data.Model import Model
 
 
-def test_on_message_user_subscribe():
-    # Mocks
+class InvalidDataType:
+    pass
+
+
+def test_handles_all_data_types():
     parser = MagicMock()
-    parser.parse_user_subscribe_events.side_effect = [UserSubscribed("987654321")]
-    twitch = MagicMock()
-    streamer = Streamer(username="test_user", channel_id="987654321")
-    streamers = [streamer]
-    events_predictions = dict()
+    logger = MagicMock()
 
-    # Args
-    message = Message(
-        {
-            "topic": "user-subscribe-events-v1.123456789",
-            "message": json.dumps({"user_id": "123456789", "channel_id": "987654321"}),
-        }
-    )
-
-    # Object under test
-    handler = PubSubHandler(
+    pubsub = PubSubHandler(
+        streamer_system=MagicMock(),
+        stream_system=MagicMock(),
+        prediction_system=MagicMock(),
+        notification_system=MagicMock(),
         parser=parser,
-        twitch=twitch,
-        streamers=streamers,
-        events_predictions=events_predictions,
     )
 
-    # Call object method
-    handler.on_message(message)
-    twitch.check_gift_sub.assert_called_once_with(streamer)
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(PubSub, "logger", logger)
+        for data_type in get_args(Model):
+            # Dynamically create subtypes for every Model type
+            dummy_event = MagicMock(spec=data_type)
+            dummy_event.id = ""
+            dummy_event.viewers = 1
+
+            parser.message_parser.return_value = dummy_event
+
+            # Should never throw an Exception
+            pubsub.on_message(MagicMock())
+        # Check error output
+        logger.error.assert_not_called()
+
+        # Test for an unknown type
+        parser.message_parser.return_value = InvalidDataType()
+        pubsub.on_message(MagicMock())
+        logger.error.assert_called_once()
