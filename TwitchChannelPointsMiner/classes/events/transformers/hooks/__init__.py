@@ -22,11 +22,11 @@ class DefaultEventTransformerFactory(EventTransformerFactory[str]):
         """
         Creates strings in this format:
 
-        `"```
+        ```
         {emoji} {event name}
         {optional "Account: " account_name}
         {message}
-        ```"`
+        ```
 
         where
         `emoji` is an emoji representative of the event or the miner's default emoji.
@@ -59,4 +59,4 @@ class DefaultEventTransformerFactory(EventTransformerFactory[str]):
                 translator=settings.translator, account_username=account_username
             )
         )
-        return CodeblockTransformer(base=MultiTransformer(*transformers))
+        return MultiTransformer(*transformers)

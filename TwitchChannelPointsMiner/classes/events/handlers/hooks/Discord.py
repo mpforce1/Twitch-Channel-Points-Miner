@@ -14,6 +14,9 @@ from TwitchChannelPointsMiner.classes.events.transformers.hooks.Discord import (
     DiscordEmbedTransformer,
     DiscordContentTransformer,
 )
+from TwitchChannelPointsMiner.classes.events.transformers.hooks.Markdown import (
+    CodeblockTransformer,
+)
 from TwitchChannelPointsMiner.logger import LoggerSettings
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
@@ -72,7 +75,9 @@ def discord(
                 username=username,
                 avatar_url=avatar_url,
                 get_content=(
-                    get_content if get_content is not None else default_transformer
+                    get_content
+                    if get_content is not None
+                    else CodeblockTransformer(default_transformer)
                 ),
             )
             if use_embeds:
