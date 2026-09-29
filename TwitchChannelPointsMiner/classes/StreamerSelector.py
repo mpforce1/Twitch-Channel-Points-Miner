@@ -1,6 +1,7 @@
 import abc
 import datetime
 import logging
+import sys
 import time
 from itertools import islice
 from typing import Protocol, Sequence, Callable
@@ -523,6 +524,29 @@ def sort_newest_stream(streamer: Streamer):
     return -sort_oldest_stream(streamer)
 
 
+def sort_multiplier(ascending: bool):
+    def inner(streamer: Streamer):
+        if streamer.total_points_multiplier() == 0:
+            return sys.maxsize
+        return streamer.total_points_multiplier() * (1 if ascending else -1)
+    return inner
+
+
+sort_multiplier_ascending = sort_multiplier(ascending=True)
+sort_multiplier_descending = sort_multiplier(ascending=False)
+
+
+def sort_subscription_ends_at(ascending: bool):
+    def inner(streamer: Streamer):
+        if streamer.gift_sub is None:
+            return sys.maxsize
+        return streamer.gift_sub.ends_at.timestamp() * (1 if ascending else -1)
+    return inner
+
+
+sort_subscription_ends_at_ascending = sort_subscription_ends_at(ascending=True)
+sort_subscription_ends_at_descending = sort_subscription_ends_at(ascending=False)
+
 # Priorities
 
 
@@ -545,6 +569,8 @@ def drops(sorting: list[GetSortKey] | None = None):
 
 
 def subscribed(sorting: list[GetSortKey] | None = None):
+    if sorting is None:
+        sorting = [sort_multiplier_descending]
     return FilterSortSelector(
         reason=Priority.SUBSCRIBED, _filter=is_subscribed, sorting=sorting
     )
