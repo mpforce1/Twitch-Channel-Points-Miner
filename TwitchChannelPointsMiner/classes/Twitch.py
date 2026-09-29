@@ -891,6 +891,12 @@ class Twitch(object):
                             "event": Events.CHANGING_WATCH_SLOTS,
                         }
                     )
+
+                    # Clear watch the sessions for dropped streams
+                    for streamer_id in dropping_ids:
+                        streamer = find_streamer(streamers, streamer_id)
+                        streamer.stream.watch_session_state = None
+
                     self.event_manager.manage(
                         ChangingWatchSlots(
                             adding=adding,
