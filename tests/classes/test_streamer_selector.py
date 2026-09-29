@@ -1,11 +1,10 @@
 import datetime
-from math import exp
+import sys
 import time
 from typing import Iterable, Sequence, Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
-from validators import isin
 
 from TwitchChannelPointsMiner.classes.Settings import Priority, StreamerSource
 from TwitchChannelPointsMiner.classes.StreamerSelector import (
@@ -39,11 +38,16 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     under_points_limit,
     sort_points_ascending,
     sort_points_descending,
+    sort_multiplier_ascending,
+    sort_multiplier_descending,
+    sort_subscription_ends_at_ascending,
+    sort_subscription_ends_at_descending,
     watch_session,
     watch_streak,
     weekly_rewards,
 )
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
+from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub, Target
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
@@ -1841,6 +1845,70 @@ def test_sort_oldest_stream():
     time.time()
     stream.created_at = datetime.datetime.fromtimestamp(1784121062)
     assert sort_oldest_stream(Streamer("a", stream=stream)) == 1784121062
+
+
+def test_sort_multiplier_ascending():
+    assert (
+        sort_multiplier_ascending(Streamer("a", active_multipliers=[])) == sys.maxsize
+    )
+
+    assert (
+        sort_multiplier_ascending(
+            Streamer("a", active_multipliers=[Properties.Multiplier(1.2)])
+        )
+        == 1.2
+    )
+
+
+def test_sort_multiplier_descending():
+    assert (
+        sort_multiplier_descending(Streamer("a", active_multipliers=[])) == sys.maxsize
+    )
+
+    assert (
+        sort_multiplier_descending(
+            Streamer("a", active_multipliers=[Properties.Multiplier(1.2)])
+        )
+        == -1.2
+    )
+
+
+def test_sort_subscription_ends_at_ascending():
+    assert sort_subscription_ends_at_ascending(Streamer("a", gift_sub=None)) == sys.maxsize
+
+    gift_sub = GiftSub(
+        _id="aa",
+        target=Target(
+            _id="bb",
+            username="targetusername",
+            display_name="TargetDisplayName",
+        ),
+        gifter=None,
+        tier=1,
+        display_name="sub",
+        ends_at=datetime.datetime.fromtimestamp(1784121062),
+    )
+
+    assert sort_subscription_ends_at_ascending(Streamer("a", gift_sub=gift_sub)) == 1784121062
+
+
+def test_sort_subscription_ends_at_descending():
+    assert sort_subscription_ends_at_descending(Streamer("a", gift_sub=None)) == sys.maxsize
+
+    gift_sub = GiftSub(
+        _id="aa",
+        target=Target(
+            _id="bb",
+            username="targetusername",
+            display_name="TargetDisplayName",
+        ),
+        gifter=None,
+        tier=1,
+        display_name="sub",
+        ends_at=datetime.datetime.fromtimestamp(1784121062),
+    )
+
+    assert sort_subscription_ends_at_descending(Streamer("a", gift_sub=gift_sub)) == -1784121062
 
 
 def test_order():
