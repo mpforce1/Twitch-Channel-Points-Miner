@@ -428,7 +428,7 @@ class TranslatorTransformer(EventTransformer[str]):
             raise ValueError(f"Unable to represent non-standard Gift Subs")
         # Get ends at in user timezone
         # TODO should the timezone be configurable
-        ends_at = gift_sub.ends_at.astimezone(datetime.datetime.now().tzinfo)
+        ends_at = gift_sub.ends_at.astimezone()
         days = (gift_sub.ends_at - datetime.datetime.now(tz=datetime.timezone.utc)).days
 
         gifter_display_name_str = self.translator.translate_optional(

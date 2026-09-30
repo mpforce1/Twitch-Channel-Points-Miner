@@ -366,6 +366,7 @@ class Drops:
 @dataclass(kw_only=True)
 class GiftSubReceived:
     from_: str
+    channel: str
     subscription: str
     ends_at: str
     duration: str

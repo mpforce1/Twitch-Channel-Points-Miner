@@ -141,6 +141,7 @@
   "chat_mention": "{actor} at {streamer} wrote: {message}",
   "gift_sub_received": {
     "from": "From",
+    "channel": "Channel",
     "subscription": "Subscription",
     "ends_at": "Ends At",
     "duration": "Duration",
