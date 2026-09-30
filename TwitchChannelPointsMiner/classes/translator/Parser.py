@@ -373,6 +373,7 @@ def gift_sub_received_parser(value):
         duration=parse_expected_value(value, "duration", expect_str),
         tier=parse_expected_value(value, "tier", requires_parser(ArgTier)),
         gifter=parse_expected_value(value, "gifter", optional_parser(ArgValue)),
+        channel=parse_expected_value(value, "channel", expect_str),
         days=parse_expected_value(value, "days", pluralizable_parser(ArgCount)),
         main=parse_expected_value(value, "main", requires_parser(ArgGiftSubReceived)),
     )

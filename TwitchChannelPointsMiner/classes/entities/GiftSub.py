@@ -45,7 +45,7 @@ class GiftSub:
         return simple_repr(self)
 
     def describe(self) -> str:
-        ends_at = self.ends_at.astimezone(datetime.datetime.now().tzinfo)
+        ends_at = self.ends_at.astimezone()
         days = (self.ends_at - datetime.datetime.now(tz=datetime.timezone.utc)).days
         days_plural = "day" if days == 1 else "days"
         gifter = (

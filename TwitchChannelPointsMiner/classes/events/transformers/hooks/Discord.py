@@ -239,7 +239,7 @@ class DiscordEmbedTransformer(EventTransformer[dict | None]):
             )
         else:
             sub_name = gift_sub.tier
-        ends_at = gift_sub.ends_at.astimezone(datetime.datetime.now().tzinfo)
+        ends_at = gift_sub.ends_at.astimezone()
         days = (gift_sub.ends_at - datetime.datetime.now(tz=datetime.timezone.utc)).days
         return {
             "color": 7798955,
@@ -249,7 +249,10 @@ class DiscordEmbedTransformer(EventTransformer[dict | None]):
                 {
                     "name": f"🎅 {self.translator.translate_str(lambda t: t.gift_sub_received.from_, self.locale)}",
                     "value": gifter,
-                    "inline": True,
+                },
+                {
+                    "name": f"📺 {self.translator.translate_str(lambda t: t.gift_sub_received.channel, self.locale)}",
+                    "value": event.streamer.username,
                 },
                 {
                     "name": f"👑 {self.translator.translate_str(lambda t: t.gift_sub_received.subscription, self.locale)}",
