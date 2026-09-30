@@ -1,16 +1,18 @@
-from dataclasses import dataclass, field
 import json
 import logging
 import os
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
 from typing import Literal
 
-from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
+from TwitchChannelPointsMiner.classes.Chat import ChatPresence
 from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
-from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings, DelayMode
+from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings
+from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
+from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.gql import Properties
@@ -168,13 +170,13 @@ class Streamer(object):
         self.settings = settings
         self.source = source
         self.is_online = is_online if is_online is not None else False
-        self.stream_up = 0
+        self.stream_up: float = 0
         self.online_at = online_at if online_at is not None else 0.0
         self.offline_at = offline_at if offline_at is not None else 0.0
         self.channel_points_enabled = channel_points_enabled
         self.chat_banned = chat_banned
         self.channel_points = channel_points if channel_points is not None else 0
-        self.community_goals = {}
+        self.community_goals: dict[str, CommunityGoal] = {}
         self.minute_watched_requests = None
         self.viewer_is_mod = False
         self.active_multipliers = active_multipliers
@@ -191,7 +193,7 @@ class Streamer(object):
 
         self.stream = stream if stream is not None else Stream()
 
-        self.raid = None
+        self.raid: Raid | None = None
         self.history = {}
 
         self.streamer_url = f"{URL}/{self.username}"
@@ -213,8 +215,6 @@ class Streamer(object):
             self.offline_at = time.time()
             self.is_online = False
 
-        self.toggle_chat()
-
         logger.info(
             f"{self} is Offline!",
             extra={
@@ -227,8 +227,6 @@ class Streamer(object):
         if self.is_online is False:
             self.online_at = time.time()
             self.is_online = True
-
-        self.toggle_chat()
 
         logger.info(
             f"{self} is Online!",
@@ -305,18 +303,6 @@ class Streamer(object):
             else 0
         )
 
-    def get_prediction_window(self, prediction_window_seconds):
-        delay_mode = self.settings.bet.delay_mode
-        delay = self.settings.bet.delay
-        if delay_mode == DelayMode.FROM_START:
-            return min(delay, prediction_window_seconds)
-        elif delay_mode == DelayMode.FROM_END:
-            return max(prediction_window_seconds - delay, 0)
-        elif delay_mode == DelayMode.PERCENTAGE:
-            return prediction_window_seconds * delay
-        else:
-            return prediction_window_seconds
-
     # === ANALYTICS === #
     def persistent_annotations(self, event_type, event_text):
         event_type = event_type.upper()
@@ -366,38 +352,6 @@ class Streamer(object):
 
             # Replace the original file with the temporary file
             os.replace(temp_fname, fname)
-
-    def leave_chat(self):
-        if self.irc_chat is not None:
-            self.irc_chat.stop()
-
-            # Recreate a new thread to start again
-            # raise RuntimeError("threads can only be started once")
-            self.irc_chat = ThreadChat(
-                self.irc_chat.username,
-                self.irc_chat.token,
-                self.username,
-            )
-
-    def __join_chat(self):
-        if self.irc_chat is not None:
-            if self.irc_chat.is_alive() is False:
-                self.irc_chat.start()
-
-    def toggle_chat(self):
-        if self.settings.chat == ChatPresence.ALWAYS:
-            self.__join_chat()
-        elif self.settings.chat != ChatPresence.NEVER:
-            if self.is_online is True:
-                if self.settings.chat == ChatPresence.ONLINE:
-                    self.__join_chat()
-                elif self.settings.chat == ChatPresence.OFFLINE:
-                    self.leave_chat()
-            else:
-                if self.settings.chat == ChatPresence.ONLINE:
-                    self.leave_chat()
-                elif self.settings.chat == ChatPresence.OFFLINE:
-                    self.__join_chat()
 
     def update_community_goal(self, community_goal):
         self.community_goals[community_goal.goal_id] = community_goal

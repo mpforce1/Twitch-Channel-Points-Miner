@@ -7,3 +7,6 @@ class UserSubscribed:
 
     def __repr__(self):
         return simple_repr(self)
+
+
+Model = UserSubscribed

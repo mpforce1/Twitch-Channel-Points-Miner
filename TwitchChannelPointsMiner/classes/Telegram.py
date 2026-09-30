@@ -7,12 +7,11 @@ from TwitchChannelPointsMiner.classes.Settings import Events
 
 
 class Telegram(LogAttributeValidatingEventHook):
-    __slots__ = ["chat_id", "telegram_api", "events", "disable_notification"]
 
     def __init__(
-        self, chat_id: int, token: str, events: list, disable_notification: bool = False
+        self, chat_id: int, token: str, events: list[Events] | Events, disable_notification: bool = False
     ):
-        super().__init__("skip_telegram")
+        super().__init__(events, "skip_telegram")
         self.chat_id = chat_id
         self.telegram_api = f"https://api.telegram.org/bot{token}/sendMessage"
         self.events = [str(e) for e in events]

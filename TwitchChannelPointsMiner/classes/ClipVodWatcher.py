@@ -12,6 +12,7 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
 
@@ -60,6 +61,7 @@ class BasicClipVodWatcher(ClipVodWatcher, abc.ABC):
         twitch: Twitch,
         streamers: list[Streamer],
         runner: SlottedTaskRunner[Streamer, Result],
+        event_manager: EventManager,
         config: BasicConfiguration | None = None,
     ):
         super().__init__()
@@ -76,6 +78,8 @@ class BasicClipVodWatcher(ClipVodWatcher, abc.ABC):
         """The maximum number of seconds to watch a VOD."""
         self.runner = runner
         """The runner that can run watch tasks."""
+        self.event_manager = event_manager
+        """The event manager."""
         self.interval_seconds = config.interval_seconds
         """The interval between checking for watchable Streamers."""
         self.max_failures_per_streamer = config.max_failures_per_streamer
@@ -295,3 +299,4 @@ class BasicClipVodWatcher(ClipVodWatcher, abc.ABC):
             interruptible_sleep(
                 lambda: self.twitch.running, duration=self.interval_seconds
             )
+        self.runner.stop()

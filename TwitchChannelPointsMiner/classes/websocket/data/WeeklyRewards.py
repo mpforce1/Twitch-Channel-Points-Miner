@@ -78,3 +78,5 @@ class Notification:
             and self.current_reward == value.current_reward
             and self.event_config == value.event_config
         )
+
+Model = Notification

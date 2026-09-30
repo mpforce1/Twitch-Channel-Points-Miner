@@ -14,6 +14,7 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import (
     VideoEdge,
@@ -79,6 +80,7 @@ def test_can_watch(streamer: Streamer, expected: bool):
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
 
     assert recovery.can_watch(streamer) == expected
@@ -204,6 +206,7 @@ def test_get_clip(streamer: Streamer, expected):
             max_vod_watch_seconds=1,
         ),
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
 
     assert recovery.get_clip(streamer) == expected
@@ -283,6 +286,7 @@ def test_get_vod(streamer: Streamer, expected):
             max_vod_watch_seconds=1,
         ),
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
 
     assert recovery.get_vod(streamer) == expected
@@ -308,6 +312,7 @@ def test_run():
             max_clip_watch_seconds=1, max_vod_watch_seconds=1, interval_seconds=0
         ),
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
     recovery._run = MagicMock()
 

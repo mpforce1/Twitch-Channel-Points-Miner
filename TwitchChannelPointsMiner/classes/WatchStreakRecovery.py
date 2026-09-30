@@ -1,6 +1,8 @@
 import abc
 import logging
 from itertools import chain
+from threading import Thread
+from typing import Literal
 
 from TwitchChannelPointsMiner.classes.ClipVodWatcher import (
     BasicClipVodWatcher,
@@ -13,6 +15,8 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +73,25 @@ class BasicWatchStreakRecovery(WatchStreakRecovery, BasicClipVodWatcher):
             logger.error(
                 f"Unable to recover Watch Streak for {streamer}: {result["reason"]}"
             )
+            self.event_manager.manage(
+                Error(
+                    context="Watch Streak Recovery",
+                    message=f"Unable to recover Watch Streak for {streamer}: {result["reason"]}",
+                    error=None,
+                )
+            )
 
 
 class WatchStreakRecoveryFactory(abc.ABC):
     @abc.abstractmethod
-    def create(self, twitch: Twitch, streamers: list[Streamer]) -> WatchStreakRecovery:
+    def create(
+        self,
+        config: BasicConfiguration | Literal[False] | None,
+        twitch: Twitch,
+        streamers: list[Streamer],
+        background_tasks: list[Thread],
+        event_manager: EventManager,
+    ) -> WatchStreakRecovery | None:
         pass
 
 
@@ -81,13 +99,31 @@ class BasicWatchStreakRecoveryFactory(WatchStreakRecoveryFactory):
     def __init__(
         self,
         runner_factory: SlottedTaskRunnerFactory,
-        config: BasicConfiguration | None = None,
     ):
-        self.config = config
         self.runner_factory = runner_factory
 
-    def create(self, twitch: Twitch, streamers: list[Streamer]) -> WatchStreakRecovery:
-        runner = self.runner_factory.create(twitch, "Watch Streak Recovery")
-        return BasicWatchStreakRecovery(
-            twitch=twitch, streamers=streamers, runner=runner, config=self.config
+    def create(
+        self,
+        config: BasicConfiguration | Literal[False] | None,
+        twitch: Twitch,
+        streamers: list[Streamer],
+        background_tasks: list[Thread],
+        event_manager: EventManager,
+    ) -> WatchStreakRecovery | None:
+        if config is False:
+            return None
+        runner = self.runner_factory.create(
+            name="Watch Streak Recovery", event_manager=event_manager
         )
+        recovery = BasicWatchStreakRecovery(
+            twitch=twitch,
+            streamers=streamers,
+            runner=runner,
+            event_manager=event_manager,
+            config=config,
+        )
+
+        recovery.start()
+        background_tasks.append(recovery)
+
+        return recovery

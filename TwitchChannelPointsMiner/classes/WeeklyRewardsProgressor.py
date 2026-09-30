@@ -1,6 +1,7 @@
 import abc
 import logging
-from typing import TypedDict
+from threading import Thread
+from typing import Literal, TypedDict
 
 from TwitchChannelPointsMiner.classes.ClipVodWatcher import (
     BasicClipVodWatcher,
@@ -13,6 +14,7 @@ from TwitchChannelPointsMiner.classes.SlottedTaskRunner import (
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 
 logger = logging.getLogger(__name__)
@@ -105,9 +107,12 @@ class WeeklyRewardsProgressorFactory(abc.ABC):
     @abc.abstractmethod
     def create(
         self,
+        config: BasicConfiguration | Literal[False] | None,
         twitch: Twitch,
         streamers: list[Streamer],
-    ) -> WeeklyRewardsProgressor:
+        background_tasks: list[Thread],
+        event_manager: EventManager,
+    ) -> WeeklyRewardsProgressor | None:
         pass
 
 
@@ -115,17 +120,27 @@ class BasicWeeklyRewardsProgressorFactory(WeeklyRewardsProgressorFactory):
     def __init__(
         self,
         runner_factory: SlottedTaskRunnerFactory,
-        config: BasicConfiguration | None = None,
     ):
         self.runner_factory = runner_factory
-        self.config = config
 
     def create(
         self,
+        config: BasicConfiguration | Literal[False] | None,
         twitch: Twitch,
         streamers: list[Streamer],
+        background_tasks: list[Thread],
+        event_manager: EventManager,
     ):
-        runner = self.runner_factory.create(twitch, "Weekly Rewards Progressor")
-        return BasicWeeklyRewardsProgressor(
-            twitch, streamers, runner, config=self.config
+        if config is False:
+            return None
+        elif config is None:
+            config = BasicConfiguration()
+        runner = self.runner_factory.create(
+            name="Weekly Rewards Progressor", event_manager=event_manager
         )
+        progressor = BasicWeeklyRewardsProgressor(
+            twitch, streamers, runner, event_manager=event_manager, config=config
+        )
+        progressor.start()
+        background_tasks.append(progressor)
+        return progressor

@@ -1,0 +1,21 @@
+{
+  "type": "points-earned",
+  "data": {
+    "timestamp": "2026-07-14T01:10:50.457165464Z",
+    "channel_id": "456789415",
+    "point_gain": {
+      "user_id": "46478941",
+      "channel_id": "456789415",
+      "total_points": 10,
+      "baseline_points": 10,
+      "reason_code": "WATCH",
+      "multipliers": [
+      ]
+    },
+    "balance": {
+      "user_id": "46478941",
+      "channel_id": "456789415",
+      "balance": 646145
+    }
+  }
+}

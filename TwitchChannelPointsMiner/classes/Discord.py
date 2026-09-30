@@ -12,15 +12,12 @@ class Discord(LogAttributeValidatingEventHook):
         "https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde"
     }
 
-    __slots__ = ["webhook_api", "events"]
-
-    def __init__(self, webhook_api: str, events: list):
-        super().__init__("skip_discord")
+    def __init__(self, webhook_api: str, events: list[Events] | Events):
+        super().__init__(events, "skip_discord")
         self.webhook_api = webhook_api
-        self.events = [str(e) for e in events]
 
     def send(self, message: str, event: Events) -> None:
-        if str(event) in self.events:
+        if event in self.events:
             requests.post(
                 url=self.webhook_api,
                 data={

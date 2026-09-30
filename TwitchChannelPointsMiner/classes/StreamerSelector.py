@@ -1,6 +1,7 @@
 import abc
 import datetime
 import logging
+import sys
 import time
 from itertools import islice
 from typing import Protocol, Sequence, Callable
@@ -518,9 +519,33 @@ def sort_oldest_stream(streamer: Streamer):
         else 0
     )
 
+
 def sort_newest_stream(streamer: Streamer):
     return -sort_oldest_stream(streamer)
 
+
+def sort_multiplier(ascending: bool):
+    def inner(streamer: Streamer):
+        if streamer.total_points_multiplier() == 0:
+            return sys.maxsize
+        return streamer.total_points_multiplier() * (1 if ascending else -1)
+    return inner
+
+
+sort_multiplier_ascending = sort_multiplier(ascending=True)
+sort_multiplier_descending = sort_multiplier(ascending=False)
+
+
+def sort_subscription_ends_at(ascending: bool):
+    def inner(streamer: Streamer):
+        if streamer.gift_sub is None:
+            return sys.maxsize
+        return streamer.gift_sub.ends_at.timestamp() * (1 if ascending else -1)
+    return inner
+
+
+sort_subscription_ends_at_ascending = sort_subscription_ends_at(ascending=True)
+sort_subscription_ends_at_descending = sort_subscription_ends_at(ascending=False)
 
 # Priorities
 
@@ -544,6 +569,8 @@ def drops(sorting: list[GetSortKey] | None = None):
 
 
 def subscribed(sorting: list[GetSortKey] | None = None):
+    if sorting is None:
+        sorting = [sort_multiplier_descending]
     return FilterSortSelector(
         reason=Priority.SUBSCRIBED, _filter=is_subscribed, sorting=sorting
     )
@@ -589,3 +616,55 @@ def group(
     if selector is None:
         selector = order()
     return PriorityGroupSelector(streamers=streamers, selector=selector)
+
+
+class StreamerSelectorFactory:
+    def create(
+        self,
+        priority: (
+            None | Priority | list[Priority] | StreamerSelector | list[StreamerSelector]
+        ),
+    ) -> StreamerSelector:
+        # Convert priority setting into a StreamerSelector
+        if priority is None:
+            # Default priorities
+            return NestedSelector(
+                [
+                    watch_session(),
+                    watch_streak(),
+                    weekly_rewards(),
+                    drops(),
+                    order(),
+                ]
+            )
+        elif isinstance(priority, Priority):
+            # Priority -> PrioritySelector
+            return PrioritySelector([priority])
+        elif isinstance(priority, StreamerSelector):
+            # Already a selector
+            return priority
+        elif isinstance(priority, list):
+            # Check which type of list we have
+            is_list_priority = True
+            is_list_selector = True
+            for item in priority:
+                if isinstance(item, Priority):
+                    is_list_selector = False
+                elif isinstance(item, StreamerSelector):
+                    is_list_priority = False
+            if is_list_priority:
+                # list[Priority] -> PrioritySelector
+                return PrioritySelector(
+                    priority  # pyright: ignore [reportArgumentType]
+                )
+            elif is_list_selector:
+                # list[StreamerSelector] -> NestedSelector
+                return NestedSelector(priority)  # pyright: ignore [reportArgumentType]
+            else:
+                raise ValueError(
+                    f"Unable to parse priority list, cannot contain a mix of Priority and StreamerSelector."
+                )
+        else:
+            raise ValueError(
+                f"priority must be an instance of one of None, Priority, StreamerSelector, list[Priority], or list[StreamerSelector]"
+            )

@@ -434,7 +434,7 @@ a [Webhook](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Web
 
 | Name          | Type           | Description                                  |
 |---------------|----------------|----------------------------------------------|
-| `webhook_api` | `str`          | This is the "Webhook URL" Discord gives you. |
+| `webhook_api_url` | `str`          | This is the "Webhook URL" Discord gives you. |
 | `events`      | `list[Events]` | The `Events` you want to send to Discord.    |
 
 #### `webhook`

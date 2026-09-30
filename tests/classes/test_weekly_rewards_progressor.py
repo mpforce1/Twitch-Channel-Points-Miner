@@ -20,6 +20,8 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.entities.Video import Video
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
+from TwitchChannelPointsMiner.classes.events.managers.Delegate import DelegatingManager
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
 from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import (
     VideoEdge,
@@ -195,6 +197,7 @@ def test_can_watch(streamer: Streamer, expected):
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
 
     assert progressor.can_watch(streamer) == expected
@@ -322,6 +325,7 @@ def test_done_watching(streamer: Streamer, expected):
         twitch=MagicMock(),
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
 
     assert progressor.done_watching(streamer) == expected
@@ -401,6 +405,7 @@ def test_get_clip(clips: Clips, expected: Clip | None):
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
 
     streamer = MagicMock()
@@ -467,6 +472,7 @@ def test_get_vod(vods: list[Video], expected: Video | None):
         twitch=twitch,
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
 
     streamer = MagicMock()
@@ -511,6 +517,7 @@ def test_update_failures(
         twitch,
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
         config=BasicConfiguration(
             max_failures_per_streamer=max_failures_per_streamer,
         ),
@@ -548,6 +555,7 @@ def test_process_result(
         twitch,
         streamers=[],
         runner=MagicMock(),
+        event_manager=MagicMock(spec=EventManager),
     )
     progressor.update_failures = MagicMock()
     progressor._failures = MagicMock()
@@ -721,12 +729,19 @@ def test_full():
         ),
     ]
 
+    # Use a delegating manager with no delegate
+    event_manager = DelegatingManager()
+
     progressor = BasicWeeklyRewardsProgressor(
         twitch=twitch,
         streamers=streamers,
         runner=SlottedTaskRunnerThread(
-            twitch=twitch, name="Test", max_concurrent=3, loop_interval_seconds=1
+            name="Test",
+            max_concurrent=3,
+            loop_interval_seconds=1,
+            event_manager=event_manager,
         ),
+        event_manager=event_manager,
         config=BasicConfiguration(
             max_clip_watch_seconds=4,
             max_vod_watch_seconds=5,
