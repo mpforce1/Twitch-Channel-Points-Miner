@@ -2,6 +2,10 @@ import logging
 
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.entities.Message import Message
+from TwitchChannelPointsMiner.classes.systems.Notifications import NotificationsSystem
+from TwitchChannelPointsMiner.classes.systems.Predictions import PredictionSystem
+from TwitchChannelPointsMiner.classes.systems.Streamers import StreamerSystem
+from TwitchChannelPointsMiner.classes.systems.Streams import StreamSystem
 from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 from TwitchChannelPointsMiner.classes.websocket.data import (
     CommunityMomentsChannel,
@@ -17,10 +21,6 @@ from TwitchChannelPointsMiner.classes.websocket.data import (
     WeeklyRewards,
 )
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser
-from TwitchChannelPointsMiner.systems.Notifications import NotificationsSystem
-from TwitchChannelPointsMiner.systems.Predictions import PredictionSystem
-from TwitchChannelPointsMiner.systems.Streamers import StreamerSystem
-from TwitchChannelPointsMiner.systems.Streams import StreamSystem
 
 logger = logging.getLogger(__name__)
 

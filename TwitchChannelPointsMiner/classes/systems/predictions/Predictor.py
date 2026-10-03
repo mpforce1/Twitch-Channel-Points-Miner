@@ -27,7 +27,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
 )
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
-from TwitchChannelPointsMiner.systems.Predictions import Predictor, PredictorFactory
+from TwitchChannelPointsMiner.classes.systems.Predictions import Predictor, PredictorFactory
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
 from TwitchChannelPointsMiner.utils.Utils import millify
 

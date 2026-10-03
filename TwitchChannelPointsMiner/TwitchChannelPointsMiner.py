@@ -43,16 +43,16 @@ from TwitchChannelPointsMiner.classes.events.managers import DefaultEventManager
 from TwitchChannelPointsMiner.classes.events.managers.Factory import EventManagerConfiguration, EventManagerFactory
 from TwitchChannelPointsMiner.classes.events.transformers.hooks import DefaultEventTransformerFactory
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
+from TwitchChannelPointsMiner.classes.systems.Notifications import NotificationsSystem
+from TwitchChannelPointsMiner.classes.systems.Streamers import StreamerSystem
+from TwitchChannelPointsMiner.classes.systems.Streams import StreamSystem
+from TwitchChannelPointsMiner.classes.systems.predictions.Predictor import BasicPredictorFactory
+from TwitchChannelPointsMiner.classes.systems.predictions.Tracker import PredictionTrackingSystemFactory
 from TwitchChannelPointsMiner.classes.websocket.Factory import DefaultWebSocketPoolFactory
 from TwitchChannelPointsMiner.classes.websocket.Pool import WebSocketPoolFactory
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
 from TwitchChannelPointsMiner.constants import CLIENT_ID, CLIENT_VERSION
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers
-from TwitchChannelPointsMiner.systems.Notifications import NotificationsSystem
-from TwitchChannelPointsMiner.systems.Streamers import StreamerSystem
-from TwitchChannelPointsMiner.systems.Streams import StreamSystem
-from TwitchChannelPointsMiner.systems.predictions.Predictor import BasicPredictorFactory
-from TwitchChannelPointsMiner.systems.predictions.Tracker import PredictionTrackingSystemFactory
 from TwitchChannelPointsMiner.utils import (
     millify,
     at_least_one_value_in_settings_is,
