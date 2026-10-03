@@ -97,7 +97,7 @@ def _setup_default_emojis():
         Events.STREAMER_ONLINE: ":partying_face:",
         Events.STREAMER_OFFLINE: ":sleeping_face:",
         Events.BONUS_POINTS_AVAILABLE: "🪎",  # Treasure chest, currently no short code
-        Events.POINTS_SPENT: ":chart_with_downwards_trend:",
+        Events.POINTS_SPENT: "📉", # For some reason, this is required to render on discord
         Events.WATCH_STREAK_PROGRESS: ":fire:",
         Events.WATCH_STREAK_MISSING: ":red_question_mark:",
         Events.WATCH_STREAK_RECOVERY: ":ambulance:",
@@ -105,7 +105,7 @@ def _setup_default_emojis():
         Events.MOMENT_CLAIM_AVAILABLE: ":video_camera:",
         Events.DROP_STATUS: ":package:",
         Events.DROP_CLAIM_AVAILABLE: ":package:",
-        Events.CHAT_MENTION: ":speech_baloon:",
+        Events.CHAT_MENTION: ":speech_balloon:",
         Events.GIFT_SUB_RECEIVED: ":wrapped_gift:",
         Events.JOIN_RAID: ":performing_arts:",
         Events.BONUS_CLAIM: ":wrapped_gift:",
