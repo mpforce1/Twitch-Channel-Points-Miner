@@ -12,6 +12,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     MomentClaim,
     WatchStreakRecovery,
 )
+from TwitchChannelPointsMiner.classes.systems.Streamers import StreamerSystem
 from TwitchChannelPointsMiner.classes.websocket.data import (
     CommunityPointsChannel,
     CommunityPointsUser,
@@ -22,7 +23,6 @@ from TwitchChannelPointsMiner.classes.websocket.data.Raid import RaidUpdate
 from TwitchChannelPointsMiner.classes.websocket.data.UserSubscribeEvents import (
     UserSubscribed,
 )
-from TwitchChannelPointsMiner.systems.Streamers import StreamerSystem
 
 Settings.enable_analytics = False
 

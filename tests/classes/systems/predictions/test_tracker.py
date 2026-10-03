@@ -12,6 +12,9 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     PredictionRefund,
     PredictionWin,
 )
+from TwitchChannelPointsMiner.classes.systems.predictions.Tracker import (
+    PredictionTrackingSystem,
+)
 from TwitchChannelPointsMiner.classes.websocket.data import Predictions
 from TwitchChannelPointsMiner.classes.websocket.data import (
     PredictionsChannel,
@@ -21,9 +24,6 @@ from TwitchChannelPointsMiner.classes.websocket.data.Predictions import (
     Outcome,
     PredictionEvent,
     User,
-)
-from TwitchChannelPointsMiner.systems.predictions.Tracker import (
-    PredictionTrackingSystem,
 )
 
 

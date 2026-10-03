@@ -14,14 +14,14 @@ from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent impor
     PredictionEvent,
 )
 from TwitchChannelPointsMiner.classes.events.Event import PredictionWin
+from TwitchChannelPointsMiner.classes.systems.predictions.Predictor import BasicPredictor
+from TwitchChannelPointsMiner.classes.systems.predictions.Tracker import (
+    PredictionTrackingSystem,
+)
 from TwitchChannelPointsMiner.classes.websocket.data import (
     Predictions,
     PredictionsChannel,
     PredictionsUser,
-)
-from TwitchChannelPointsMiner.systems.predictions.Predictor import BasicPredictor
-from TwitchChannelPointsMiner.systems.predictions.Tracker import (
-    PredictionTrackingSystem,
 )
 from TwitchChannelPointsMiner.utils.Utils import generate_random_uuid
 

@@ -26,7 +26,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     PredictionPointsBelowMinimum,
     SettingsFiltered,
 )
-from TwitchChannelPointsMiner.systems.predictions.Predictor import (
+from TwitchChannelPointsMiner.classes.systems.predictions.Predictor import (
     BasicPredictor,
     create_bet,
     get_prediction_time,

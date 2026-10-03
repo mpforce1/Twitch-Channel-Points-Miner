@@ -15,15 +15,15 @@ from TwitchChannelPointsMiner.classes.events.Event import (
 )
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
+from TwitchChannelPointsMiner.classes.systems.Predictions import (
+    PredictionSystem,
+    PredictionSystemFactory,
+)
+from TwitchChannelPointsMiner.classes.systems.predictions.Predictor import Predictor
 from TwitchChannelPointsMiner.classes.websocket.data import (
     PredictionsChannel,
     PredictionsUser,
 )
-from TwitchChannelPointsMiner.systems.Predictions import (
-    PredictionSystem,
-    PredictionSystemFactory,
-)
-from TwitchChannelPointsMiner.systems.predictions.Predictor import Predictor
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
 
 logger = logging.getLogger(__name__)

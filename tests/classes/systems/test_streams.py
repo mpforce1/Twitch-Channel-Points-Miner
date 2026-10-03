@@ -10,7 +10,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     StreamViewCount,
     StreamerOffline,
 )
-from TwitchChannelPointsMiner.systems.Streams import StreamSystem
+from TwitchChannelPointsMiner.classes.systems.Streams import StreamSystem
 
 
 def test_bring_up():
