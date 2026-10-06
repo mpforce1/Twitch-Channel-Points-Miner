@@ -1,4 +1,5 @@
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.websocket.Pool import (
     WebSocketPoolFactory,
     WebSocketPool,
@@ -10,14 +11,19 @@ from TwitchChannelPointsMiner.constants import CLIENT_ID_WEB, HERMES_WEBSOCKET
 
 
 class DefaultWebSocketPoolFactory(WebSocketPoolFactory):
-    def create(self, twitch: Twitch, use_hermes: bool) -> WebSocketPool:
+    def create(
+        self, twitch: Twitch, event_manager: EventManager, use_hermes: bool
+    ) -> WebSocketPool:
         if use_hermes:
             return HermesWebSocketPool(
                 url=f"{HERMES_WEBSOCKET}?clientId={CLIENT_ID_WEB}",
                 twitch=twitch,
+                event_manager=event_manager,
                 request_encoder=hermes_data.JsonEncoder(),
                 response_decoder=hermes_data.JsonDecoder(),
                 listeners=[],
             )
         else:
-            return PubSubWebSocketPool(twitch=twitch, listeners=[])
+            return PubSubWebSocketPool(
+                twitch=twitch, event_manager=event_manager, listeners=[]
+            )

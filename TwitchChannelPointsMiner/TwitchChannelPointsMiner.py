@@ -347,7 +347,9 @@ class TwitchChannelPointsMiner:
         )
 
         # WebSockets
-        self.ws_pool = factories.ws_pool.create(self.twitch, use_hermes)
+        self.ws_pool = factories.ws_pool.create(
+            self.twitch, self.event_manager, use_hermes
+        )
 
         # Weekly reward progression
         factories.weekly_rewards.create(
