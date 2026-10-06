@@ -5,6 +5,8 @@ import time
 from threading import Thread
 from typing import Iterable
 
+from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
@@ -20,11 +22,16 @@ logger = logging.getLogger(__name__)
 
 
 class PubSubWebSocketPool(WebSocketPool):
-    __slots__ = ["ws", "twitch", "listeners"]
 
-    def __init__(self, twitch: Twitch, listeners: Iterable[MessageListener]):
+    def __init__(
+        self,
+        twitch: Twitch,
+        event_manager: EventManager,
+        listeners: Iterable[MessageListener],
+    ):
         self.ws = []
         self.twitch = twitch
+        self.event_manager = event_manager
         self.listeners = [listener for listener in listeners]
         self.forced_close = False
 
@@ -54,7 +61,9 @@ class PubSubWebSocketPool(WebSocketPool):
         if self.ws[index].is_opened is False:
             self.ws[index].pending_topics.append(topic)
         else:
-            self.ws[index].listen(topic, self.twitch.client_session.login.get_auth_token())
+            self.ws[index].listen(
+                topic, self.twitch.client_session.login.get_auth_token()
+            )
 
     def __new(self, index):
         return PubSubWebSocket(
@@ -64,7 +73,7 @@ class PubSubWebSocketPool(WebSocketPool):
             on_message=PubSubWebSocketPool.on_message,
             on_open=PubSubWebSocketPool.on_open,
             on_error=PubSubWebSocketPool.on_error,
-            on_close=PubSubWebSocketPool.on_close
+            on_close=PubSubWebSocketPool.on_close,
             # on_close=PubSubWebSocketPool.handle_reconnection, # Do nothing.
         )
 
@@ -97,9 +106,9 @@ class PubSubWebSocketPool(WebSocketPool):
     def check_stale_connections(self):
         for index in range(0, len(self.ws)):
             if (
-                    self.ws[index].is_reconnecting is False
-                    and self.ws[index].elapsed_last_ping() > 10
-                    and internet_connection_available() is True
+                self.ws[index].is_reconnecting is False
+                and self.ws[index].elapsed_last_ping() > 10
+                and internet_connection_available() is True
             ):
                 logger.info(
                     f"#{index} - The last PING was sent more than 10 minutes ago. Reconnecting to the WebSocket..."
@@ -137,6 +146,13 @@ class PubSubWebSocketPool(WebSocketPool):
         # Connection lost | [WinError 10054] An existing connection was forcibly closed by the remote host
         # Connection already closed | Connection is already closed (raise WebSocketConnectionClosedException)
         logger.error(f"#{ws.index} - WebSocket error: {error}")
+        ws.event_manager.manage(
+            Error(
+                context="WebSocket Pool - PubSub",
+                message=f"#{ws.index} - WebSocket error: {error}",
+                error=None,
+            )
+        )
 
     @staticmethod
     def on_close(ws, close_status_code, close_reason):
@@ -183,7 +199,9 @@ class PubSubWebSocketPool(WebSocketPool):
 
     @staticmethod
     def on_message(ws: PubSubWebSocket, message: str):
-        message_loggable = "REDACTED" if Settings.logger.anonymiser.strict else message.strip()
+        message_loggable = (
+            "REDACTED" if Settings.logger.anonymiser.strict else message.strip()
+        )
         logger.debug(f"#{ws.index} - Received: {message_loggable}")
         response = json.loads(message)
 
@@ -194,10 +212,10 @@ class PubSubWebSocketPool(WebSocketPool):
             # If we have more than one PubSub connection, messages may be duplicated
             # Check the concatenation between message_type.top.channel_id
             if (
-                    ws.last_message_type_channel is not None
-                    and ws.last_message_timestamp is not None
-                    and ws.last_message_timestamp == message.timestamp
-                    and ws.last_message_type_channel == message.identifier
+                ws.last_message_type_channel is not None
+                and ws.last_message_timestamp is not None
+                and ws.last_message_timestamp == message.timestamp
+                and ws.last_message_type_channel == message.identifier
             ):
                 return
 
@@ -216,7 +234,7 @@ class PubSubWebSocketPool(WebSocketPool):
             if "ERR_BADAUTH" in error_message:
                 # Inform the user about the potential outdated cookie file
                 logger.error(
-                    f"Received the ERR_BADAUTH error, most likely you have an outdated cookie file \"cookies\\[your username].pkl\". Delete this file and try again."
+                    f'Received the ERR_BADAUTH error, most likely you have an outdated cookie file "cookies\\[your username].pkl". Delete this file and try again.'
                 )
                 # Attempt to delete the outdated cookie file
                 # try:

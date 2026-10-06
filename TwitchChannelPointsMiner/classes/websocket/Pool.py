@@ -2,6 +2,7 @@ import abc
 
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.websocket.MessageListener import MessageListener
 
 
@@ -42,5 +43,5 @@ class WebSocketPool(abc.ABC):
 
 class WebSocketPoolFactory(abc.ABC):
     @abc.abstractmethod
-    def create(self, twitch: Twitch, use_hermes: bool) -> WebSocketPool:
+    def create(self, twitch: Twitch, event_manager: EventManager, use_hermes: bool) -> WebSocketPool:
         pass
