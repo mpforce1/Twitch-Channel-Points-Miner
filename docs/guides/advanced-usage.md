@@ -17,12 +17,14 @@ In order to download the latest release image and load it into your local docker
 commands:
 
 ```sh
-wget https://github.com/mpforce1/Twitch-Channel-Points-Miner-v2/releases/latest/twitch-miner
+wget https://github.com/mpforce1/Twitch-Channel-Points-Miner/releases/download/{latest version number}/twitch-channel-points-miner-{platform tag}.tar.gz
 docker image load -i [downloaded filename]
 ```
 
-1. The first command downloads the latest miner release from the GitHub repository releases page. This can be skipped if
-   you've downloaded the release manually, just ensure your current working directory contains the downloaded file.
+1. The first command downloads the latest miner release from the GitHub repository releases page.
+   `{latest version number}` should be replaced with the current latest version number (e.g. `2.0.0`), and
+   `{platform tag}` should be the tag for your platform (e.g. `linux-amd64`). This can be skipped if you've downloaded
+   the release manually, just ensure your current working directory contains the downloaded file.
 2. The second command loads the downloaded image file into your local docker image store. You should replace
    `[downloaded filename]` with the actual filename of the downloaded file. This step cannot be skipped.
 
@@ -38,7 +40,7 @@ Once this is completed you'll have an image in your local docker image store tag
 To clone the repository run the following command:
 
 ```sh
-git clone git@github.com:mpforce1/Twitch-Channel-Points-Miner-v2.git
+git clone git@github.com:mpforce1/Twitch-Channel-Points-Miner.git
 ```
 
 This command clones this repository into your local filesystem, it'll be in the current working directory in a

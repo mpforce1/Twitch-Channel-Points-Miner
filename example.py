@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
 
 import logging
+
 from colorama import Fore
+
 from TwitchChannelPointsMiner import TwitchChannelPointsMiner
+from TwitchChannelPointsMiner.classes import WatchStreakRecovery, WeeklyRewardsProgressor
 from TwitchChannelPointsMiner.classes.Anonymiser import ConsistentAnonymiser
-from TwitchChannelPointsMiner.classes import WeeklyRewardsProgressor
-from TwitchChannelPointsMiner.logger import LoggerSettings, ColorPalette
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence
-from TwitchChannelPointsMiner.classes.Discord import Discord
-from TwitchChannelPointsMiner.classes.Webhook import Webhook
-from TwitchChannelPointsMiner.classes.Telegram import Telegram
-from TwitchChannelPointsMiner.classes.Matrix import Matrix
-from TwitchChannelPointsMiner.classes.Pushover import Pushover
-from TwitchChannelPointsMiner.classes.Gotify import Gotify
 from TwitchChannelPointsMiner.classes.Settings import Priority, Events, FollowersOrder
-from TwitchChannelPointsMiner.classes.entities.Bet import Strategy, BetSettings, Condition, OutcomeKeys, FilterCondition, DelayMode
+from TwitchChannelPointsMiner.classes.Translator import Translator
+from TwitchChannelPointsMiner.classes.entities.Bet import (
+    Strategy, BetSettings, Condition, OutcomeKeys,
+    FilterCondition, DelayMode
+)
 from TwitchChannelPointsMiner.classes.entities.Streamer import HLSSettings, Streamer, StreamerSettings
+from TwitchChannelPointsMiner.classes.events.handlers.hooks import discord, gotify, matrix, pushover, telegram, webhook
+from TwitchChannelPointsMiner.logger import LoggerSettings, ColorPalette
 from TwitchChannelPointsMiner.utils import AttemptStrategy
 
 twitch_miner = TwitchChannelPointsMiner(
@@ -33,12 +34,15 @@ twitch_miner = TwitchChannelPointsMiner(
     use_hermes=False,                           # Set to True if you want to use the Hermes WebSocket API instead of the PubSub WebSocket API
     logger_settings=LoggerSettings(
         save=True,                              # If you want to save logs in a file (suggested)
+        console_enabled=True,                   # Set to False to disable console logging
         console_level=logging.INFO,             # Level of logs - use logging.DEBUG for more info
         console_username=False,                 # Adds a username to every console log line if True. Also adds it to Telegram, Discord, etc. Useful when you have several accounts
+        console_truncate=False,                 # Set to an int (e.g. 30) to cause logs to truncate to that many characters, set to "console" to automatically truncate to your console width
         auto_clear=True,                        # Create a file rotation handler with interval = 1D and backupCount = 7 if True (default)
         time_zone="",                           # Set a specific time zone for console and file loggers. Use tz database names. Example: "America/Denver"
         file_level=logging.DEBUG,               # Level of logs - If you think the log file it's too big, use logging.INFO
         emoji=True,                             # On Windows, we have a problem printing emoji. Set to false if you have a problem
+        username=None,                          # Set to a string (e.g. "myusername") to prepend a username to each log message
         less=False,                             # If you think that the logs are too verbose, set this to True
         colored=True,                           # If you want to print colored text
         color_palette=ColorPalette(             # You can also create a custom palette color (for the common message).
@@ -46,62 +50,62 @@ twitch_miner = TwitchChannelPointsMiner(
             streamer_offline="red",             # Read more in README.md
             BET_wiN=Fore.MAGENTA                # Color allowed are: [BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE, RESET].
         ),
-        telegram=Telegram(                                                          # You can omit or set to None if you don't want to receive updates on Telegram
+        redact_secrets=False,                                                         # Set to True to redact secrets like passwords or authentication tokens
+        anonymiser=ConsistentAnonymiser(                                              # Set this to an Anonymiser to anonymise channel usernames, ids, and points
+            random_points_min=100,                                                    # Optionally set this to set the per channel minimum for the random channel points
+            random_points_max=1_000_000                                               # Optionally set this to se the per channel maximum for the random channel points
+        ),
+        translator=Translator(            # Set this to override Translation for Event strings in default handler messages, can be left as None for the default English translation
+            locales_directory="locales",  # The directory containing your locale files
+            default_locale="en",          # The default locale to use
+        ),
+        locale="en",                      # Override the default locale
+    ),
+    handlers=[                                                                      # An optional list of EventHandler or EventHandlerFactory, these will recieve Events generated by the miner
+        telegram(                                                                   # You can omit or set to None if you don't want to receive updates on Telegram
             chat_id=123456789,                                                      # Chat ID to send messages @getmyid_bot
             token="123456789:shfuihreuifheuifhiu34578347",                          # Telegram API token @BotFather
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
                     Events.BET_LOSE, Events.CHAT_MENTION],                          # Only these events will be sent to the chat
             disable_notification=True,                                              # Revoke the notification (sound/vibration)
         ),
-        discord=Discord(
-            webhook_api="https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J",  # Discord Webhook URL
+        discord(
+            webhook_api_url="https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J",  # Discord Webhook URL
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION],                                  # Only these events will be sent to the chat
+                    Events.BET_LOSE, Events.CHAT_MENTION],                                       # Only these events will be sent to the chat
         ),
-        webhook=Webhook(
-            endpoint="https://example.com/webhook",                                                                    # Webhook URL
-            method="GET",                                                                   # GET or POST
+        discord(                                                                                 # Add as many additional handlers, of each type, as required
+            webhook_api_url="https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde",
+            events=[Events.GAIN_FOR_RAID, Events.GAIN_FOR_WATCH,
+                    Events.GAIN_FOR_CLAIM, Events.GAIN_FOR_WATCH_STREAK],
+        ),
+        webhook(
+            endpoint="https://example.com/webhook",                                 # Webhook URL
+            method="GET",                                                           # GET or POST
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION],                                  # Only these events will be sent to the endpoint
+                    Events.BET_LOSE, Events.CHAT_MENTION],                          # Only these events will be sent to the endpoint
         ),
-        matrix=Matrix(
+        matrix(
             username="twitch_miner",                                                   # Matrix username (without homeserver)
             password="...",                                                            # Matrix password
             homeserver="matrix.org",                                                   # Matrix homeserver
             room_id="...",                                                             # Room ID
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE, Events.BET_LOSE], # Only these events will be sent
         ),
-        pushover=Pushover(
+        pushover(
             userkey="YOUR-ACCOUNT-TOKEN",                                             # Login to https://pushover.net/, the user token is on the main page
             token="YOUR-APPLICATION-TOKEN",                                           # Create a application on the website, and use the token shown in your application
             priority=0,                                                               # Read more about priority here: https://pushover.net/api#priority
             sound="pushover",                                                         # A list of sounds can be found here: https://pushover.net/api#sounds
             events=[Events.CHAT_MENTION, Events.DROP_CLAIM],                          # Only these events will be sent
         ),
-        gotify=Gotify(
-            endpoint="https://example.com/message?token=TOKEN",
-            priority=8,
+        gotify(
+            endpoint="https://example.com/message?token=TOKEN",       # The URL of the Gotify server
+            priority=8,                                               # The message priority (higher is more important) (https://gotify.net/docs/priority#how-clients-handle-priorities)
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION],
+                    Events.BET_LOSE, Events.CHAT_MENTION],            # Only these events will be sent
         ),
-        hooks=[
-            Discord(
-                webhook_api="https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J",
-                events=[Events.GAIN_FOR_RAID, Events.GAIN_FOR_WATCH,
-                        Events.GAIN_FOR_CLAIM, Events.GAIN_FOR_WATCH_STREAK],
-            ),
-            Discord(
-                webhook_api="https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde",
-                events=[Events.BET_GENERAL, Events.BET_LOSE,
-                        Events.BET_WIN, Events.BET_REFUND],
-            )
-        ],                                                                            # Add any additional log hooks to this list, in this example 2 different discord webhooks get 2 different types of Events
-        redact_secrets=False,                                                         # Set to True to redact secrets like passwords or authentication tokens
-        anonymiser=ConsistentAnonymiser(                                              # Set this to an Anonymiser to anonymise channel usernames, ids, and points
-            random_points_min=100,                                                    # Optionally set this to set the per channel minimum for the random channel points
-            random_points_max=1_000_000                                               # Optionally set this to se the per channel maximum for the random channel points
-        ),
-    ),
+    ],
     streamer_settings=StreamerSettings(
         make_predictions=True,                  # If you want to Bet / Make prediction
         follow_raid=True,                       # Follow raid to obtain more points
@@ -135,14 +139,22 @@ twitch_miner = TwitchChannelPointsMiner(
         attempts=3,                             # Number of attempts to make per GQL request
         attempt_interval_seconds=1              # Number of seconds to wait between attempts
     ),
-    weekly_rewards=WeeklyRewardsProgressor.BasicConfiguration( # Set to None in order to use this default configuration, False to disable, can also use a custom factory
-        max_concurrent_watch=2,                                # The maximum number of streamers to attempt to progress concurrently
-        max_seconds_clips=30,                                  # The maximum number of seconds to attempt to watch Clips
-        max_seconds_vods=8*60,                                 # The maximum number of seconds to attempt to watch VODs
-        loop_interval_seconds=20,                              # The number of seconds between checking if a streamer needs progression
-        max_failures_per_streamer=1,                           # The maximum number of failed progression attempts for each streamer before they get put on cooldown
-        failure_cooldown_seconds=60*60,                        # The number of seconds a streamer is on cooldown, during which time we won't attempt to make progress
-    )
+    weekly_rewards=WeeklyRewardsProgressor.BasicConfiguration(     # Set to None in order to use this default configuration, False to disable, can also use a custom factory
+        max_concurrent=2,                                          # The maximum number of streamers to attempt to progress concurrently
+        max_clip_watch_seconds=30,                                 # The maximum number of seconds to attempt to watch Clips
+        max_vod_watch_seconds=8*60,                                # The maximum number of seconds to attempt to watch VODs
+        interval_seconds=20,                                       # The number of seconds between checking if a streamer needs progression
+        max_failures_per_streamer=1,                               # The maximum number of failed progression attempts for each streamer before they get put on cooldown
+        failure_cooldown_seconds=60*60,                            # The number of seconds a streamer is on cooldown, during which time we won't attempt to make progress
+    ),
+    watch_streak_recovery=WatchStreakRecovery.BasicConfiguration(  # Same as weekly_rewards
+        max_concurrent=2,
+        max_clip_watch_seconds=30,
+        max_vod_watch_seconds=8*60,
+        interval_seconds=20,
+        max_failures_per_streamer=1,
+        failure_cooldown_seconds=60*60,
+    ),
 )
 
 # You can customize the settings for each streamer. If not settings were provided, the script would use the streamer_settings from TwitchChannelPointsMiner.

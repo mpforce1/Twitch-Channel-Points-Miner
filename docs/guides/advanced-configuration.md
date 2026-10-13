@@ -26,8 +26,12 @@ expand more on their usage.
 | `use_hermes`                    | `bool`                                                                          | `False`                                                                 |
 | `logger_settings`               | `LoggerSettings`                                                                | (see [here](#logger_settings))                                          |
 | `streamer_settings`             | `StreamerSettings`                                                              | (see [here](#streamer_settings))                                        |
-| `gql`                           | `AttemptStrategy` or `GQLFactory`                                               | `GQLFactory`                                                            |
-| `weekly_rewards`                | `BasicConfiguration` or `WeeklyRewardsProgressorFactory` or `False`             | `BasicWeeklyRewardsProgressorFactory`                                   |
+| `gql`                           | `AttemptStrategy` or `None`                                               | `GQLFactory`                                                            |
+| `weekly_rewards`                | `BasicConfiguration` or `False` or `None`             | `None`                                   |
+| `watch_streak_recovery`| `Basicconfiguration` or `False` or `None`| `None`|
+| `event_manager`| `EventManagerConfiguration` or `True` or `None`| `True`      |
+| `handlers`               | `list[EventHandler or EventHandlerFactory]` or None| `None`|
+| `factories`| `Factories` or `None`                                                   | `None`|
 
 
 ### `username`
@@ -101,6 +105,30 @@ The `sorting` functions are:
  - `sort_points_descending` which sorts streamers by the number of channel points descending
  - `sort_oldest_stream` which sorts streamers by the stream start time oldest first
  - `sort_newset_stream` which sorts streamers by the stream start time newest first
+ - `sort_multiplier_ascending` which sorts streamers by your points multiplier ascending
+ - `sort_multipler_descending` which sorts streamers by your points multiplier descending
+ - `sort_subscription_ends_at_ascending` which sorts by your subscription end time ascending
+ - `sort_subscription_ends_at_descending` which sorts by your subscription end time descending
+
+There's also `group` which allows you to specify that a given selector should only apply to a subset of Streamers:
+
+```python
+priority=[
+    group(
+        streamers=["streamer-1", "streamer-2", "streamer-3"],
+        selector=order(),
+    ),
+    group(
+        streamers=["streamer-4", "streamer-5", "streamer-6"],
+        selector=watch_streak(),
+    ),
+    order(),
+]
+```
+
+This will first select "streamer-1", "streamer-2", then "streamer-3" in the order defined in your run file. Then it will
+consider "streamer-4", "streamer-5", and "streamer-6" if they're missing their watch streaks. Finally, it will look at
+all remaining streamers in the oder defined in your run file.
 
 #### `StreamerSelector`
 
@@ -316,608 +344,11 @@ and still works.
 
 ### `logger_settings`
 
-This allows you to configure logging options. See [here](logs.md) for some examples.
-
-| Name               | Type                             | Default             |
-|--------------------|----------------------------------|---------------------|
-| `save`             | `bool`                           | `True`              |
-| `console_level`    | `int`                            | `logging.INFO`      |
-| `console_username` | `bool`                           | `False`             |
-| `auto_clear`       | `bool`                           | `True`              |
-| `time_zone`        | `str`                            | `""` (empty string) |
-| `file_level`       | `int`                            | `logging.DEBUG`     |
-| `emoji`            | `bool`                           | `True`              |
-| `less`             | `bool`                           | `False`             |
-| `colored`          | `bool`                           | `True`              |
-| `color_palette`    | `ColorPalette`                   | `None`              |
-| `telegram`         | `Telegram`                       | `None`              |
-| `discord`          | `Discord`                        | `None`              |
-| `webhook`          | `WebHook`                        | `None`              |
-| `matrix`           | `Matrix`                         | `None`              |
-| `pushover`         | `Pushover`                       | `None`              |
-| `gotify`           | `Gotify`                         | `None`              |
-| `hooks`            | `list[EventHook]`                | `[]` (empty list)   |
-| `redact_secrets`   | `bool`                           | `False`             |
-| `anonymiser`       | `Anonymiser` or `bool` or `None` | `None`              |
-
-#### `save`
-
-If set to `True` the miner will save logs to a file in the `logs` directory. If `False` then logs will not be saved.
-
-#### `console_level`
-
-Set this to change the [log level](https://docs.python.org/3/library/logging.html#logging-levels) the miner will output
-to the console. The default is `INFO` which means all logs from `ERROR` to `INFO` will be logged, while `DEBUG` logs
-will be ignored.
-
-As another example, you can set this to `ERROR` to only see `ERROR` logs, ignoring `DEBUG`, `INFO`, and `WARNING` logs.
-
-You'll see `NOTSET` and `CRITIAL` in the `logging` documentation but the miner doesn't use those.
-
-#### `console_username`
-
-Adds a username to the beginning of every console log line if `True`. Also adds it any configured `EventHooks`
-(Telegram, Discord, etc). Useful when you have several accounts.
-
-#### `auto_clear`
-
-Creates a file rotation handler with an interval of 1 day and backup count of 7 if `True` (default). This means the
-miner will maintain 7 log files going back the last 7 days, after a day of logs the miner will:
-
-1. Rename the current log file, appending the current date (formatted like `[username].log.[yyyy-mm-dd]`).
-2. Potentially delete the oldest log file if more than 7 would exist.
-3. Create a new log file and begin writing logs to that.
-
-#### `time_zone`
-
-Sets a specific time zone for console and file loggers.
-Use [tz database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) names. Example: "America/Denver".
-
-#### `file_level`
-
-Similar to [`console_level`](#console_level), set this to change
-the [log level](https://docs.python.org/3/library/logging.html#logging-levels) the miner will output to the file(s).
-
-Using `DEBUG` will result in a large file size due to the amount of `DEBUG` logs produced. If this is too large for you
-please try changing this to `INFO`.  
-
-#### `emoji`
-
-On Windows, the miner has a problem printing emoji, so you can try setting to `False` to disable emoji.
-
-#### `less`
-
-Reduces the length of most miner logs by attempting to include only the most important information. Use this if you need
-shorter logs or a smaller file size.
-
-#### `colored`
-
-Set to `True` to enable coloured text when outputting logs to the console.
-
-#### `color_palette`
-
-Customises the colours used when printing to the console. Set this to a `ColorPalette` object, you can pass
-any [Events](/TwitchChannelPointsMiner/classes/Settings.py) as a named argument set to any of the following
-colours: `BLACK`, `RED`, `GREEN`, `YELLOW`, `BLUE`, `MAGENTA`, `CYAN`, `WHITE`, `RESET`. The names and values are
-case-insensitive, and you may use a direct reference to the same `colorama.Fore` colours.
-
-For example:
-
-```python3
-ColorPalette(
-    STREAMER_online="GREEN",
-    streamer_offline="red",
-    BET_wiN=Fore.MAGENTA,
-)
-```
-
-In this case, `STREAMER_ONLINE` events will be logged in `GREEN`, `STREAMER_OFFLINE` events will be logged in `RED`, and
-`BET_WIN` events will be logged in `MAGENTA`.
-
-#### `telegram`
-
-One of the `EventHook` types, allows events to be sent to Telegram
-using [sendMessage](https://core.telegram.org/bots/api#sendmessage).
-
-| Name                    | Type           | Description                                                                     |
-|-------------------------|----------------|---------------------------------------------------------------------------------|
-| `chat_id`               | `int`          | The unique identifier of the target chat of the username of the target channel. |
-| `token`                 | `str`          | The token for your Telegram bot.                                                |
-| `events`                | `list[Events]` | The `Events` you want to send to telegram.                                      |
-| `disable_notifciations` | `bool`         | `True` to trigger Telegram notifications without sound.                         |
-
-
-#### `discord`
-
-One of the `EventHook` types, allows events to be sent to Discord using
-a [Webhook](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks).
-
-| Name          | Type           | Description                                  |
-|---------------|----------------|----------------------------------------------|
-| `webhook_api_url` | `str`          | This is the "Webhook URL" Discord gives you. |
-| `events`      | `list[Events]` | The `Events` you want to send to Discord.    |
-
-#### `webhook`
-
-One of the `EventHook` types, allows events to be sent to a generic Webhook in a set format.
-
-| Name       | Type           | Description                                   |
-|------------|----------------|-----------------------------------------------|
-| `endpoint` | `str`          | The URL of the Webhook.                       |
-| `method`   | `str`          | The HTTP method to use when sending data.     |
-| `events`   | `list[Events]` | The `Events` you want to send to the Webhook. |
-
-#### `matrix`
-
-One of the `EventHook` types, allows events to be sent to a [Matrix](https://matrix.org/docs/chat_basics/matrix-for-im/)
-server.
-
-| Name         | Type          | Description                                            |
-|--------------|---------------|--------------------------------------------------------|
-| `username`   | `str`         | Your Matrix username.                                  |
-| `password`   | `str`         | Your Matrix password.                                  |
-| `homeserver` | `str`         | The URL of the Matrix server (e.g. `"matrix.org"`      |
-| `room_id`    | `str`         | The id of the room to which you want to send `Events`. |
-| `events`     | `list[Event]` | The `Events` you want to send to Matrix.               |
-
-#### `Pushover`
-
-One of the `EventHook` types, allows events to be sent to a [Pushover](https://pushover.net/api) server.
-
-| Name       | Type           | Description                                                                       |
-|------------|----------------|-----------------------------------------------------------------------------------|
-| `userkey`  | `str`          | [Log in](https://pushover.net/) and the user token is on the main page.           |
-| `token`    | `str`          | Create a application on the website, and use the token shown in your application. |
-| `priority` | `int`          | The [priority](https://pushover.net/api#priority) of the messages.                |
-| `sound`    | `str`          | The [sound](https://pushover.net/api#sounds) to use for Pushover notifications.   |
-| `events`   | `list[Events]` | The `Events` you want to send to Pushover.                                        |
-
-#### `gotify`
-
-One of the `EventHook` types, allows events to be send to a [Gotify](https://gotify.net/docs/index) server.
-
-| Name       | Type          | Description                                                                                                       |
-|------------|---------------|-------------------------------------------------------------------------------------------------------------------|
-| `endpoint` | `str`         | The full URL of the gotify server, including the path and token. i.e. `"https://example.com/message?token=TOKEN"` |
-| `priority` | `int`         | The priority of the message.                                                                                      |
-| `events`   | `list[Event]` | The `Events` you want to send to Gotify.                                                                          |
-
-
-#### `hooks`
-
-A list of arbitrary `EventHook` objects. This can be used in place of or in addition to the above `EventHook` types.
-This list allows you to define multiple hooks of any type. For example:
-
-```python3
-hooks=[
-    Discord(
-        webhook_api="https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J",
-        events=[Events.GAIN_FOR_RAID, Events.GAIN_FOR_WATCH,
-                Events.GAIN_FOR_CLAIM, Events.GAIN_FOR_WATCH_STREAK],
-    ),
-    Discord(
-        webhook_api="https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde",
-        events=[Events.BET_GENERAL, Events.BET_LOSE,
-                Events.BET_WIN, Events.BET_REFUND],
-    ),
-    Gotify(
-        endpoint="https://example.com/message?token=TOKEN",
-        priority=8,
-        events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE]
-    ),
-    Gotify(
-        endpoint="https://example.com/message?token=TOKEN2",
-        priority=8,
-        events=[Events.JOIN_RAID, Events.CHAT_MENTION]
-    ),
-]    
-```
-
-This sends `GAIN_FOR...` events to one Discord Webhook and `BET...` events to a different one. It also sends
-`STREAMER_ONLINE/OFFLINE` events to a Gotify application and sends `JOIN_RAID` and `CHAT_MENTION` events to another. 
-
-#### `redact_secrets`
-
-Set this to `True` to have secrets (passwords and authentication tokens) redacted from the logs. In particular, this
-currently affects PubSub request logging.
-
-#### `anonymiser`
-
-> [!NOTE]
-> Credit to [Klaro](https://github.com/0x8fv) and their
-> work [here](https://github.com/0x8fv/Twitch-Channel-Points-Miner/blob/940c98409e5821900752815cd9550ae5b750b597/TwitchChannelPointsMiner/privacy/anonymizer.go)
-> for inspiring this feature!
-
-> [!WARNING]
-> While this does work for logged information the miner _**itself**_ generates, it cannot work for information
-> _**received**_ from external sources like the Twitch GQL and WebSocket APIs.
-
-Set this to `True` to automatically anonymise, to the extent possible, all identifying information in the logs. This
-works for channel ids, usernames, points, WebSocket topics, and Hermes subscription ids.
-
-By default, this is set to `False`. Setting it to `False` or `None` will cause no information to be anonymised.
-
-*Example logs:*
-```text
-12/03 09:18:52 - Twitch Channel Points Miner-1.1.0 (fork by mpforce1)
-12/03 09:18:52 - https://github.com/mpforce1/Twitch-Channel-Points-Miner
-12/03 09:18:54 - 🌐  Analytics running on http://0.0.0.0:5000/
-12/03 09:18:54 - 💣  Start session: 'a0ae3a4d-2cf8-4573-bfg1-a310a060a930'
-12/03 09:18:54 - 🤓  Loading data for 17 streamers. Please wait...
-12/03 09:18:56 - 😴  Streamer7 (195.37k points) is Offline!
-12/03 09:18:56 - 😴  Streamer6 (757.73k points) is Offline!
-12/03 09:18:56 - 😴  Streamer4 (265.12k points) is Offline!
-12/03 09:18:56 - 😴  Streamer1 (517.41k points) is Offline!
-12/03 09:18:56 - 🚀  Detected WATCH_STREAK for Streamer9 (989.18k points)
-12/03 09:18:56 - 😴  Streamer2 (747.28k points) is Offline!
-12/03 09:18:56 - 😴  Streamer10 (559.75k points) is Offline!
-12/03 09:18:56 - 😴  Streamer5 (696.38k points) is Offline!
-12/03 09:18:56 - 😴  Streamer8 (505.82k points) is Offline!
-12/03 09:18:56 - 💬  Join IRC Chat: Streamer3
-12/03 09:18:56 - 🥳  Streamer3 (157.89k points) is Online!
-12/03 09:18:56 - 💬  Join IRC Chat: Streamer9
-12/03 09:18:56 - 🥳  Streamer9 (989.18k points) is Online!
-12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer16 (174.22k points)
-12/03 09:18:58 - 😴  Streamer17 (320.06k points) is Offline!
-12/03 09:18:58 - 😴  Streamer12 (803.47k points) is Offline!
-12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer11 (370.13k points)
-12/03 09:18:58 - 😴  Streamer13 (503.6k points) is Offline!
-12/03 09:18:58 - 😴  Streamer14 (242.69k points) is Offline!
-12/03 09:18:58 - 🚀  Detected WATCH_STREAK for Streamer15 (364.78k points)
-12/03 09:18:58 - 💬  Join IRC Chat: Streamer11
-12/03 09:18:58 - 🥳  Streamer11 (370.13k points) is Online!
-12/03 09:18:59 - 💬  Join IRC Chat: Streamer15
-12/03 09:18:59 - 🥳  Streamer15 (364.78k points) is Online!
-12/03 09:18:59 - 💬  Join IRC Chat: Streamer16
-12/03 09:18:59 - 🥳  Streamer16 (174.22k points) is Online!
-12/03 09:37:21 - 🚀  +10 → Streamer9 (989.19k points) - Reason: WATCH.
-12/03 09:38:12 - 🚀  +10 → Streamer3 (157.9k points) - Reason: WATCH.
-12/03 09:42:21 - 🚀  +10 → Streamer9 (989.2k points) - Reason: WATCH.
-12/03 09:43:12 - 🚀  +10 → Streamer3 (157.91k points) - Reason: WATCH.
-12/03 09:47:22 - 🚀  +10 → Streamer9 (989.21k points) - Reason: WATCH.
-12/03 09:47:22 - 🚀  +50 → Streamer9 (989.26k points) - Reason: CLAIM.
-12/03 09:48:10 - 🚀  +10 → Streamer3 (157.92k points) - Reason: WATCH.
-12/03 09:48:10 - 🚀  +50 → Streamer3 (157.97k points) - Reason: CLAIM.
-12/03 09:52:20 - 🚀  +10 → Streamer9 (989.27k points) - Reason: WATCH.
-12/03 09:53:12 - 🚀  +10 → Streamer3 (157.98k points) - Reason: WATCH.
-12/03 09:57:21 - 🚀  +10 → Streamer9 (989.28k points) - Reason: WATCH.
-12/03 09:58:12 - 🚀  +10 → Streamer3 (157.99k points) - Reason: WATCH.
-12/03 10:02:22 - 🚀  +10 → Streamer9 (989.29k points) - Reason: WATCH.
-12/03 10:02:22 - 🚀  +50 → Streamer9 (989.34k points) - Reason: CLAIM.
-12/03 10:03:11 - 🚀  +10 → Streamer3 (158k points) - Reason: WATCH.
-12/03 10:03:11 - 🚀  +50 → Streamer3 (158.05k points) - Reason: CLAIM.
-12/03 10:04:50 - 🎭  Joining raid from Streamer15 (364.78k points) to Streamer18!
-12/03 10:05:08 - 🚀  +250 → Streamer15 (365.03k points) - Reason: RAID.
-12/03 10:05:26 - 💬  Leave IRC Chat: Streamer15
-12/03 10:05:26 - 😴  Streamer15 (365.03k points) is Offline!
-12/03 10:07:22 - 🚀  +10 → Streamer9 (989.35k points) - Reason: WATCH.
-12/03 10:08:13 - 🚀  +10 → Streamer3 (158.06k points) - Reason: WATCH.
-12/03 10:10:26 - 🚀  +10 → Streamer9 (989.36k points) - Reason: WATCH.
-12/03 10:13:12 - 🚀  +10 → Streamer3 (158.07k points) - Reason: WATCH.
-12/03 10:17:22 - 🚀  +10 → Streamer9 (989.37k points) - Reason: WATCH.
-12/03 10:17:22 - 🚀  +50 → Streamer9 (989.42k points) - Reason: CLAIM.
-12/03 10:18:12 - 🚀  +10 → Streamer3 (158.08k points) - Reason: WATCH.
-12/03 10:18:12 - 🚀  +50 → Streamer3 (158.13k points) - Reason: CLAIM.
-12/03 10:22:22 - 🚀  +10 → Streamer9 (989.43k points) - Reason: WATCH.
-12/03 10:23:13 - 🚀  +10 → Streamer3 (158.14k points) - Reason: WATCH.
-12/03 10:27:22 - 🚀  +10 → Streamer9 (989.44k points) - Reason: WATCH.
-12/03 10:28:12 - 🚀  +10 → Streamer3 (158.15k points) - Reason: WATCH.
-12/03 10:32:21 - 🚀  +10 → Streamer9 (989.45k points) - Reason: WATCH.
-12/03 10:32:21 - 🚀  +50 → Streamer9 (989.5k points) - Reason: CLAIM.
-12/03 10:33:13 - 🚀  +10 → Streamer3 (158.16k points) - Reason: WATCH.
-12/03 10:33:13 - 🚀  +50 → Streamer3 (158.21k points) - Reason: CLAIM.
-12/03 10:37:22 - 🚀  +10 → Streamer9 (989.51k points) - Reason: WATCH.
-12/03 10:38:12 - 🚀  +10 → Streamer3 (158.22k points) - Reason: WATCH.
-12/03 10:42:22 - 🚀  +10 → Streamer9 (989.52k points) - Reason: WATCH.
-12/03 10:43:12 - 🚀  +10 → Streamer3 (158.23k points) - Reason: WATCH.
-12/03 10:43:29 - CTRL+C Detected! Please wait just a moment!
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer3
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer9
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer16
-12/03 10:43:29 - 💬  Leave IRC Chat: Streamer11
-
-
-
-12/03 10:43:38 - 🛑  Ending session: 'a0ae3a4d-2cf8-4573-bfg1-a310a060a930'
-12/03 10:43:38 - 📄  Logs file: /usr/src/app/logs/Streamer19.log
-12/03 10:43:38 - ⌛  Duration 1:24:46.543687
-12/03 10:43:38 - 💰  Streamer3 (158.23k points), Total Points Gained: 340
-                         CLAIM (4 times, 200 gained)
-                         WATCH (14 times, 140 gained)
-12/03 10:43:38 - 💰  Streamer9 (989.52k points), Total Points Gained: 340
-                         CLAIM (4 times, 200 gained)
-                         WATCH (14 times, 140 gained)
-12/03 10:43:38 - 💰  Streamer15 (365.03k points), Total Points Gained: 250
-                         RAID (1 times, 250 gained)
-```
-
-You can see in this example that the amount of points gained from start to end for each Streamer is consistent, along
-with the streamer usernames. Even the `Logs file` path is anonymised, keep this in mind since this should actually be
-in a file named with your real username.
-
-The `ConsistentAnonymiser` and `RandomAnonymiser` can optionally specify some configuration options for each type of
-anonymisation.
-
-**`channel_ids`**
-
-Can be set to `True` to enable anonymising channel ids, this includes your own user id (since users are also channels),
-as well as streamer channel ids. In addition, some Hermes WebSocket API ids include the channel id (Twitch may phase
-this out in future) so these also get anonymised. If `False` then channel ids will not be anonymised. Defaults to
-`True`.
-
-**`usernames`**
-
-Can be set to `True` to enable anonymising streamer usernames, this includes your own username. If `False` then 
-usernames will not be anonymised. Defaults to `True`.
-
-**`channel_points`**
-
-Can be set to `True` to enable anonymising streamer channel points. If `False` then channel points will not be
-anonymised. Defaults to `True`.
-
-**`strict`**
-
-If this is set to `True` then all web API responses will be redacted. This is useful because we cannot guarantee that
-text the miner didn't create doesn't contain data that should be anonymised. You can optionally set it to `False` to
-allow logging these responses. This can be useful if it's not possible to debug an issue without checking the response
-text, although it comes with more risk of leaking data that you might want anonymised.
-
-**`base_path`**
-
-This is the configuration option for filepath anonymisation. This is useful if you want to anonymise your local system
-user's name. You can set this to `True` to enable this feature, this is all you should need to do but advanced users may
-want to specify a `str` that represents the "base path" of files to be redacted. For example:
-
-```text
-If
-    `base_path` = "/home/username/miner"
-Then
-    "/home/username/miner/module_1/module_2/some_python_file.py"
-Becomes
-    "[PATH REDACTED]/module_1/module_2/some_python_file.py"
-```
-
-You can see how the `username` part of the filepath has been removed.
-
-This will apply to all paths logged as part of exception stack traces in `ERROR` logging.
-
-##### `ConsistentAnonymiser`
-
-This is the `Anonymiser` used when `anonymiser` is set to `True`, it will generate random values for each type of
-anonymised data and return the same random value each time that same data is requested. For example, say a Streamer with
-username `bingo` gets logged, the anonymiser may anonymise them as `Streamer5`. Each time the username for this streamer
-is logged, it will log `Streamer5`.
-
-In addition, when logging channel points only the initial value is randomised. As that channel gains/loses points the
-amount logged will reflect the change amount. For example, a channel has `500` points which gets randomised to `2000`
-points. The value you'll initially see logged will be `2000`. If they then gain `50` points you'll see `2050` points
-logged.
-
-```python3
-ConsistentAnonymiser(
-    channel_ids=True,
-    usernames=True,
-    channel_points=True,
-    strict=True,
-    base_path=True,
-    random_points_min=100,
-    random_points_max=1_000_000,
-    random_source=RandomSource(
-        random_int=random.randint,
-        random_uuid=generate_random_uuid,
-    ),
-)
-```
-
-`random_points_min` to `random_points_max` defines the range of possible values when generating the initial random
-channel points for a Streamer. In this example, channel points will be in the range `100` to `1_000_000`.
-
-`random_source` mostly exists for testing. It allows you to override the way randomness is generated. By default, it
-uses the built-in functions [`random.randint`](https://docs.python.org/3/library/random.html#random.randint) and
-[`uuid.v4`](https://docs.python.org/3/library/uuid.html#uuid.uuid4) to generate channel points and UUIDs.
-
-##### `Deanonymiser`
-
-This is the `Anonymiser` used when `anonymiser` is set to `False`. It does not alter information. `strict` is set to
-`False` for this anonymiser, but you can set it to `True` if you want that behaviour.
-
-```python3
-Deanonymiser(
-    strict=False
-)
-```
-
-##### `RandomAnonymiser`
-
-This anonymises information in a more random way. Unlike `ConsistentAnonymiser`, each value is randomly generated each
-time it is logged. For example, a Streamer's username might be `Streamer5` the first time it's logged and `Streamer100`
-the next time.
-
-```python3
-RandomAnonymiser(
-    channel_ids=True,
-    usernames=True,
-    channel_points=True,
-    strict=True,
-    base_path=True,
-    random_source=RandomSource(
-        random_int=random.randint,
-        random_uuid=generate_random_uuid,
-    )
-)
-```
-
-`strict` is `True` by default for this anonymiser, but you can set it to `False` if you want that behaviour.
-
-Configuration for the `RandomSource` is the same as `ConsistentAnonymiser`.
+See [here](/docs/guides/logger-settings.md) for more information.
 
 ### `streamer_settings`
 
-This is the default settings to use for each streamer.
-
-#### `make_predictions`
-
-Set to `True` if you want to make predictions using your channel points.
-
-#### `follow_raid`
-
-Set to `True` if you want to follow raids for this streamer and receive the raid bonus points.
-
-#### `claim_drops`
-
-Set to `True` if you want to claim Drops for Campaigns this streamer is in. Will claim all drops for which you've met
-the watch time requirements once every 15 minutes.
-
-#### `claim_moments`
-
-If set to `True`, [moments](https://help.twitch.tv/s/article/moments) will be claimed when available.
-
-#### `watch_streak`
-
-If set to `True` and `Priority.STREAK` is used, the miner will attempt to watch long enough to get the Watch Streak for
-this streamer.
-
-#### `community_goals`
-
-If `True`, the miner will contribute the maximum channel points per stream to the streamer's community challenge goals.
-
-#### `chat`
-
-Join the streamer's IRC chat, can be set to one of these `ChatPresence`:
-
-| Name      | Description                                                     |
-|-----------|-----------------------------------------------------------------|
-| `ALWAYS`  | Always attempt to join this streamer's chat.                    |
-| `NEVER`   | Never attempt to join this streamer's chat.                     |
-| `ONLINE`  | Only attempt to join this streamer's chat when they're online.  |
-| `OFFLINE` | Only attempt to join this streamer's chat when they're offline. |
-
-#### `simulate_hls_playback`
-
-This enables what was previously called M3U8 playback, essentially we simulate "watching" by making a HEAD request to 
-the latest stream segment. This does not result in the miner downloading **any** stream video. In the process, we also
-get a `PlaybackAccessToken` from Twitch. This may result in better watch simulation, users have reported getting more
-gift subs with this enabled.
-
-This can be set to either `False`, in which case HLS playback is disabled, or an `HLSSettings` object which allows you
-to set the number of seconds before expiry to refresh the `PlaybackAccessToken`:
-
-```python
-HLSSettings(
-    refresh_before=5 * 60
-)
-```
-
-In this example, I've set the number of seconds to `5 * 60` or 5 minutes. This will cause the token to get refreshed
-once we get to 5 minutes before the token expires. Tokens typically last for 20 minutes. The default is 120 seconds (2
-minutes).
-
-#### `weekly_rewards`
-
-Enables automatic progression of Weekly Rewards for this streamer. This includes both selecting them when using
-`Priority.WEEKLY_REWARDS` and automatic progression when the streamer is offline. Defaults to `True`.
-
-#### 'points_limit'
-
-Set this to a whole positive number (e.g. `1000`, `50000`) to enable a limit on the amount of points that the miner will
-attempt to get for this Streamer. This only applies to `Priority.ORDER`, `Priority.POINTS_ASCENDING`,
-`Priority.POINTS_DESCENDING`, and `Priority.SUBSCRIBED`. Set this to `None` or `False` to disable.
-
-
-#### `bet`
-
-> [!NOTE]
-> Terminology:
-> 
-> - "Prediction Event" refers to the event on which you can make predictions.
-> - "Outcome" refers to one of the options you can select in a prediction event.
-> - "Prediction" refers to an individual wager on an outcome in a prediction event.
-> - "Decision" refers to the outcome miner has decided to pick.
-
-Set this to a `BetStrategy` to configure how the miner makes predictions for prediction events for this streamer.
-
-| Name               | Type              | Default          | Description                                                                                                                                                     |
-|--------------------|-------------------|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `strategy`         | `Strategy`        | `Strategy.SMART` | See [here](#strategy) for more information.                                                                                                                     |
-| `percentage`       | `int`             | `5`              | The maximum percentage of your channel points to wager in a given prediction.                                                                                   |
-| `percentage_gap`   | `int`             | `20`             | In the `SMART` strategy, if the difference between outcomes 1 and 2 is less than this `ODDS` will be used, otherwise `TOTAL_USERS` will be used.                |
-| `max_points`       | `int`             | `50000`          | The maximum number of your channel points to wager in a given prediction.                                                                                       |
-| `minimum_points`   | `int`             | `0`              | If you have fewer than this many channel points, predictions will not be made.                                                                                  |
-| `stealth_mode`     | `bool`            | `False`          | If `True` always wagers fewer than the highest number of points on the decided outcome. This avoids your username being displayed in the web client if you win. |
-| `filter_condition` | `FilterCondition` | `None`           | See [here](#filter_condition) for more information.                                                                                                             |
-| `delay`            | `float`           | `6`              | Relates to `delay_mode`, expressed as a number of seconds.                                                                                                      |
-| `delay_mode`       | `DelayMode`       | `FROM_END`       | See [here](#delay_mode) for more information.                                                                                                                   |
-
-##### Example
-
-- If you want to make a prediction ONLY if the total of predictors in the event is greater than 200:
-  - `FilterCondition(by=OutcomeKeys.TOTAL_USERS, where=Condition.GT, value=200)`
-- If you want to make a prediction ONLY if the winning odds of your decision is greater than or equal to 1.3:
-  - `FilterCondition(by=OutcomeKeys.ODDS, where=Condition.GTE, value=1.3)`
-- If you want to make a prediction ONLY if the prediction with the most points is lower than 2000:
-  - `FilterCondition(by=OutcomeKeys.TOP_POINTS, where=Condition.LT, value=2000)`
-
-##### `strategy`
-
-| Name          | Description                                                                                               |
-|---------------|-----------------------------------------------------------------------------------------------------------|
-| `MOST_VOTED`  | Makes predictions on the outcome with the most number of individual predictions.                          |
-| `HIGH_ODDS`   | Makes predictions on the outcome with the highest odds (lowest percentage).                               |
-| `PERCENTAGE`  | Makes predictions on the outcome with the highest percentage (lowest odds).                               |
-| `SMART_MONEY` | Makes predictions on the outcome with the highest number of points in an individual predciton.            |
-| `SMART`       | If more than `percentage_gap` choose a given outcome then choose that outcome. Otherwise use `HIGH_ODDS`. |
-| `NUMBER_[N]`  | Where `[N]` is the nth outcome in the list. You can pick any outcome from 1 to 8.                         |
-
-##### `filter_condition`
-
-A `FilterCondition` takes the following arguments:
-
-| Name    | Type          | Description                                                                                               |
-|---------|---------------|-----------------------------------------------------------------------------------------------------------|
-| `by`    | `OutcomeKeys` | See [here](#by) for more information.                                                                     |
-| `where` | `Condition`   | `GT` (greater than), `LT` (less than), `GTE` (greater than or equal to), or `LTE`(less than or equal to). |
-| `value` | `float`       | The number in the condition.                                                                              |
-
-For example:
-
-```python3
-FilterCondition(
-    by=OutcomeKeys.TOTAL_USERS,
-    where=Condition.LTE,
-    value=800,
-)
-```
-
-Skips prediction events where the total number of users that have made a prediction is less than or equal to 800.
-
-###### `by`
-
-An `OutcomeKeys` can be one of the following:
-
-| Name               | Outcome/Decision/Total | Description                                                                                                                     |
-|--------------------|------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| `PERCENTAGE_USERS` | Outcome                | The percentage of number of users who have made a prediction on this outcome.                                                   |
-| `ODDS_PERCENTAGE`  | Outcome                | The percentage of points wagered on this outcome expressed as a percentage, i.e. 50% of points would be `50` rather than `0.5`. |
-| `ODDS`             | Outcome                | The value of the odds of this outcome.                                                                                          |
-| `DECISION_USERS`   | Decision               | The total number of users that have placed a prediction on the decided outcome.                                                 |
-| `DECISION_POINTS`  | Decision               | The total number of points that have been placed on the decided outcome.                                                        |
-| `TOP_POINTS`       | Outcome                | The outcome with the most total points wagered.                                                                                 |
-| `TOTAL_USERS`      | Total                  | The total number of users that have placed a wager in this prediction event.                                                    |
-| `TOTAL_POINTS`     | Total                  | The total number of points that have been placed on this prediction event.                                                      |
-
-- "Outcome" means a specific outcome in the prediction
-- "Decision" means the outcome that the miner has decided to choose.
-- "Total" means the total of the relevant thing in the prediction event, rather than any specific outcome.
-
-###### `delay_mode`
-
-A `DelayMode` can be one of the following:
-
-| Name         | Description                                                       |
-|--------------|-------------------------------------------------------------------|
-| `FROM_START` | Waits `delay` seconds the start of the event.                     |
-| `FROM_END`   | Waits until `delay` seconds until the end of the event.           |
-| `PERCENTAGE` | Waits `delay`% of the event duration from the start of the event. |
+See [here](/docs/guides/streamer-settings.md) for more information.
 
 ### `gql`
 
@@ -946,28 +377,6 @@ gql=AttemptStrategy(
 ```
 In this case the miner will make up 5 attempts at each request with a 2-second delay between each request.
 
-```python
-gql=GQLFactory(
-   attempt_strategy=AttemptStrategy(
-      attempts=3,
-      attempt_interval_seconds=1
-   ),
-   parser=Parser(),
-   post_request
-)
-```
-> [!IMPORTANT]
-> This is intended for advanced users only.
-
-You can completely override the GQL implementation by providing
-a [GQLFactory](/TwitchChannelPointsMiner/classes/gql/Integration.py) instance. The base usage allows you to
-override the `attempt_strategy`, `parser`, and `post_request`. `attempt_strategy` has already been covered, but it
-allows you to define how the GQL integration makes attempts at each request. `parser` is the class responsible for
-parsing the json returned from the GQL API into usable types. `post_request` is the function that can make web requests
-to the API. We don't expect most users to need to do more than override the `attempt_strategy`, which is why we allow
-passing that directly to the value of `gql`. Advanced users can also override the factory type for even more
-customization, perhaps returning a custom subclass of `GQL` that overrides the original behaviour entirely.
-
 ### `weekly_rewards`
 
 Defines how the miner attempts to make progress on [Weekly Rewards](https://help.twitch.tv/s/article/weekly-rewards).
@@ -980,10 +389,10 @@ hour, meanwhile other Streamers can be attempted. All of these values can be cha
 
 ```python
 weekly_rewards=WeeklyRewardsProgressor.BasicConfiguration(
-  max_concurrent_watch=2,
-  max_seconds_clips=30,
-  max_seconds_vods=8*60,
-  loop_interval_seconds=20,
+  max_concurrent=2,
+  max_clip_watch_seconds=30,
+  max_vod_watch_seconds=8*60,
+  interval_seconds=20,
   max_failures_per_streamer=1,
   failure_cooldown_seconds=60*60,
 )
@@ -1008,20 +417,426 @@ You may also set it to `False` which will disable automatic Weekly Rewards progr
 weekly_rewards=False,
 ```
 
-#### `WeeklyRewardsProgressorFactory`
+### `watch_streak_recovery`
+
+This defines how the miner attempts to automatically recover Watch Streaks. Twitch allows recovery of missed streaks via
+Clip or VOD watching, so the miner implements that behaviour. Because both this and [Weekly Rewards](#weekly_rewards)
+work via Clip and VOD watching, the configuration format is the same for both:
+
+```python
+watch_streak_recovery=WatchStreakRecovery.BasicConfiguration(
+  max_concurrent=2,
+  max_clip_watch_seconds=30,
+  max_vod_watch_seconds=8*60,
+  interval_seconds=20,
+  max_failures_per_streamer=1,
+  failure_cooldown_seconds=60*60,
+)
+```
+
+### `event_manager`
+
+This defines the configuration options for the miner's Event Manager. During operation, the miner will emit various
+Events. This includes things like Streamers going online/offline, prediction start and end, and drops claiming. The
+Event Manager handles those Events and passes them onto the [Handlers](#handlers) (defined below).
+
+```python
+EventManagerConfiguration(
+    console=False,
+    queue=None,
+    events=Events.all(),
+)
+```
+
+This is the default configuration, provided when the value is set to `True`. Here console output is disabled by default,
+we expect most users to want to use the console for logging rather than Events. The `queue` configuration is `None`
+which tells us to use the default values for that. And `events` is `Events.all()` which doesn't really matter because
+the console is disabled.
+
+You may also set `console` to `True` which sets up a priority Console Handler. This is useful because it allows the
+Handler to bypass the queue, Events will be output to the console almost immediately regardless of your queue settings.
+Also, you may set the events you want to output to the console via `events`, as with other Handlers, this may be a union
+of `Events` or a list, e.g.:
+
+```python
+Events.PREDICTIONS | Events.STREAMER_ONLINE | Events.DROP_CLAIM
+# is equivalent to
+[Events.PREDICTIONS, Events.STREAMER_ONLINE, Events.DROP_CLAIM]
+```
+
+You can also set `event_manager` to `None`, in this case the Event Manager is disabled and no Events will be passed to Handlers. 
+
+### `handlers`
+
+This is an optional list of Event Handlers that can respond to Events emitted by the miner. The common use case for this
+is providing data to an Event Hook like Discord or Telegram:
+
+> [!NOTE]
+> This may seem familiar, the old log Hooks have been reimplemented as Handlers with similar syntax
+
+```python
+handlers=[
+    discord("https://example.com/path?token=some_token"),
+    telegram(123456789, "some_token"),
+]
+```
+
+In this example, a Discord and Telegram handler have been added, which send miner Events to Discord and Telegram.
+
+We provide these convenience functions for each of the Event Handlers: `telegram`, `discord`, `matrix`, `pushover`,
+`gotify`, and `webhook`. They all have some unique parameters, however, they can all be provided the following to further
+customise functionality:
+
+| Name   | Type   | Default   | Description |
+|---|---|---|---|
+| `name`   | `str`  | N/A  | Used for logging errors when we're unable to send the Event data. |
+| `webhook_api_url` | `str`  | N/A  | This is the URL that the Event data will be sent to.  |
+| `transformer`  | `EventTransformer[dict[str, str]]` | N/A  | This allows you to completely override how Event data is transformed into web request data. |
+| `events`  | `list[Events]` or `Events` or `None`  | `Events.default()` (when `None`)  | This defines the Events that this Hanlder handles.  |
+| `use_json`  | `bool`  | `False`  | If True, the data will be sent as JSON, otherwise plain data will be sent.  |
+| `attempt_strategy`  | `AttemptStrategy` or `None`  | `AttemptStrategy(attempt_interval_seconds=2, attempts=3)` (when `None`) | The strategy to use when making web requests, 429 (rate limit) responses will be retried automatically.  |
+| `timeout`  | `float` or `tuple[float, float]` or `None` | `(5, 10)` (when `None`)  | This defines the connect and request timeouts for each web request in seconds.  |
+| `post_request`  | `PostRequest` or `None`  | `requests.post` (when `None`)  | Allows defining a custom post request method, useful when testing.  |
+
+Of these, `webhook_api_url` is most frequently required (but not always). The rest are there for more advanced users who
+want specific integration behaviour.
+
+#### `telegram`
+
+One of the Event Handlers, allows events to be sent to Telegram
+using [sendMessage](https://core.telegram.org/bots/api#sendmessage).
+
+| Name                    | Type           | Description                                                                     |
+|-------------------------|----------------|---------------------------------------------------------------------------------|
+| `chat_id`               | `int`          | The unique identifier of the target chat of the username of the target channel. |
+| `token`                 | `str`          | The token for your Telegram bot.                                                |
+| `disable_notifciations` | `bool`         | `True` to trigger Telegram notifications without sound.                         |
+
+Note that `webhook_api_url` is not used here as telegram has a static URL. 
+
+#### `discord`
+
+One of the Event Handlers, allows events to be sent to Discord using
+a [Webhook](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks).
+
+| Name         | Type            | Default                             | Description                                                                                            |
+|--------------|-----------------|-------------------------------------|--------------------------------------------------------------------------------------------------------|
+| `username`   | `str` or `None` | `"Twitch Channel Points Miner"`     | This is the username that shows up in Discord. Set to `None` to use the app default.                   |
+| `avatar_url` | `str` or `None` | `"https://i.imgur.com/X9fEkhT.png"` | This is the image that shows up next to the username in Discord. Set to `None` to use the app default. |
+| `use_embeds` | `bool`          | `True`                              | Allows sending some supported messages as Discord Embeds.                                              |
+
+#### `webhook`
+
+One of the Event Handlers, allows events to be sent to a generic Webhook in a set format.
+
+| Name       | Type           | Description                                   |
+|------------|----------------|-----------------------------------------------|
+| `method`   | `str`          | The HTTP method to use when sending data.     |
+
+#### `matrix`
+
+One of the `EventHandler` types, allows events to be sent to a [Matrix](https://matrix.org/docs/chat_basics/matrix-for-im/)
+server.
+
+| Name         | Type          | Description                                            |
+|--------------|---------------|--------------------------------------------------------|
+| `username`   | `str`         | Your Matrix username.                                  |
+| `password`   | `str`         | Your Matrix password.                                  |
+| `homeserver` | `str`         | The URL of the Matrix server (e.g. `"matrix.org"`      |
+| `room_id`    | `str`         | The id of the room to which you want to send `Events`. |
+
+Note that `webhook_api_url` is not used here as Matrix URLs have a set format.
+
+#### `pushover`
+
+One of the Event Handlers, allows events to be sent to a [Pushover](https://pushover.net/api) server.
+
+| Name       | Type            | Description                                                                                  |
+|------------|-----------------|----------------------------------------------------------------------------------------------|
+| `userkey`  | `str`           | [Log in](https://pushover.net/) and the user token is on the main page.                      |
+| `token`    | `str`           | Create a application on the website, and use the token shown in your application.            |
+| `priority` | `int`           | The [priority](https://pushover.net/api#priority) of the messages.                           |
+| `sound`    | `str`           | The [sound](https://pushover.net/api#sounds) to use for Pushover notifications.              |
+| `title`    | `str` or `None` | The message title in Pushover, defaults to `"Twitch Channel Points Miner"` if set to `None`. |
+
+#### `gotify`
+
+One of the Event Handlers, allows events to be sent to a [Gotify](https://gotify.net/docs/index) server.
+
+| Name       | Type          | Description                                                                                                       |
+|------------|---------------|-------------------------------------------------------------------------------------------------------------------|
+| `priority` | `int`         | The priority of the message.                                                                                      |
+
+#### Custom Hooks
 
 > [!IMPORTANT]
-> This is intended for advanced users only.
+> The following is intended for advanced users only.
 
-Advanced users may opt to completely override behaviour by providing a custom `WeeklyRewardsProgressorFactory`. This
-defines a `create` method that the miner uses to produce a `WeeklyRewardsProgressor` instance. By default, it'll use a
-`BasicWeeklyRewardsProgressorFactory` which produces a `BasicWeeklyRewardsProgressor`. This is useful if you have a
-different method for progressing weekly rewards, an optimisation, or if you need better hooks into the process. For
-example, this is how the default behaviour could be defined:
+You may also implement your own Handler, this can either implement `EventHandler` or `EventHandlerFactory`:
+
+```python
+class CustomEventHandler(EventHandler):
+    def handles(self) -> Events:
+        return Events.STREAM_UP | Events.STREAM_DOWN
+    
+    def handle(self, event: Event):
+        print(event)
+```
+
+In this example, we're just printing and `STREAM_UP/DOWN` Events, but you could also implement this to integrate with a
+new 3rd party API.
+
+```python
+class CustomDBHandler(EventHandler):
+    def __init__(self, db_service, transformer):
+        self.service = db_service
+    
+    def handles(self):
+        return Events.all()
+    
+    def handle(self, event: Event):
+        self.service.log_event(self.transformer.transform(event))
+
+# assume we've defined a custom database service
+
+def custom_db_handler(db_service) -> EventHandlerFactory:
+    # Do some setup with the arguments
+    db_service.connect()
+    db_service.authenticate()
+    ...
+
+    def factory(        
+        logger_settings: LoggerSettings,
+        background_tasks: list[Thread],
+        default_transformer: EventTransformer[str],
+        account_name: str,
+    ) -> EventHandler:
+        return CustomDBHandler(
+            db_Service,
+            default_transformer
+        )
+    return factory
+```
+
+In this example, we want access to the miner's default event transformer so we've created a factory that will be
+provided with it during setup. A custom database service exposes a `log_event` method which allows storing the Event
+text in a database table somewhere. We then provide a factory function that takes the service and the transformer and
+passes them to a new `CustomDBHandler` object.
+
+### `factories`
+
+> [!IMPORTANT]
+> This is intended for advanced users only. The vast majority of users should never need to use this.
+
+This is a dependency injection container for the miner application, it controls setup for most of the miner's functional
+units. It can be constructed as such:
+
+```python
+factories=Factories()
+```
+Which will produce a `Factories` containing all default values. You can also provide a custom factory for each argument:
+|Argument Name   | Type   |
+|-----------------------|-----------------------------|
+| `streamer_selector`   | `StreamerSelectorFactory`   |
+| `clip_vod_watcher_runner` | `SlottedTaskRunnerFactory`|  
+| `gql`  | `GQLFactory`  |
+| `ws_pool`  | `WebSocketPoolFactory`  |
+| `weekly_rewards`  | `WeeklyRewardsProgressorFactory`  |
+| `watch_streak_recovery`  | `WatchStreakRecoveryFactory`  |
+| `default_event_transformer`| `EventTransformerFactory[str]`|
+| `event_manager_runner`| `SlottedTaskRunnerFactory`|
+| `event_manager`| `EventManagerFactory`|
+| `chat_manager`| `ChatManagerFactory`|
+
+#### `streamer_selector`
+
+The miner functionality provided by this factory is the root `StreamerSelector`, this controls which Streams are watched.
+This is a `StreamerSelectorFactory` which takes a streamer selector configuration and produces a root streamer selector.
+The default behaviour is to take the list of provided configuration and convert it into the related Selector, for example:
+
+```python
+factory.create(Priority.DROPS)
+# produces
+PrioritySelector([Priority.DROPS])
+```
+```python
+factory.create([watch_streak(), subscribed(), order()])
+# produces
+NestedSelector(
+    [
+        FilterSortSelector(
+            reason=Priority.WATCH_SESSION,
+            _filter=in_watch_session,
+        ),
+        FilterSortSelector(
+            reason=Priority.SUBSCRIBED,
+            _filter=is_subscribed,
+            sorting=[sort_multiplier_descending],
+        ),
+        FilterSortSelector(
+            reason=Priority.ORDER,
+            _filter=match_order,
+        ),
+        
+    ]
+)
+```
+The end result is a selector that works according to the configuration rules defined [above](#priority).
+
+
+#### `clip_vod_watcher_runner`
+
+Long-running processes, like Clip/VOD watchers, need a way to ensure they complete in a given amount of time and that
+all exit conditions are properly handled. We implement this using `SlottedTaskRunner` which can process tasks
+concurrently in a given number of slots.
+
+The Weekly Rewards and Watch Streak miner features require a runner to be able to perform their functions. So their
+factories rely on this one to produce the underlying runners.
+
+The default runner creates a new `SlottedTaskRunnerThread` which runs tasks in a background Thread. At most 3 tasks can
+be run simultaneously with a 20-second interval between checking tasks.
+
+#### `gql`
+
+This produces the Twitch GQL (Graph Query Language) integration instance, required for making requests to their GQL API.
+It can take a `Parser` which handles parsing the API responses from JSON and transforming them into usable, well-defined
+Python objects.
+It can also take a `PostRequest` function, which handles doing the actual requests. This is most useful for testing when
+we don't want to communicate with the actual Twitch API.
+For example:
+
+```python
+gql=GQLFactory()
+```
+
+Produces the default factory which creates an integration with a default parser and API endpoint.
+
+```python
+gql=GQLFactory(
+    parser=CustomParser(),
+    post_request=custom_post_request,
+)
+```
+
+You might implement a `CustomParser` that implements JSON parsing differently, perhaps expanding the error states checked.
+You might also implement a `custom_post_request` that implements making the API call differently, perhaps with custom retry rules.
+
+```python
+gql=CustomGQLFactory()
+```
+
+You might implement a `CustomGQLFactory` that implements the `create` method to produce an integration that works in a
+different way.
+
+#### `ws_pool`
+
+This provides the miner with a WebSocket Pool which manages its connections to the chosen Twitch WebSocket API. Its
+`create` method takes the `use_hermes` configuration value and creates a Pool, one of either the legacy PubSub Pool
+or the newer Hermes pool. As with the other factories, you can implement this to provide greater control over the
+relevant features.
+
+#### `weekly_rewards`
+
+This provides the miner with a `WeeklyRewardsProgressor` for use when the user wants to automatically progress Weekly
+Rewards via Clip and VOD watching. This defines a `create` method that the miner uses to produce a
+`WeeklyRewardsProgressor` instance. By default, it'll use a `BasicWeeklyRewardsProgressorFactory` which produces a
+`BasicWeeklyRewardsProgressor`. This is useful if you have a different method for progressing weekly rewards, an
+optimisation, or if you need better hooks into the process. For example, this is how the default behaviour could be
+defined:
 
 ```python
 weekly_rewards=WeeklyRewards.BasicWeeklyRewardsProgressorFactory()
 ```
+
+This creates a progressor with a default configuration, and a task runner produced by the given runner factory.
+
+#### `watch_streak_recovery`
+
+This provides the miner with a `WatchStreakRecovery` for use when the user wants to automatically recover missing Watch
+Streaks via Clip and VOD watching. This is very similar to the `weekly_rewards` object, under the hood they're both
+implemented in a similar way, mainly because the Twitch requirements for both are nearly identical.
+
+```python
+watch_streak_recovery=WatchStreakRecovery.BasicWatchStreakRecoveryFactory()
+```
+
+#### `default_event_transformer`
+
+This is used by the Events system to produce human-readable strings, similar to the ones you see in the logs. This is
+for consumption by Event Hooks (Discord, Telegram, etc...).
+
+```python
+default_event_transformer=DefaultEventTransformerFactory()
+```
+
+This produces a factory that creates a transformer that takes into account various settings from your `LoggerSettings`
+configuration. The format of messages will be:
+
+```text
+{emoji} {event name}
+{optional "Account": account_name}
+{message}
+```
+where
+
+`emoji` is an emoji representative of the event or the miner's default emoji.
+
+`optional "Account: " account_name` is the user's account name prefixed by "Account: " or nothing
+
+`message` is a human-readable string representation of the event.
+
+The emojis are decided by `EmojiTransformer`. The account name is decided by the value of `LoggerSettings.username`. The
+message is provided by `TranslatorTransformer`, which relies on the `LoggerSettings.translator` to produce text in the
+user's locale (`en` by default).
+
+#### `event_manager_runner`
+
+This is the task runner that processes background tasks for the Event Manager. By default, the runner uses the provided
+event manager config's `max_concurrent` and `runner_loop_interval_seconds` to decide how many and how often to process
+events.
+
+#### `event_manager`
+
+This produces the Event Manager for the miner, which is used to process events emitted by the miner. By default, we use
+`DefaultEventManagerFactory` which uses the user's configuration to produce a Manager:
+
+```python
+event_manager=DefaultEventManagerFactory()
+```
+
+If no configuration is provided, the Event Manager will be disabled (the miner will produce no Events).
+If the configuration is just `True`, the default configuration will be used. This is:
+
+```python
+EventManagerConfiguration(
+    console=False,
+    queue=None,
+    events=Events.all(),
+)
+```
+
+Additionally, when `queue` here is `None`, we use the default queue configuration. This is:
+
+```python
+QueueConfiguration(
+    task_timeout_seconds=60,
+    loop_sleep_seconds=0.5,
+    max_concurrent=10,
+    runner_loop_interval_seconds=0.5,
+)
+```
+
+This creates a `QueueManager` that creates background tasks for emitted Events, one for each subscribed Handler. The
+tasks can run for up to 60 seconds before the manager considers them failed. It can process up to 10 tasks simultaneously.
+
+`events` is only used if `console` is enabled. It determines which Events will be output to the console.
+
+#### `chat_manager`
+
+This produces the `ChatManager` that the miner uses when connecting to IRC. By default, this manager will periodically
+check each Streamer's online status and use their `ChatPresence` to determine whether IRC should be connected. A custom
+chat manager could be provided here to connect to IRC or in a custom way or otherwise provide a unique way to manage the
+connections.
 
 ## `TwitchChannelPointsMiner.mine`
 
