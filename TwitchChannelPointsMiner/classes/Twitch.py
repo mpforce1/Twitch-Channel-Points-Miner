@@ -722,7 +722,7 @@ class Twitch(object):
         return lowest_quality_playlist_url
 
     def simulate_hls_playback(
-        self, streamer: Streamer, force_refresh_token: bool
+        self, streamer: Streamer, force_refresh_token: bool, request_all_segments: bool
     ) -> bool:
         """
         Simulates the HLS playback for the current Stream for the given Streamer by making a HEAD request to the latest
@@ -730,14 +730,17 @@ class Twitch(object):
 
         :param streamer: The Streamer for which to simulate playback.
         :param force_refresh_token: If True, the playback token will be refreshed.
+        :param request_all_segments: If True, every segment found in the playlist will be requested.
         :return: True if playback succeeded, False otherwise.
         """
         # Twitch serves Streams via HLS which is based on M3U8 playlists. To "play back" a part of a stream you can:
         # 1. Make a request to the "usher" URL which returns the Master Playlist
         # 2. Take the last URL from the Master Playlist which should be the Lowest Quality Stream Playlist
         # 3. Make a request to the Lowest Quality Stream Playlist URL which returns the Segment Playlist
-        # 4. Take the last URL from the Segment Playlist which should be the URL of the lastest Stream Segment
-        # 5. Make a HEAD request to the Stream Segment URL
+        # 4. Either:
+        #    a. Take the last URL from the Segment Playlist which should be the URL of the lastest Stream Segment
+        #    b. or take every segment URL
+        # 5. Make a HEAD request to the Stream Segment URL(s)
         # Steps 1 and 2 should only need to be done once per Stream. The rest must be done once per play back attempt
         # because the contents of the Lowest Quality Stream Playlist changes at least every 2 seconds.
 
@@ -769,34 +772,71 @@ class Twitch(object):
                 )
             )
             return False
-        stream_playlist_text = stream_playlist_response.text
+        # The file format has "#EXTINF:..." on each line that precedes a segment
+        stream_playlist_text = stream_playlist_response.text.split("\n")
+        stream_segment_urls = []
+        if request_all_segments:
+            logger.info(f"Requesting all stream segments for {streamer}")
+            line_index = 0
+            while line_index < len(stream_playlist_text):
+                if stream_playlist_text[line_index].startswith("#EXTINF:"):
+                    line_index += 1
+                    stream_segment_url = stream_playlist_text[line_index].strip()
+                    if not validators.url(stream_segment_url):
+                        logger.debug(
+                            f"Unable to parse stream segment URL from stream playlist, URL: {stream_segment_url}"
+                        )
+                        self.event_manager.manage(
+                            Error(
+                                context="Twitch API",
+                                message=f"Unable to parse stream segment URL from stream playlist, URL: {stream_segment_url}",
+                                error=None,
+                            )
+                        )
+                        return False
+                    stream_segment_urls.append(stream_segment_url)
+                line_index += 1
+        else:
+            logger.info(f"Requesting last stream segment for {streamer}")
+            # Search from the end for the last segment
+            line_index = len(stream_playlist_text) - 1
+            while line_index >= 0:
+                if stream_playlist_text[line_index].startswith("#EXTINF:"):
+                    stream_segment_url = stream_playlist_text[line_index + 1].strip()
+                    if not validators.url(stream_segment_url):
+                        logger.debug(
+                            f"Unable to parse latest segment URL from stream playlist, URL: {stream_segment_url}"
+                        )
+                        self.event_manager.manage(
+                            Error(
+                                context="Twitch API",
+                                message=f"Unable to parse latest segment URL from stream playlist, URL: {stream_segment_url}",
+                                error=None,
+                            )
+                        )
+                        return False
+                    stream_segment_urls = [stream_segment_url]
+                    break
+                line_index -= 1
 
-        # Just take the last line, which should be the URL for the latest segment
-        stream_segment_url = stream_playlist_text.split("\n")[-2]
-        if not validators.url(stream_segment_url):
+        for stream_segment_url in stream_segment_urls:
+            if stream_segment_url in streamer.stream.watched_segments:
+                continue
+            # Perform a HEAD request to simulate watching the stream segment
+            logger.debug(f"Sending stream segment request for {streamer}")
+            stream_segment_response = requests.head(
+                stream_segment_url,
+                headers={"User-Agent": self.client_session.user_agent},
+                timeout=CLIENT_WATCH_SECONDS,
+            )
             logger.debug(
-                f"Unable to parse latest segment URL from stream playlist, URL: {stream_segment_url}"
+                f"Sent stream segment request for {streamer}, Status: {stream_segment_response.status_code}"
             )
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Unable to parse latest segment URL from stream playlist, URL: {stream_segment_url}",
-                    error=None,
-                )
-            )
-            return False
-
-        # Perform a HEAD request to simulate watching the stream segment
-        logger.debug(f"Sending stream segment request for {streamer}")
-        stream_segment_response = requests.head(
-            stream_segment_url,
-            headers={"User-Agent": self.client_session.user_agent},
-            timeout=CLIENT_WATCH_SECONDS,
-        )
-        logger.debug(
-            f"Sent stream segment request for {streamer}, Status: {stream_segment_response.status_code}"
-        )
-        return stream_segment_response.status_code == 200
+            if stream_segment_response.status_code != 200:
+                logger.info(f"Unable to request segment for {streamer}: status {stream_segment_response.status_code}")
+                return False
+            streamer.stream.watched_segments.append(stream_segment_url)
+        return True
 
     def send_spade_payload(self, streamer: Streamer, payload: list, name: str):
         """
@@ -925,6 +965,9 @@ class Twitch(object):
                             and not self.simulate_hls_playback(
                                 streamer,
                                 streamer.channel_id not in watched_previous_iteration,
+                                # TODO add setting to disable requesting all segments
+                                #streamer.any_campaign_has_progressable_drop()
+                                True
                             )
                         ):
                             continue

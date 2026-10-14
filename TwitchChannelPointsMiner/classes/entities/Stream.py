@@ -1,3 +1,4 @@
+from collections import deque
 import json
 import logging
 import time
@@ -43,6 +44,7 @@ class Stream(object):
         "__minute_watched_timestamp",
         "created_at",
         "watch_session_state",
+        "watched_segments",
     ]
 
     def __init__(self):
@@ -71,6 +73,8 @@ class Stream(object):
         # Start as None as we've yet to begin a watch session
         self.watch_session_state: datetime | None = None
         """The start time of the current watch session or None if we haven't started a session since the last WATCH."""
+
+        self.watched_segments: deque[str] = deque(maxlen=256)
 
         self.init_watch_streak()
 
