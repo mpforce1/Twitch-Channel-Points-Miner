@@ -14,11 +14,10 @@ class Telegram(LogAttributeValidatingEventHook):
         super().__init__(events, "skip_telegram")
         self.chat_id = chat_id
         self.telegram_api = f"https://api.telegram.org/bot{token}/sendMessage"
-        self.events = [str(e) for e in events]
         self.disable_notification = disable_notification
 
     def send(self, message: str, event: Events) -> None:
-        if str(event) in self.events:
+        if event in self.events:
             requests.post(
                 url=self.telegram_api,
                 data={
