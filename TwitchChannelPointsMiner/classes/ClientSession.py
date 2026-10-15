@@ -3,6 +3,8 @@ import string
 import uuid
 from secrets import choice
 
+import requests
+
 from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
 from TwitchChannelPointsMiner.constants import CLIENT_VERSION
 
@@ -16,6 +18,7 @@ class ClientSession:
         self,
         login: TwitchLogin,
         user_agent: str,
+        session: requests.Session,
         version: str | None = None,
         device_id: str | None = None,
         session_id: str | None = None,
@@ -23,6 +26,7 @@ class ClientSession:
     ):
         self.login = login
         self.user_agent = user_agent
+        self.session = session
         self.version: str = version if version is not None else CLIENT_VERSION
         self.version_outdated = version_outdated
         self.device_id = (
@@ -33,3 +37,5 @@ class ClientSession:
             )
         )
         self.session_id = session_id if session_id is not None else str(uuid.uuid4())
+        # Add the user agent to the session
+        self.session.headers.update({"User-Agent": self.user_agent})

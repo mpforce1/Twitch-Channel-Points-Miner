@@ -11,7 +11,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Tuple
 
 import requests
 import validators
@@ -82,6 +82,7 @@ class Twitch(object):
         "cookies_file",
         "running",
         "client_session",
+        "request_timeout",
         "gql",
         "twilight_build_id_pattern",
     ]
@@ -92,6 +93,7 @@ class Twitch(object):
         username: str,
         client_session: ClientSession,
         gql: GQL,
+        request_timeout: Tuple[float, float] = (3.05, CLIENT_WATCH_SECONDS)
     ):
         self.event_manager = event_manager
         cookies_path = os.path.join(Path().absolute(), "cookies")
@@ -102,6 +104,7 @@ class Twitch(object):
         )
         self.client_session = client_session
         self.gql = gql
+        self.request_timeout = request_timeout
         self.running = True
 
     def login(self):
@@ -180,19 +183,17 @@ class Twitch(object):
 
     def get_spade_url(self, streamer):
         try:
-            # fixes AttributeError: 'NoneType' object has no attribute 'group'
-            # headers = {"User-Agent": self.user_agent}
             from TwitchChannelPointsMiner.constants import USER_AGENTS
-
+            # Override session user agent
             headers = {"User-Agent": USER_AGENTS["Linux"]["FIREFOX"]}
-
-            main_page_request = requests.get(streamer.streamer_url, headers=headers)
+            main_page_request = self.client_session.session.get(
+                streamer.streamer_url, headers=headers, timeout=self.request_timeout
+            )
             response = main_page_request.text
-            # logger.info(response)
             regex_settings = "(https://static.twitchcdn.net/config/settings.*?js|https://assets.twitch.tv/config/settings.*?.js)"
             settings_url = re.search(regex_settings, response).group(1)
 
-            settings_request = requests.get(settings_url, headers=headers)
+            settings_request = self.client_session.session.get(settings_url, headers=headers, timeout=self.request_timeout)
             response = settings_request.text
             regex_spade = '"spade_url":"(.*?)"'
             streamer.stream.spade_url = re.search(regex_spade, response).group(1)
@@ -248,10 +249,9 @@ class Twitch(object):
 
         playlist_url = f"https://usher.ttvnw.net/vod/v2/{vod_id}.m3u8?sig={token.signature}&token={token.value}"
         logger.debug(f"Sending VOD playlist request for {vod_id} for {streamer}")
-        playlist_response = requests.get(
+        playlist_response = self.client_session.session.get(
             playlist_url,
-            headers={"User-Agent": self.client_session.user_agent},
-            timeout=CLIENT_WATCH_SECONDS,
+            timeout=self.request_timeout,
         )
         logger.debug(
             f"Sent VOD playlist request for {vod_id} for {streamer}, Status: {playlist_response.status_code}"
@@ -575,7 +575,7 @@ class Twitch(object):
         try:
             # Set the version as up to date to avoid spamming requests
             self.client_session.version_outdated = False
-            response = requests.get(URL)
+            response = self.client_session.session.get(URL, timeout=self.request_timeout)
             if response.status_code != 200:
                 logger.debug(
                     f"Error with update_client_version: {response.status_code}"
@@ -680,10 +680,9 @@ class Twitch(object):
 
         # Get list of video qualities from master playlist
         logger.debug(f"Sending master playlist request for {streamer}")
-        master_playlist_response = requests.get(
+        master_playlist_response = self.client_session.session.get(
             master_playlist_url,
-            headers={"User-Agent": self.client_session.user_agent},
-            timeout=CLIENT_WATCH_SECONDS,
+            timeout=self.request_timeout,
         )
         logger.debug(
             f"Sent master playlist request for {streamer}, Status: {master_playlist_response.status_code}"
@@ -751,10 +750,9 @@ class Twitch(object):
 
         # Get list of segment URLs
         logger.debug(f"Sending stream playlist request for {streamer}")
-        stream_playlist_response = requests.get(
+        stream_playlist_response = self.client_session.session.get(
             stream_playlist_url,
-            headers={"User-Agent": self.client_session.user_agent},
-            timeout=CLIENT_WATCH_SECONDS,
+            timeout=self.request_timeout,
         )
         logger.debug(
             f"Sent stream playlist request for {streamer}, Status: {stream_playlist_response.status_code}"
@@ -824,10 +822,9 @@ class Twitch(object):
                 continue
             # Perform a HEAD request to simulate watching the stream segment
             logger.debug(f"Sending stream segment request for {streamer}")
-            stream_segment_response = requests.head(
+            stream_segment_response = self.client_session.session.head(
                 stream_segment_url,
-                headers={"User-Agent": self.client_session.user_agent},
-                timeout=CLIENT_WATCH_SECONDS,
+                timeout=self.request_timeout,
             )
             logger.debug(
                 f"Sent stream segment request for {streamer}, Status: {stream_segment_response.status_code}"
@@ -849,11 +846,10 @@ class Twitch(object):
         """
         try:
             logger.debug(f"Sending spade {name} payload for {streamer}")
-            response = requests.post(
+            response = self.client_session.session.post(
                 streamer.stream.spade_url,
                 data=encode_payload(payload),
-                headers={"User-Agent": self.client_session.user_agent},
-                timeout=CLIENT_WATCH_SECONDS,
+                timeout=self.request_timeout,
             )
             logger.debug(
                 f"Sent spade {name} payload for {streamer} - {response.status_code}"

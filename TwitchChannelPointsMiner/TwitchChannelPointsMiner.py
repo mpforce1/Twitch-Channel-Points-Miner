@@ -15,6 +15,8 @@ from pathlib import Path
 from secrets import token_hex
 from typing import Literal
 
+import requests
+
 from TwitchChannelPointsMiner.classes import WatchStreakRecovery, WeeklyRewardsProgressor
 from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
@@ -163,6 +165,7 @@ class TwitchChannelPointsMiner:
     __slots__ = [
         "username",
         "event_manager",
+        "client_session",
         "twitch",
         "claim_drops_startup",
         "enable_analytics",
@@ -326,9 +329,10 @@ class TwitchChannelPointsMiner:
             CLIENT_ID, device_id, username, user_agent, password=password
         )
         client_session_id = token_hex(16)
-        client_session = ClientSession(
+        self.client_session = ClientSession(
             login=twitch_login,
             user_agent=user_agent,
+            session=requests.Session(),
             version=CLIENT_VERSION,
             device_id=device_id,
             session_id=client_session_id,
@@ -336,13 +340,19 @@ class TwitchChannelPointsMiner:
         )
 
         # GQL API
-        gql_api = factories.gql.create(client_session=client_session, strategy=gql)
+        # TODO timeout configuration
+        gql_request_timeout = None
+        gql_api = factories.gql.create(
+            client_session=self.client_session,
+            strategy=gql,
+            request_timeout=gql_request_timeout,
+        )
 
         # Twitch API
         self.twitch = Twitch(
             event_manager=self.event_manager,
             username=username,
-            client_session=client_session,
+            client_session=self.client_session,
             gql=gql_api,
         )
 
@@ -640,7 +650,7 @@ class TwitchChannelPointsMiner:
                 target=lambda: interruptible_repeating_task(
                     self.twitch.update_client_version,
                     lambda: self.running,
-                    lambda: self.twitch.client_session.version_outdated,
+                    lambda: self.client_session.version_outdated,
                     update_client_version_period,
                     background_task_sleep_step,
                 ),
@@ -713,7 +723,7 @@ class TwitchChannelPointsMiner:
             self.ws_pool.start()
 
             # Subscribe to community-points-user. Get update for points spent or gains
-            user_id = self.twitch.client_session.login.get_user_id()
+            user_id = self.client_session.login.get_user_id()
             # print(f"!!!!!!!!!!!!!! USER_ID: {user_id}")
 
             # Fixes 'ERR_BADAUTH'
@@ -911,6 +921,10 @@ class TwitchChannelPointsMiner:
         logger.info("Shutting down websocket pool")
         if self.ws_pool is not None:
             self.ws_pool.end()
+
+        logger.info("Shutting down HTTP Session")
+        if self.client_session is not None:
+            self.client_session.session.close()
 
         # Check if all the mutex are unlocked.
         # Prevent breaks of .json file
