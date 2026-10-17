@@ -53,16 +53,11 @@ class Drop(object):
         self.is_claimable = False
         self.is_printable = False
         self.percentage_progress = (
-            current_minutes_watched / minutes_required if minutes_required != 0 else 0
+            100 * current_minutes_watched / minutes_required if minutes_required != 0 else 0
         )
 
         self.end_at = end_at
         self.start_at = start_at
-        self.dt_match = (
-            self.start_at.timestamp()
-            < datetime.now().timestamp()
-            < self.end_at.timestamp()
-        )
 
     @classmethod
     def from_gql(cls, data: TimeBasedDropDetails | TimeBasedDropInProgress):

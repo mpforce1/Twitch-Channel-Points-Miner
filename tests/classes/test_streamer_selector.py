@@ -46,7 +46,7 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     watch_streak,
     weekly_rewards,
 )
-from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
+from TwitchChannelPointsMiner.classes.entities.Drop import Drop
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub, Target
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
@@ -54,10 +54,6 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import (
     StreamerSettings,
 )
 from TwitchChannelPointsMiner.classes.gql import Properties
-from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
-    DropCampaignDetails,
-    TimeBasedDropDetails,
-)
 from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import (
     EventConfig,
     WeeklyRewards,
@@ -1655,31 +1651,17 @@ def test_needs_watch_streak(streamer, expected):
 def test_has_drops():
     streamer_1 = Streamer("a", settings=StreamerSettings(claim_drops=False))
     assert has_drops(streamer_1) is False
-    drop = TimeBasedDropDetails(
+    drop = Drop(
         _id="",
         name="",
         end_at=datetime.datetime.now(),
         start_at=datetime.datetime.now(),
         benefits=[],
-        required_minutes_watched=10,
-        required_subs=0,
+        minutes_required=10,
+        subs_required=0,
     )
     stream = Stream()
-    stream.campaigns = [
-        Campaign(
-            data=DropCampaignDetails(
-                _id="",
-                name="",
-                status="",
-                game=MagicMock(),
-                allow_channel_ids=None,
-                start_at=datetime.datetime.now(),
-                end_at=datetime.datetime.now(),
-                time_based_drops=[drop],
-            )
-        )
-    ]
-    stream.campaigns[0].drops[0].is_claimable = True
+    stream.campaigns_ids = ["01a14a7a-1186-7308-817b-7a815283b3f2"]
     streamer_2 = Streamer(
         "b", is_online=True, settings=StreamerSettings(claim_drops=True), stream=stream
     )
@@ -1874,7 +1856,9 @@ def test_sort_multiplier_descending():
 
 
 def test_sort_subscription_ends_at_ascending():
-    assert sort_subscription_ends_at_ascending(Streamer("a", gift_sub=None)) == sys.maxsize
+    assert (
+        sort_subscription_ends_at_ascending(Streamer("a", gift_sub=None)) == sys.maxsize
+    )
 
     gift_sub = GiftSub(
         _id="aa",
@@ -1889,11 +1873,17 @@ def test_sort_subscription_ends_at_ascending():
         ends_at=datetime.datetime.fromtimestamp(1784121062),
     )
 
-    assert sort_subscription_ends_at_ascending(Streamer("a", gift_sub=gift_sub)) == 1784121062
+    assert (
+        sort_subscription_ends_at_ascending(Streamer("a", gift_sub=gift_sub))
+        == 1784121062
+    )
 
 
 def test_sort_subscription_ends_at_descending():
-    assert sort_subscription_ends_at_descending(Streamer("a", gift_sub=None)) == sys.maxsize
+    assert (
+        sort_subscription_ends_at_descending(Streamer("a", gift_sub=None))
+        == sys.maxsize
+    )
 
     gift_sub = GiftSub(
         _id="aa",
@@ -1908,7 +1898,10 @@ def test_sort_subscription_ends_at_descending():
         ends_at=datetime.datetime.fromtimestamp(1784121062),
     )
 
-    assert sort_subscription_ends_at_descending(Streamer("a", gift_sub=gift_sub)) == -1784121062
+    assert (
+        sort_subscription_ends_at_descending(Streamer("a", gift_sub=gift_sub))
+        == -1784121062
+    )
 
 
 def test_order():

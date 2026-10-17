@@ -4,13 +4,28 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
+from TwitchChannelPointsMiner.classes.Anonymiser import Deanonymiser, RandomAnonymiser
+from TwitchChannelPointsMiner.classes.Settings import Settings
+from TwitchChannelPointsMiner.classes.entities.Streamer import (
+    Streamer,
+    StreamerSettings,
+)
 from TwitchChannelPointsMiner.classes.events.Event import (
     StreamDown,
     StreamUp,
     StreamViewCount,
     StreamerOffline,
 )
+from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
+    DropsCampaign,
+    DropsProgressCriteria,
+    DropsReward,
+    DropsRewardGroup,
+    DropsRewardGroupSelfEdge,
+    DropsUnlockRequirement,
+)
 from TwitchChannelPointsMiner.classes.systems.Streams import StreamSystem
+from TwitchChannelPointsMiner.logger import LoggerSettings
 
 
 def test_bring_up():
@@ -111,3 +126,149 @@ def test_update_view_count(stream_up_elapsed: bool):
     event_manager.manage.assert_called_once_with(
         StreamViewCount(timestamp=timestamp, streamer=streamer, view_count=view_count)
     )
+
+
+test_update_campaigns_data = [
+    # No campaigns
+    (
+        Streamer(
+            "12345",
+            "12345",
+            settings=StreamerSettings(claim_drops=True),
+            is_online=True,
+        ),
+        datetime.datetime.fromisoformat("2026-10-17T18:00:00Z"),
+        [],
+        [],
+    ),
+    # No progressable campaigns
+    (
+        Streamer(
+            "12345",
+            "12345",
+            settings=StreamerSettings(claim_drops=True),
+            is_online=True,
+        ),
+        datetime.datetime.fromisoformat("2026-10-17T18:00:00Z"),
+        [
+            # No drops
+            DropsCampaign(
+                id="01a14adc-f2f1-70c1-8772-1265b8b70839",
+                name="test drop campaign",
+                start_at=datetime.datetime.fromisoformat("2026-10-17T18:00:00Z"),
+                end_at=datetime.datetime.fromisoformat("2026-10-18T18:00:00Z"),
+                game=None,
+                reward_groups=[],
+            ),
+            # Drop watch requirement already completed
+            DropsCampaign(
+                id="01a14ae1-5610-74ed-b8a4-9733e49067cb",
+                name="test drop campaign 2",
+                start_at=datetime.datetime.fromisoformat("2026-10-17T18:00:00Z"),
+                end_at=datetime.datetime.fromisoformat("2026-10-18T18:00:00Z"),
+                game=None,
+                reward_groups=[
+                    DropsRewardGroup(
+                        id="01a14ae1-c8b9-743d-829d-e57cfa2fdd1d",
+                        name="test reward group",
+                        progress_criteria=DropsProgressCriteria(
+                            requirement_type="minutes_watched",
+                            requirements=DropsUnlockRequirement(
+                                minutes_watched=100,
+                                subs=0,
+                                turbo_subs=0,
+                            ),
+                            categories=[],
+                        ),
+                        rewards=[],
+                        self_edge=DropsRewardGroupSelfEdge(
+                            status="IN_PROGRESS",
+                            current_minutes_watched=100,
+                            current_subs=0,
+                        ),
+                    )
+                ],
+            ),
+        ],
+        [],
+    ),
+    # Progressible campaigns
+    (
+        Streamer(
+            "12345",
+            "12345",
+            settings=StreamerSettings(claim_drops=True),
+            is_online=True,
+        ),
+        datetime.datetime.fromisoformat("2026-10-17T18:00:00Z"),
+        [
+            DropsCampaign(
+                id="01a14ae5-6252-72a0-82bc-7e8f272cc2c0",
+                name="test drop campaign",
+                start_at=datetime.datetime.fromisoformat("2026-10-17T18:00:00Z"),
+                end_at=datetime.datetime.fromisoformat("2026-10-18T18:00:00Z"),
+                game=None,
+                reward_groups=[
+                    DropsRewardGroup(
+                        id="01a14ae5-8638-72ae-a726-892afe08f11f",
+                        name="test reward group",
+                        progress_criteria=DropsProgressCriteria(
+                            requirement_type="minutes_watched",
+                            requirements=DropsUnlockRequirement(
+                                minutes_watched=100,
+                                subs=0,
+                                turbo_subs=0,
+                            ),
+                            categories=[],
+                        ),
+                        rewards=[
+                            DropsReward(
+                                id="01a14aeb-4962-742c-adc1-9be8d562bc3e",
+                                name="test reward",
+                                is_account_connected=True,
+                            )
+                        ],
+                        self_edge=DropsRewardGroupSelfEdge(
+                            status="IN_PROGRESS",
+                            current_minutes_watched=10,
+                            current_subs=0,
+                        ),
+                    )
+                ],
+            ),
+        ],
+        ["01a14ae5-6252-72a0-82bc-7e8f272cc2c0"],
+    ),
+]
+Settings.logger = LoggerSettings(anonymiser=Deanonymiser())
+
+
+@pytest.mark.parametrize(
+    "streamer,time_now,campaigns,expected_ids", test_update_campaigns_data
+)
+def test_update_campaigns(
+    streamer: Streamer,
+    time_now: datetime.datetime,
+    campaigns: list[DropsCampaign],
+    expected_ids: list[str],
+):
+    event_manager = MagicMock()
+
+    twitch = MagicMock()
+
+    system = StreamSystem(
+        twitch=twitch,
+        streamers=[streamer],
+        event_manager=event_manager,
+    )
+    system._fetch_progress = MagicMock()
+    system._fetch_progress.return_value = campaigns
+
+    with pytest.MonkeyPatch.context() as patcher:
+        mock_datetime = MagicMock()
+        mock_datetime.now = MagicMock()
+        mock_datetime.now.return_value = time_now
+        patcher.setattr(datetime, "datetime", mock_datetime)
+        system.update_campaigns(streamer.channel_id)
+
+    assert streamer.stream.campaigns_ids == expected_ids

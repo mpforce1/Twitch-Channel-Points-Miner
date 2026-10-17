@@ -558,7 +558,7 @@ class Parser:
             logger.debug(f"Unknown viewer-milestones type: {type}")
             return None
 
-    def drop_progress_parser(self, value) -> UserDropEvents.Model | None:
+    def drop_progress_parser(self, value) -> UserDropEvents.DropProgress | None:
         value = expect_dict(value)
         progress_type = parse_expected_value(value, "progress_type", expect_str)
         if progress_type != "minutes_watched":
