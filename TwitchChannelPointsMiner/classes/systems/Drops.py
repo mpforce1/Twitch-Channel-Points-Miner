@@ -133,7 +133,7 @@ class DropsSystem:
                                 drop.self_edge.is_claimed = True
 
     def _progress_bar(self, current: int, required: int, segments=10):
-        percentage_progress = current / required
+        percentage_progress = current / required if required != 0 else 0
         progress = math.floor(percentage_progress * segments)
         remaining = segments - progress
         return f"|{('█' * progress)}{(' ' * remaining)}|\t{percentage_progress * 100:.2f}% [{current}/{required}]"
