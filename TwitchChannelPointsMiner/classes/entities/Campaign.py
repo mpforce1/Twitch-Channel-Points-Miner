@@ -4,6 +4,7 @@ from typing import Callable
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
 from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
+    GameDetails,
     TimeBasedDropInProgress,
     DropCampaignDetails,
 )
@@ -23,19 +24,42 @@ class Campaign(object):
         "channels",
     ]
 
-    def __init__(self, data: DropCampaignDetails):
-        self.id = data.id
-        self.game = data.game
-        self.name = data.name
-        self.status = data.status
-        self.channels = (
-            data.allow_channel_ids if data.allow_channel_ids is not None else []
-        )
-        self.end_at = data.end_at
-        self.start_at = data.start_at
+    def __init__(
+        self,
+        _id: str,
+        game: GameDetails,
+        name: str,
+        status: str,
+        channels: list[str],
+        end_at: datetime,
+        start_at: datetime,
+        drops: list[Drop]
+    ):
+        self.id = _id
+        self.game = game
+        self.name = name
+        self.status = status
+        self.channels = channels
+        self.end_at = end_at
+        self.start_at = start_at
         self.dt_match = self.start_at < datetime.now() < self.end_at
         self.in_inventory = False
-        self.drops = [Drop(drop) for drop in data.time_based_drops]
+        self.drops = drops
+
+    @classmethod
+    def from_gql(cls, data: DropCampaignDetails):
+        return cls(
+            _id=data.id,
+            game=data.game,
+            name=data.name,
+            status=data.status,
+            channels=(
+                data.allow_channel_ids if data.allow_channel_ids is not None else []
+            ),
+            end_at=data.end_at,
+            start_at=data.start_at,
+            drops=[Drop.from_gql(drop) for drop in data.time_based_drops],
+        )
 
     def __repr__(self):
         return f"Campaign(id={self.id}, name={self.name}, game={self.game}, in_inventory={self.in_inventory})"
@@ -78,3 +102,6 @@ class Campaign(object):
 
     def any_drop_claimable(self):
         return any(drop for drop in self.drops if drop.is_claimable)
+
+    def any_drop_progressable(self):
+        return any(drop for drop in self.drops if drop.is_progressable())
