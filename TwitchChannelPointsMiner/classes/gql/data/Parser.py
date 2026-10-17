@@ -16,6 +16,7 @@ from TwitchChannelPointsMiner.JsonParser import (
     JsonParentContext,
     dig,
     expect_any,
+    with_default,
 )
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub, Gifter, Target
 from TwitchChannelPointsMiner.classes.gql.Errors import (
@@ -49,6 +50,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.ChatRoomBanStatus import
     ChatRoomBanStatusResponse,
 )
 from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
+    DropsError,
     DropsHighlightServiceAvailableDropsResponse,
     InventoryResponse,
 )
@@ -382,13 +384,17 @@ def drop_campaign_dashboard_parser(value: Any) -> Drops.DropCampaignDashboard:
     )
 
 
-def drops_game_details_parser(value: Any) -> Drops.GameDetails:
-    expect_dict(value)
-    return Drops.GameDetails(
-        _id=parse_expected_value(value, "id", expect_str),
-        slug=parse_expected_value(value, "slug", expect_str),
-        display_name=parse_expected_value(value, "displayName", expect_str),
-    )
+def drops_game_details_parser(
+    name_field_name: str,
+) -> Callable[[object], Drops.GameDetails]:
+    def inner(value: Any) -> Drops.GameDetails:
+        expect_dict(value)
+        return Drops.GameDetails(
+            _id=parse_expected_value(value, "id", expect_str),
+            display_name=parse_expected_value(value, name_field_name, expect_str),
+        )
+
+    return inner
 
 
 def time_based_drop_in_progress_parser(value: Any) -> Drops.TimeBasedDropInProgress:
@@ -411,6 +417,7 @@ def drop_campaign_in_progress_parser(value: Any) -> Drops.DropCampaignInProgress
     expect_dict(value)
     return Drops.DropCampaignInProgress(
         _id=parse_expected_value(value, "id", expect_str),
+        is_account_connected=dig(value, ["self", "isAccountConnected"], expect_bool),
         time_based_drops=parse_expected_value(
             value, "timeBasedDrops", list_parser(time_based_drop_in_progress_parser)
         ),
@@ -436,7 +443,9 @@ def drop_campaign_details_parser(value: Any) -> Drops.DropCampaignDetails:
         _id=parse_expected_value(value, "id", expect_str),
         name=parse_expected_value(value, "name", expect_str),
         status=parse_expected_value(value, "status", expect_str),
-        game=parse_expected_value(value, "game", drops_game_details_parser),
+        game=parse_expected_value(
+            value, "game", drops_game_details_parser("displayName")
+        ),
         allow_channel_ids=allow_channel_ids,
         start_at=parse_expected_value(value, "startAt", expect_iso_8601),
         end_at=parse_expected_value(value, "endAt", expect_iso_8601),
@@ -691,6 +700,105 @@ def clips_cards_user_clip_edge_parser(value) -> ClipsCardsUser.Clip:
         url=parse_expected_value(value, "url", expect_str),
         title=parse_expected_value(value, "title", expect_str),
         duration_seconds=parse_expected_value(value, "durationSeconds", expect_int),
+    )
+
+
+# Channel Drop Campaigns Progress
+
+
+def drops_unlock_requirement_parser(value) -> Drops.DropsUnlockRequirement:
+    value = expect_dict(value)
+    return Drops.DropsUnlockRequirement(
+        minutes_watched=parse_expected_value(
+            value, "minutesWatched", with_default(optional_parser(expect_int), 0)
+        ),
+        subs=parse_expected_value(
+            value, "subs", with_default(optional_parser(expect_int), 0)
+        ),
+        turbo_subs=parse_expected_value(
+            value, "turboSubs", with_default(optional_parser(expect_int), 0)
+        ),
+    )
+
+
+def drops_progress_criteria_parser(value) -> Drops.DropsProgressCriteria:
+    value = expect_dict(value)
+    return Drops.DropsProgressCriteria(
+        requirement_type=parse_expected_value(value, "requirementType", expect_str),
+        requirements=parse_expected_value(
+            value, "requirements", drops_unlock_requirement_parser
+        ),
+        categories=parse_expected_value(
+            value, "categories", list_parser(drops_game_details_parser("displayName"))
+        ),
+    )
+
+
+#  Drop Channel Campaigns Progress
+
+
+def drops_reward_progress_parser(value) -> Drops.DropsReward:
+    value = expect_dict(value)
+    return Drops.DropsReward(
+        id=parse_expected_value(value, "id", expect_str),
+        name=parse_expected_value(value, "name", expect_str),
+        is_account_connected=parse_expected_value(
+            value, "isAccountConnected", expect_bool
+        ),
+    )
+
+
+def drops_reward_group_self_edge_parser(value) -> Drops.DropsRewardGroupSelfEdge:
+    value = expect_dict(value)
+    return Drops.DropsRewardGroupSelfEdge(
+        status=parse_expected_value(value, "status", expect_str),
+        current_minutes_watched=parse_expected_value(
+            value, "currentMinutesWatched", with_default(optional_parser(expect_int), 0)
+        ),
+        current_subs=parse_expected_value(
+            value, "currentSubs", with_default(optional_parser(expect_int), 0)
+        ),
+    )
+
+
+def drops_reward_group_progress_parser(value) -> Drops.DropsRewardGroup:
+    value = expect_dict(value)
+    return Drops.DropsRewardGroup(
+        id=parse_expected_value(value, "id", expect_str),
+        name=parse_expected_value(value, "name", expect_str),
+        progress_criteria=parse_expected_value(
+            value, "progressCriteria", drops_progress_criteria_parser
+        ),
+        rewards=parse_expected_value(
+            value, "rewards", list_parser(drops_reward_progress_parser)
+        ),
+        self_edge=parse_expected_value(
+            value, "self", optional_parser(drops_reward_group_self_edge_parser)
+        ),
+    )
+
+
+def drops_campaign_progress_parser(value) -> Drops.DropsCampaign:
+    value = expect_dict(value)
+    return Drops.DropsCampaign(
+        id=parse_expected_value(value, "id", expect_str),
+        name=parse_expected_value(value, "name", expect_str),
+        start_at=parse_expected_value(value, "startAt", expect_iso_8601),
+        end_at=parse_expected_value(value, "endAt", expect_iso_8601),
+        game=parse_expected_value(
+            value, "game", optional_parser(drops_game_details_parser("name"))
+        ),
+        reward_groups=parse_expected_value(
+            value, "rewardGroups", list_parser(drops_reward_group_progress_parser)
+        ),
+    )
+
+
+def drops_claim_error_parser(value) -> DropsError:
+    value = expect_dict(value)
+    return DropsError(
+        code=parse_expected_value(value, "code", expect_str),
+        message=parse_expected_value(value, "message", expect_str),
     )
 
 
@@ -977,15 +1085,19 @@ class Parser:
             claim_drop_rewards = parse_expected_value(
                 data, "claimDropRewards", optional_parser(expect_dict)
             )
+            data_error = None
             # Apparently this can be None but I couldn't find a case where it was
             if claim_drop_rewards is not None:
                 with JsonParentContext("claimDropRewards"):
                     status = parse_expected_value(
                         claim_drop_rewards, "status", expect_str
                     )
-
-            data_errors = parse_value(data, "errors", optional_parser(expect_list))
-            return Drops.DropsPageClaimDropsResponse(status, data_errors)
+                    data_error = parse_value(
+                        claim_drop_rewards,
+                        "error",
+                        optional_parser(drops_claim_error_parser),
+                    )
+            return Drops.DropsPageClaimDropsResponse(status, data_error)
 
     def parse_user_points_contribution(
         self, response: Any
@@ -1150,5 +1262,18 @@ class Parser:
                     data,
                     ["user", "clips"],
                     paginated_parser(clips_cards_user_clip_edge_parser),
+                )
+            )
+
+    def parse_drop_channel_campaigns_progress(
+        self, response
+    ) -> Drops.DropChannelCampaignsProgressResponse:
+        _, _, data = self.parse_base_response(response)
+        with JsonParentContext("data"):
+            return Drops.DropChannelCampaignsProgressResponse(
+                campaigns=parse_expected_value(
+                    data,
+                    "channelDropCampaignsProgress",
+                    optional_parser(list_parser(drops_campaign_progress_parser)),
                 )
             )
