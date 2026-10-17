@@ -31,9 +31,7 @@ from TwitchChannelPointsMiner.classes.Settings import (
     Settings,
 )
 from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
-from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
-from TwitchChannelPointsMiner.classes.entities.Drop import Drop
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
     PlaybackAccessToken,
@@ -43,7 +41,7 @@ from TwitchChannelPointsMiner.classes.entities.Video import Video
 from TwitchChannelPointsMiner.classes.entities.predictions.Bet import Bet
 from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent import PredictionEvent
 from TwitchChannelPointsMiner.classes.events.Event import (
-    ChangingWatchSlots, CommunityGoalContribution, DropClaim, Error, GiftSubReceived, PredictionFailed, StreamDown,
+    ChangingWatchSlots, CommunityGoalContribution, Error, GiftSubReceived, PredictionFailed, StreamDown,
     StreamerOffline,
     StreamerOnline, WatchStreakMissing,
     WatchStreakProgress, WatchStreakRecovery, WeeklyRewardsUpdate
@@ -52,11 +50,6 @@ from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.Integration import GQL
 from TwitchChannelPointsMiner.classes.gql.data.response.ClipsCardsUser import Clip
-from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
-    DropCampaignInProgress,
-    DropCampaignDetails,
-    DropCampaignDashboard,
-)
 from TwitchChannelPointsMiner.classes.gql.data.response.FilterableVideoTower import VideoEdge
 from TwitchChannelPointsMiner.classes.gql.data.response.RewardList import RewardListResponse
 from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
@@ -170,12 +163,6 @@ class Twitch(object):
                 ):
                     event_properties["game"] = streamer.stream.game_name()
                     event_properties["game_id"] = streamer.stream.game_id()
-
-                if streamer.settings.claim_drops is True:
-                    # Update also the campaigns_ids so we are sure to tracking the correct campaign
-                    streamer.stream.campaigns_ids = (
-                        self.__get_campaign_ids_from_streamer(streamer)
-                    )
 
                 streamer.stream.payload = [
                     {"event": "minute-watched", "properties": event_properties}
@@ -774,7 +761,7 @@ class Twitch(object):
         stream_playlist_text = stream_playlist_response.text.split("\n")
         stream_segment_urls = []
         if request_all_segments:
-            logger.info(f"Requesting all stream segments for {streamer}")
+            logger.debug(f"Requesting all stream segments for {streamer}")
             line_index = 0
             while line_index < len(stream_playlist_text):
                 if stream_playlist_text[line_index].startswith("#EXTINF:"):
@@ -795,7 +782,7 @@ class Twitch(object):
                     stream_segment_urls.append(stream_segment_url)
                 line_index += 1
         else:
-            logger.info(f"Requesting last stream segment for {streamer}")
+            logger.debug(f"Requesting last stream segment for {streamer}")
             # Search from the end for the last segment
             line_index = len(stream_playlist_text) - 1
             while line_index >= 0:
@@ -971,46 +958,6 @@ class Twitch(object):
                         if self.send_spade_minute_watched_event(streamer):
                             watched_this_iteration.add(streamer.channel_id)
                             streamer.stream.update_minute_watched()
-
-                            """
-                            Remember, you can only earn progress towards a time-based Drop on one participating channel at a time.  [ ! ! ! ]
-                            You can also check your progress towards Drops within a campaign anytime by viewing the Drops Inventory.
-                            For time-based Drops, if you are unable to claim the Drop in time, you will be able to claim it from the inventory page until the Drops campaign ends.
-                            """
-
-                            for campaign in streamer.stream.campaigns:
-                                for drop in campaign.drops:
-                                    # We could add .has_preconditions_met condition inside is_printable
-                                    if (
-                                        drop.has_preconditions_met is not False
-                                        and drop.is_printable is True
-                                    ):
-                                        drop_messages = [
-                                            f"{streamer} is streaming {streamer.stream}",
-                                            f"Campaign: {campaign}",
-                                            f"Drop: {drop}",
-                                            f"{drop.progress_bar()}",
-                                        ]
-                                        for single_line in drop_messages:
-                                            logger.info(
-                                                single_line,
-                                                extra={
-                                                    "event": Events.DROP_STATUS,
-                                                    "skip_telegram": True,
-                                                    "skip_discord": True,
-                                                    "skip_webhook": True,
-                                                    "skip_matrix": True,
-                                                    "skip_gotify": True,
-                                                    "skip_pushover": True,
-                                                },
-                                            )
-
-                                        if len(Settings.logger.hooks) > 0:
-                                            combined_message = "\n".join(drop_messages)
-                                            for hook in Settings.logger.hooks:
-                                                hook.send(
-                                                    combined_message, Events.DROP_STATUS
-                                                )
 
                     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
                         # Attempt to reduce the URL length for max retry errors
@@ -1532,243 +1479,6 @@ class Twitch(object):
                     error_code=error_code
                 )
             )
-
-    # === CAMPAIGNS / DROPS / INVENTORY === #
-    def __get_campaign_ids_from_streamer(self, streamer):
-        try:
-            return self.gql.get_available_drops(streamer.channel_id).ids
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to get drops campaign ids for {Settings.logger.anonymiser.streamer_username(streamer)}: {e}"
-            )
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Error while trying to get drops campaign ids for {streamer}",
-                    error=e,
-                )
-            )
-            return []
-
-    def __get_inventory(self):
-        try:
-            return self.gql.get_inventory()
-        except RetryError as e:
-            logger.error(f"Error while trying to get user inventory: {e}")
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Error while trying to get user inventory",
-                    error=e,
-                )
-            )
-            return None
-
-    def __get_drops_dashboard(
-        self, status: str | None = None
-    ) -> list[DropCampaignDashboard]:
-        try:
-            campaigns = self.gql.get_viewer_drops_dashboard().campaigns or []
-            if status is not None:
-                status = status.upper()
-                campaigns = [
-                    campaign for campaign in campaigns if campaign.status == status
-                ]
-            return campaigns
-        except RetryError as e:
-            logger.error(f"Error while trying to get viewer drops dashboard: {e}")
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Error while trying to get viewer drops dashboard",
-                    error=e,
-                )
-            )
-            return []
-
-    def __get_campaigns_details(
-        self, campaigns: list[DropCampaignDashboard]
-    ) -> list[DropCampaignDetails]:
-        campaign_ids: list[str] = [c.id for c in campaigns]
-        try:
-            return [
-                response.campaign
-                for response in self.gql.get_drop_campaign_details(campaign_ids)
-            ]
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to get campaigns details for campaigns: {campaign_ids}: {e}"
-            )
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Error while trying to get campaigns details for campaigns: {campaign_ids}",
-                    error=e,
-                )
-            )
-            return []
-
-    def __sync_campaigns(self, campaigns: list[Campaign]) -> list[Campaign]:
-        # We need the inventory only for get the real updated value/progress
-        # Get data from inventory and sync current status with streamers.campaigns
-        inventory = self.__get_inventory()
-        if inventory is not None and inventory.campaigns is not None:
-            # Iterate all campaigns from dashboard (only active, with working drops)
-            # In this array we have also the campaigns never started from us (not in nventory)
-            for i in range(len(campaigns)):
-                campaigns[i].clear_drops()  # Remove all the claimed drops
-                # Iterate all campaigns currently in progress from out inventory
-                progress: DropCampaignInProgress  # Annoyingly the IDE thinks progress is Campaign not DropCampaign
-                for progress in inventory.campaigns:
-                    if progress.id == campaigns[i].id:
-                        campaigns[i].in_inventory = True
-                        campaigns[i].sync_drops(
-                            progress.time_based_drops, self.claim_drop
-                        )
-                        # Remove all the claimed drops
-                        campaigns[i].clear_drops()
-                        break
-        return campaigns
-
-    def claim_drop(self, drop: Drop, streamer: Streamer | None = None):
-        if drop.drop_instance_id is None:
-            logger.debug(f"Unable to claim drop '{drop.id}', no instance id'")
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Unable to claim drop '{drop.id}', no instance id'",
-                    error=None,
-                )
-            )
-            return False
-        logger.info(
-            f"Claim {drop}", extra={"emoji": ":package:", "event": Events.DROP_CLAIM}
-        )
-        self.event_manager.manage(
-            DropClaim(
-                streamer=streamer,
-                drop=drop,
-            )
-        )
-        try:
-            response = self.gql.claim_drop_rewards(drop.drop_instance_id)
-        except RetryError as e:
-            logger.error(
-                f"Error while trying to claim drop with id '{drop.drop_instance_id}': {e}"
-            )
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Error while trying to claim drop with id '{drop.drop_instance_id}'",
-                    error=e,
-                )
-            )
-            return False
-        if response.status is None:
-            return False
-        if response.errors is not None and len(response.errors) > 0:
-            logger.error(
-                f"Errors while trying to claim drop with id '{drop.drop_instance_id}': {response.errors}"
-            )
-            self.event_manager.manage(
-                Error(
-                    context="Twitch API",
-                    message=f"Errors while trying to claim drop with id '{drop.drop_instance_id}': {response.errors}",
-                    error=None,
-                )
-            )
-            return False
-        if response.status in ["ELIGIBLE_FOR_ALL", "DROP_INSTANCE_ALREADY_CLAIMED"]:
-            return True
-        return False
-
-    def claim_all_drops_from_inventory(self):
-        inventory = self.__get_inventory()
-        if inventory is not None:
-            if inventory.campaigns is not None:
-                for campaign in inventory.campaigns:
-                    for time_based_drop in campaign.time_based_drops:
-                        drop = Drop(time_based_drop)
-                        drop.update(time_based_drop.self_edge)
-                        if drop.is_claimable:
-                            drop.is_claimed = self.claim_drop(drop)
-                            time.sleep(random.uniform(5, 10))
-
-    def sync_campaigns(self, streamers, chunk_size=3):
-        campaigns_update = 0
-        campaigns = []
-        while self.running:
-            try:
-                # Get update from dashboard each 60minutes
-                if (
-                    campaigns_update == 0
-                    # or ((time.time() - campaigns_update) / 60) > 60
-                    # TEMPORARY AUTO DROP CLAIMING FIX
-                    # 30 minutes instead of 60 minutes
-                    or ((time.time() - campaigns_update) / 30) > 30
-                    #####################################
-                ):
-                    campaigns_update = time.time()
-
-                    # TEMPORARY AUTO DROP CLAIMING FIX
-                    self.claim_all_drops_from_inventory()
-                    #####################################
-
-                    # Get full details from current ACTIVE campaigns
-                    # Use dashboard so we can explore new drops not currently active in our Inventory
-                    campaigns_details = self.__get_campaigns_details(
-                        self.__get_drops_dashboard(status="ACTIVE")
-                    )
-                    campaigns = []
-
-                    # Going to clear array and structure. Remove all the timeBasedDrops expired or not started yet
-                    for index in range(0, len(campaigns_details)):
-                        if campaigns_details[index] is not None:
-                            campaign = Campaign(campaigns_details[index])
-                            if campaign.dt_match is True:
-                                # Remove all the drops already claimed or with dt not matching
-                                campaign.clear_drops()
-                                if campaign.drops != []:
-                                    campaigns.append(campaign)
-                        else:
-                            continue
-
-                # Divide et impera :)
-                campaigns = self.__sync_campaigns(campaigns)
-
-                # Check if user It's currently streaming the same game present in campaigns_details
-                for i in range(0, len(streamers)):
-                    if streamers[i].should_sync_campaigns() is True:
-                        # yes! The streamer[i] have the drops_tags enabled and we It's currently stream a game with campaign active!
-                        # With 'campaigns_ids' we are also sure that this streamer have the campaign active.
-                        # yes! The streamer[index] have the drops_tags enabled and we It's currently stream a game with campaign active!
-                        streamers[i].stream.campaigns = list(
-                            filter(
-                                lambda x: x.drops != []
-                                and x.game == streamers[i].stream.game
-                                and x.id in streamers[i].stream.campaigns_ids,
-                                campaigns,
-                            )
-                        )
-
-            except (
-                ValueError,
-                KeyError,
-                requests.exceptions.ConnectionError,
-                RetryError,
-            ) as e:
-                logger.error(f"Error while syncing inventory: {e}")
-                self.event_manager.manage(
-                    Error(
-                        context="Twitch API",
-                        message=f"Error while syncing inventory",
-                        error=None,
-                    )
-                )
-                campaigns = []
-                self.__check_connection_handler(chunk_size)
-
-            self.__chuncked_sleep(60, chunk_size=chunk_size)
 
     def contribute_to_community_goals(self, streamer: Streamer):
         # Don't bother doing the request if no goal is currently started or in stock

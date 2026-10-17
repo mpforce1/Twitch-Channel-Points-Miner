@@ -27,24 +27,66 @@ class Drop(object):
         "is_printable",
     ]
 
-    def __init__(self, data: TimeBasedDropDetails | TimeBasedDropInProgress):
-        self.id = data.id
-        self.name = data.name
-        self.benefit = ", ".join(set([bf for bf in data.benefits]))
-        self.minutes_required = data.required_minutes_watched
-        self.subs_required = data.required_subs
+    def __init__(
+        self,
+        _id: str,
+        name: str,
+        benefits: list[str],
+        minutes_required: int,
+        subs_required: int,
+        end_at: datetime,
+        start_at: datetime,
+        drop_instance_id: str | None = None,
+        current_minutes_watched: int = 0,
+        is_claimed: bool = False
+    ):
+        self.id = _id
+        self.name = name
+        self.benefit = ", ".join(set([bf for bf in benefits]))
+        self.minutes_required = minutes_required
+        self.subs_required = subs_required
 
         self.has_preconditions_met = None  # [True, False], None we don't know
-        self.current_minutes_watched = 0
-        self.drop_instance_id = None
-        self.is_claimed = False
+        self.current_minutes_watched = current_minutes_watched
+        self.drop_instance_id = drop_instance_id
+        self.is_claimed = is_claimed
         self.is_claimable = False
         self.is_printable = False
-        self.percentage_progress = 0
+        self.percentage_progress = (
+            current_minutes_watched / minutes_required if minutes_required != 0 else 0
+        )
 
-        self.end_at = data.end_at
-        self.start_at = data.start_at
-        self.dt_match = self.start_at.timestamp() < datetime.now().timestamp() < self.end_at.timestamp()
+        self.end_at = end_at
+        self.start_at = start_at
+        self.dt_match = (
+            self.start_at.timestamp()
+            < datetime.now().timestamp()
+            < self.end_at.timestamp()
+        )
+
+    @classmethod
+    def from_gql(cls, data: TimeBasedDropDetails | TimeBasedDropInProgress):
+        if isinstance(data, TimeBasedDropInProgress):
+            instance_id = data.self_edge.drop_instance_id
+            minutes_watched = data.self_edge.current_minutes_watched
+            is_claimed = data.self_edge.is_claimed
+        else:
+            instance_id = None
+            minutes_watched = 0
+            is_claimed = False
+
+        return cls(
+            _id=data.id,
+            name=data.name,
+            benefits=[bf for bf in data.benefits],
+            minutes_required=data.required_minutes_watched,
+            subs_required=data.required_subs,
+            end_at=data.end_at,
+            start_at=data.start_at,
+            drop_instance_id=instance_id,
+            current_minutes_watched=minutes_watched,
+            is_claimed=is_claimed,
+        )
 
     def update(self, progress: TimeBasedDropInProgress.SelfEdge):
         self.has_preconditions_met = progress.has_preconditions_met
@@ -102,3 +144,7 @@ class Drop(object):
             return self.id == other.id
         else:
             return False
+
+    def is_progressable(self):
+        """True if this Drop's percentage progress can be progressed by the miner, False otherwise."""
+        return self.is_claimable and self.percentage_progress < 100

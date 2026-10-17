@@ -96,7 +96,7 @@ def priority_streak(streamers: Sequence[Streamer], max_amount: int) -> list[str]
 def priority_drops(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
     # max_amount can be ignored due to 1 drop limit
     for streamer in streamers:
-        if streamer.any_campaign_has_claimable_drop() is True:
+        if streamer.any_campaign_has_progressable_drop():
             return [streamer.channel_id]
     return []
 

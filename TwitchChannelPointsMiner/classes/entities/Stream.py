@@ -30,7 +30,6 @@ class Stream(object):
         "game",
         "tags",
         "drops_tags",
-        "campaigns",
         "campaigns_ids",
         "viewers_count",
         "spade_url",
@@ -55,7 +54,6 @@ class Stream(object):
         self.tags: list[Tag] = []
 
         self.drops_tags: bool = False
-        self.campaigns: list[Campaign] = []
         self.campaigns_ids: list[str] = []
 
         self.viewers_count = 0

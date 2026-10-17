@@ -6,6 +6,7 @@ from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.classes.events.Event import DropClaimAvailable
 from TwitchChannelPointsMiner.classes.events.Events import Events
 from TwitchChannelPointsMiner.classes.events.Manager import EventManager
+from TwitchChannelPointsMiner.classes.systems.Drops import DropsSystem
 from TwitchChannelPointsMiner.classes.websocket.data import OnsiteNotification
 
 logger = logging.getLogger(__name__)
@@ -13,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 class NotificationsSystem:
     def __init__(
-        self, twitch: Twitch, streamers: list[Streamer], event_manager: EventManager
+        self, streamers: list[Streamer], drops_system: DropsSystem, event_manager: EventManager
     ):
-        self.twitch = twitch
         self.streamers = streamers
+        self.drops_system = drops_system
         self.event_manager = event_manager
 
     def user_drop_reminder(
@@ -32,7 +33,7 @@ class NotificationsSystem:
                 drop=notification.drop_name
             )
         )
-        self.twitch.claim_all_drops_from_inventory()
+        self.drops_system.claim_all_drops()
 
     def user_earned_quests_reward_badge(
         self, notification: OnsiteNotification.UserEarnedQuestsRewardBadgeNotification
