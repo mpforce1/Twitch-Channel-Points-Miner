@@ -18,7 +18,6 @@ from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropsRewardGroup,
 )
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
-from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list
 
 logger = logging.getLogger(__name__)
 
@@ -143,9 +142,6 @@ class StreamSystem:
                 for campaign in in_progress_campaigns
                 if is_campaign_progressable(campaign)
             ]
-            logger.info(
-                f"{streamer} Campaigns: {oxford_comma_list(streamer.stream.campaigns_ids)}"
-            )
         else:
             # Clear campaign ids when offline
             streamer.stream.campaigns_ids = []
