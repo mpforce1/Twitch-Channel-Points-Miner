@@ -809,6 +809,17 @@ class GQL:
             self.parser.parse_clips_cards_user,
         )
 
+    def drop_channel_campaigns_progress(self, channel_id: str):
+        json_data = copy.deepcopy(GQLOperations.DropChannelCampaignsProgress)
+        json_data["variables"] = {
+            "channelID": channel_id
+        }
+        return self.post_gql_request_single(
+            GQLOperations.DropChannelCampaignsProgress["operationName"],
+            json_data,
+            self.parser.parse_drop_channel_campaigns_progress,
+        )
+
 
 class GQLFactory:
     """Factory class for creating GQL objects."""
