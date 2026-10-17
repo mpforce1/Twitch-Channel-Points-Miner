@@ -91,7 +91,7 @@ class GQLOperations:
         "extensions": {
             "persistedQuery": {
                 "version": 1,
-                "sha256Hash": "a455deea71bdc9015b78eb49f4acfbce8baa7ccbedd28e549bb025bd0f751930",
+                "sha256Hash": "3b8a08f5a35dc95d7de229dea731a106a9aa9fa2e84c8f693fd159943f273e4f",
             }
         },
     }
@@ -129,7 +129,7 @@ class GQLOperations:
         "extensions": {
             "persistedQuery": {
                 "version": 1,
-                "sha256Hash": "8337eb8541b314040b0edde0c09c5c7a2783ba1960aa9edfbf3bac16d0fec404",
+                "sha256Hash": "3ab317a5753b25125f47d4ce962ebe928ff4e85047b77508340c94ebc20b6230",
             }
         },
     }
