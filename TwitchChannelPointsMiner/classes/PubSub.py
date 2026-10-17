@@ -2,6 +2,7 @@ import logging
 
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.entities.Message import Message
+from TwitchChannelPointsMiner.classes.systems.Drops import DropsSystem
 from TwitchChannelPointsMiner.classes.systems.Notifications import NotificationsSystem
 from TwitchChannelPointsMiner.classes.systems.Predictions import PredictionSystem
 from TwitchChannelPointsMiner.classes.systems.Streamers import StreamerSystem
@@ -19,6 +20,7 @@ from TwitchChannelPointsMiner.classes.websocket.data import (
     VideoPlaybackById,
     ViewerMilestones,
     WeeklyRewards,
+    UserDropEvents,
 )
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser
 
@@ -37,12 +39,14 @@ class PubSubHandler(MessageListener):
         stream_system: StreamSystem,
         prediction_system: PredictionSystem,
         notification_system: NotificationsSystem,
+        drops_system: DropsSystem,
         parser: Parser,
     ):
         self.streamer_system = streamer_system
         self.stream_system = stream_system
         self.prediction_system = prediction_system
         self.notification_system = notification_system
+        self.drops_system = drops_system
         self.parser = parser
 
     def on_message(self, message: Message):
@@ -101,6 +105,8 @@ class PubSubHandler(MessageListener):
                     self.streamer_system.weekly_reward_update(data)
                 case ViewerMilestones.StreakRecovered():
                     self.streamer_system.watch_streak_recovered(data)
+                case UserDropEvents.DropProgress():
+                    self.drops_system.drop_progress(data)
                 case None:
                     # Do nothing, it's a type we don't handle
                     logger.debug(f"Ignoring: {message}")
