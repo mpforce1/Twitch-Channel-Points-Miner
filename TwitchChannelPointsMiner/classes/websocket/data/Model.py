@@ -2,6 +2,7 @@ from TwitchChannelPointsMiner.classes.websocket.data import (
     CommunityMomentsChannel,
     CommunityPointsChannel,
     CommunityPointsUser,
+    UserDropEvents,
     OnsiteNotification,
     PredictionsChannel,
     PredictionsUser,
@@ -13,15 +14,16 @@ from TwitchChannelPointsMiner.classes.websocket.data import (
 )
 
 Model = (
-    CommunityMomentsChannel.Model
-    | CommunityPointsChannel.Model
-    | CommunityPointsUser.Model
-    | OnsiteNotification.Model
-    | PredictionsChannel.Model
-    | PredictionsUser.Model
-    | Raid.Model
-    | UserSubscribeEvents.Model
-    | VideoPlaybackById.Model
-    | ViewerMilestones.Model
-    | WeeklyRewards.Model
+        CommunityMomentsChannel.Model
+        | CommunityPointsChannel.Model
+        | CommunityPointsUser.Model
+        | OnsiteNotification.Model
+        | PredictionsChannel.Model
+        | PredictionsUser.Model
+        | Raid.Model
+        | UserSubscribeEvents.Model
+        | VideoPlaybackById.Model
+        | ViewerMilestones.Model
+        | WeeklyRewards.Model
+        | UserDropEvents.Model
 )
