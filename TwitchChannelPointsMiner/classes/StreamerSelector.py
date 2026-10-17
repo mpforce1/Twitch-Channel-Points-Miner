@@ -422,6 +422,7 @@ class FilterSortSelector(StreamerSelector):
         reason: object,
         _filter: FilterFunction,
         sorting: list[GetSortKey] | None = None,
+        max_select: int | None = None,
     ):
         self.reason = reason
         """A description of the reason for selection. (i.e. 'WATCH_STREAK')"""
@@ -432,6 +433,8 @@ class FilterSortSelector(StreamerSelector):
         A function that should return a sorting key.
         (i.e. `streamer.channel_points` or `-streamer.channel_points`)
         """
+        self.max_select = max_select
+        """An override to the maximum number of streamers to select."""
 
     def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
         selected = list(
@@ -445,7 +448,7 @@ class FilterSortSelector(StreamerSelector):
                         ],
                     ),
                 ),
-                max_amount,
+                max_amount if self.max_select is None else self.max_select,
             )
         )
         logger.debug(f"Selecting {selected} for {self.reason}")
@@ -474,7 +477,7 @@ def needs_watch_streak(streamer: Streamer):
 
 
 def has_drops(streamer: Streamer):
-    return streamer.any_campaign_has_claimable_drop() is True
+    return streamer.any_campaign_has_progressable_drop()
 
 
 def is_subscribed(streamer: Streamer):
@@ -529,6 +532,7 @@ def sort_multiplier(ascending: bool):
         if streamer.total_points_multiplier() == 0:
             return sys.maxsize
         return streamer.total_points_multiplier() * (1 if ascending else -1)
+
     return inner
 
 
@@ -541,6 +545,7 @@ def sort_subscription_ends_at(ascending: bool):
         if streamer.gift_sub is None:
             return sys.maxsize
         return streamer.gift_sub.ends_at.timestamp() * (1 if ascending else -1)
+
     return inner
 
 
@@ -565,7 +570,9 @@ def watch_streak(sorting: list[GetSortKey] | None = None):
 
 
 def drops(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(reason=Priority.DROPS, _filter=has_drops, sorting=sorting)
+    return FilterSortSelector(
+        reason=Priority.DROPS, _filter=has_drops, sorting=sorting, max_select=1
+    )
 
 
 def subscribed(sorting: list[GetSortKey] | None = None):
