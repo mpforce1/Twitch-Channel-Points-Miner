@@ -816,6 +816,8 @@ class Twitch(object):
             logger.debug(
                 f"Sent stream segment request for {streamer}, Status: {stream_segment_response.status_code}"
             )
+            # Ensure the request has been consumed
+            _ = stream_segment_response.content
             if stream_segment_response.status_code != 200:
                 logger.info(f"Unable to request segment for {streamer}: status {stream_segment_response.status_code}")
                 return False
@@ -944,13 +946,14 @@ class Twitch(object):
 
                     try:
                         if (
-                            streamer.settings.simulate_hls_playback
+                            streamer.settings.simulate_hls_playback is not False
                             and not self.simulate_hls_playback(
                                 streamer,
                                 streamer.channel_id not in watched_previous_iteration,
-                                # TODO add setting to disable requesting all segments
-                                #streamer.any_campaign_has_progressable_drop()
-                                True
+                                (
+                                    streamer.any_campaign_has_progressable_drop()
+                                    or streamer.settings.simulate_hls_playback.watch_all_segments
+                                ),
                             )
                         ):
                             continue

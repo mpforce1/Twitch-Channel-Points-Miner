@@ -2,6 +2,7 @@ import datetime
 import logging
 import math
 
+from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
@@ -141,7 +142,7 @@ class DropsSystem:
     def drop_progress(self, progress: DropProgress):
         streamer = self._find_streamer(progress.channel_id)
         if streamer is None:
-            logger.info(
+            logger.debug(
                 f"Drop progress for {progress.drop_id} for untracked Streamer: {progress.channel_id}"
             )
             return
@@ -160,16 +161,17 @@ class DropsSystem:
                 # Update drop data
                 drop.self_edge.current_minutes_watched = progress.current_progress_min
 
-                drop_messages = [
-                    f"{streamer} is streaming {streamer.stream}",
-                    f"Drop: {drop.name}",
-                    f"{self._progress_bar(progress.current_progress_min, progress.required_progress_min)}",
-                ]
-                for single_line in drop_messages:
-                    logger.info(
-                        single_line,
-                        extra={"event": Events.DROP_STATUS},
-                    )
+                if Settings.logger.drops_progress:
+                    drop_messages = [
+                        f"{streamer} is streaming {streamer.stream}",
+                        f"Drop: {drop.name}",
+                        f"{self._progress_bar(progress.current_progress_min, progress.required_progress_min)}",
+                    ]
+                    for single_line in drop_messages:
+                        logger.info(
+                            single_line,
+                            extra={"event": Events.DROP_STATUS},
+                        )
 
                 self.event_manager.manage(
                     DropProgressEvent(
@@ -179,4 +181,4 @@ class DropsSystem:
                     )
                 )
             else:
-                logger.info(f"Progress for untracked drop: {progress.drop_id}")
+                logger.debug(f"Progress for untracked drop: {progress.drop_id}")
