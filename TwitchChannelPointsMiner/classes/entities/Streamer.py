@@ -4,6 +4,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum, auto
 from threading import Lock
 from typing import Literal
 
@@ -28,12 +29,23 @@ logger = logging.getLogger(__name__)
 
 
 class HLSSettings:
-    def __init__(self, refresh_before: int):
+    def __init__(self, refresh_before: int, watch_all_segments: bool):
         self.refresh_before = refresh_before
-        """ The number of seconds, before a token expires, to refresh it. """
+        """The number of seconds, before a token expires, to refresh it."""
+        self.watch_all_segments = watch_all_segments
+        """If True, we will force watching all stream segments, if False it'll depend on whether drops can be progressed."""
 
     def __repr__(self):
         return simple_repr(self)
+
+
+class DropsMode(Enum):
+    NONE = auto()
+    """Don't progress drops"""
+    LINKED = auto()
+    """Only progress drops with a linked account"""
+    ALL = auto()
+    """Progress all drops"""
 
 
 class StreamerSettings(object):
@@ -55,7 +67,7 @@ class StreamerSettings(object):
         self,
         make_predictions: bool = None,
         follow_raid: bool = None,
-        claim_drops: bool = None,
+        claim_drops: bool | DropsMode = None,
         claim_moments: bool = None,
         watch_streak: bool = None,
         community_goals: bool = None,
@@ -67,7 +79,13 @@ class StreamerSettings(object):
     ):
         self.make_predictions = make_predictions
         self.follow_raid = follow_raid
-        self.claim_drops = claim_drops
+        # Convert claim_drops to DropsMode
+        if claim_drops is None or claim_drops is True:
+            self.claim_drops = DropsMode.LINKED
+        elif claim_drops is False:
+            self.claim_drops = DropsMode.NONE
+        else:
+            self.claim_drops = claim_drops
         self.claim_moments = claim_moments
         self.watch_streak = watch_streak
         self.community_goals = community_goals
@@ -85,7 +103,6 @@ class StreamerSettings(object):
         for name in [
             "make_predictions",
             "follow_raid",
-            "claim_drops",
             "claim_moments",
             "watch_streak",
             "weekly_rewards",
@@ -99,7 +116,9 @@ class StreamerSettings(object):
         if self.chat is None:
             self.chat = ChatPresence.ONLINE
         if self.simulate_hls_playback is None:
-            self.simulate_hls_playback = HLSSettings(refresh_before=2 * 60)
+            self.simulate_hls_playback = HLSSettings(
+                refresh_before=2 * 60, watch_all_segments=False
+            )
         if self.points_limit is None:
             self.points_limit = False
 
@@ -272,7 +291,7 @@ class Streamer(object):
 
     def any_campaign_has_progressable_drop(self):
         return (
-            self.settings.claim_drops is True
+            self.settings.claim_drops is not DropsMode.NONE
             and self.is_online is True
             and len(self.stream.campaigns_ids) > 0
         )

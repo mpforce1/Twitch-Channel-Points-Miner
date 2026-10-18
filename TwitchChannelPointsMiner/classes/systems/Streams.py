@@ -3,7 +3,7 @@ import logging
 import time
 
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
-from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.entities.Streamer import DropsMode, Streamer
 from TwitchChannelPointsMiner.classes.events.Event import (
     Error,
     StreamDown,
@@ -22,12 +22,16 @@ from TwitchChannelPointsMiner.utils.Entities import find_streamer
 logger = logging.getLogger(__name__)
 
 
-def is_reward_group_progressable(group: DropsRewardGroup) -> bool:
-    group.rewards = [reward for reward in group.rewards if reward.is_account_connected]
-    requirements = group.progress_criteria.requirements
+def is_reward_group_progressable(group: DropsRewardGroup, allow_unlinked: bool) -> bool:
+    # Filter rewards that aren't linked
+    if not allow_unlinked:
+        group.rewards = [
+            reward for reward in group.rewards if reward.is_account_connected
+        ]
     # Filter groups with no rewards
     if len(group.rewards) <= 0:
         return False
+    requirements = group.progress_criteria.requirements
     # Filter groups with a turbo sub requirement
     if requirements.turbo_subs > 0:
         return False
@@ -51,11 +55,13 @@ def is_reward_group_progressable(group: DropsRewardGroup) -> bool:
     return True
 
 
-def is_campaign_progressable(campaign: DropsCampaign) -> bool:
+def is_campaign_progressable(campaign: DropsCampaign, allow_unlinked: bool) -> bool:
     if campaign.end_at < datetime.datetime.now(datetime.timezone.utc):
         return False
     campaign.reward_groups = [
-        group for group in campaign.reward_groups if is_reward_group_progressable(group)
+        group
+        for group in campaign.reward_groups
+        if is_reward_group_progressable(group, allow_unlinked=allow_unlinked)
     ]
     if len(campaign.reward_groups) == 0:
         return False
@@ -133,14 +139,20 @@ class StreamSystem:
         :param channel_id: The id of the Streamer
         """
         streamer = find_streamer(self.streamers, channel_id)
-        if streamer.is_online and streamer.settings.claim_drops is True:
+        if streamer.is_online and streamer.settings.claim_drops in {
+            DropsMode.ALL,
+            DropsMode.LINKED,
+        }:
             # Get campaign data
             in_progress_campaigns = self._fetch_progress(streamer)
             # Filter out unprogressable campaigns and extract ids
             streamer.stream.campaigns_ids = [
                 campaign.id
                 for campaign in in_progress_campaigns
-                if is_campaign_progressable(campaign)
+                if is_campaign_progressable(
+                    campaign,
+                    allow_unlinked=streamer.settings.claim_drops == DropsMode.ALL,
+                )
             ]
         else:
             # Clear campaign ids when offline
