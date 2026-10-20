@@ -148,30 +148,26 @@ class DropsSystem:
             return
         inventory = self._refresh_inventory()
         if inventory is not None and inventory.campaigns is not None:
-            drop = next(
+            campaign_and_drop = next(
                 (
-                    drop
+                    (campaign, drop)
                     for campaign in inventory.campaigns
                     for drop in campaign.time_based_drops
                     if drop.id == progress.drop_id
                 ),
                 None,
             )
-            if drop is not None:
+            if campaign_and_drop is not None:
+                campaign, drop = campaign_and_drop
                 # Update drop data
                 drop.self_edge.current_minutes_watched = progress.current_progress_min
 
                 if Settings.logger.drops_progress:
-                    drop_messages = [
-                        f"{streamer} is streaming {streamer.stream}",
-                        f"Drop: {drop.name}",
-                        f"{self._progress_bar(progress.current_progress_min, progress.required_progress_min)}",
-                    ]
-                    for single_line in drop_messages:
-                        logger.info(
-                            single_line,
-                            extra={"event": Events.DROP_STATUS},
-                        )
+                    logger.info(
+                        f"{self._progress_bar(progress.current_progress_min, progress.required_progress_min)}: "
+                        f"{streamer}: {campaign.name}: {drop.name}",
+                        extra={"event": Events.DROP_STATUS},
+                    )
 
                 self.event_manager.manage(
                     DropProgressEvent(
