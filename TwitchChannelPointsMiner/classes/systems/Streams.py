@@ -1,4 +1,3 @@
-import datetime
 import logging
 import time
 
@@ -15,57 +14,11 @@ from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.gql.Errors import RetryError
 from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropsCampaign,
-    DropsRewardGroup,
 )
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
+from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list
 
 logger = logging.getLogger(__name__)
-
-
-def is_reward_group_progressable(group: DropsRewardGroup, allow_unlinked: bool) -> bool:
-    # Filter rewards that aren't linked
-    if not allow_unlinked:
-        group.rewards = [
-            reward for reward in group.rewards if reward.is_account_connected
-        ]
-    # Filter groups with no rewards
-    if len(group.rewards) <= 0:
-        return False
-    requirements = group.progress_criteria.requirements
-    # Filter groups with a turbo sub requirement
-    if requirements.turbo_subs > 0:
-        return False
-    if group.self_edge is None:
-        current_subs = 0
-        current_minutes_watched = 0
-        status = None
-    else:
-        current_subs = group.self_edge.current_subs
-        current_minutes_watched = group.self_edge.current_minutes_watched
-        status = group.self_edge.status
-    # Filter groups with a higher sub requirement than the user has
-    if requirements.subs > current_subs:
-        return False
-    # Filter groups with more minutes watched than required
-    if current_minutes_watched >= requirements.minutes_watched:
-        return False
-    # Filter groups that are already claimable/claimed
-    if status in {"CLAIMABLE", "CLAIMED"}:
-        return False
-    return True
-
-
-def is_campaign_progressable(campaign: DropsCampaign, allow_unlinked: bool) -> bool:
-    if campaign.end_at < datetime.datetime.now(datetime.timezone.utc):
-        return False
-    campaign.reward_groups = [
-        group
-        for group in campaign.reward_groups
-        if is_reward_group_progressable(group, allow_unlinked=allow_unlinked)
-    ]
-    if len(campaign.reward_groups) == 0:
-        return False
-    return True
 
 
 class StreamSystem:
@@ -144,16 +97,26 @@ class StreamSystem:
             DropsMode.LINKED,
         }:
             # Get campaign data
-            in_progress_campaigns = self._fetch_progress(streamer)
-            # Filter out unprogressable campaigns and extract ids
-            streamer.stream.campaigns_ids = [
-                campaign.id
-                for campaign in in_progress_campaigns
-                if is_campaign_progressable(
-                    campaign,
-                    allow_unlinked=streamer.settings.claim_drops == DropsMode.ALL,
-                )
-            ]
+            new_campaigns = {
+                campaign.id: campaign for campaign in self._fetch_progress(streamer)
+            }
+            # Log the difference
+            for old_campaign_id in streamer.stream.campaigns:
+                if old_campaign_id not in new_campaigns:
+                    old_campaign = streamer.stream.campaigns[old_campaign_id]
+                    logger.info(
+                        f"Streamer {streamer} has deactivated Drops Campaign: {old_campaign.name}"
+                    )
+            for new_campaign_id in new_campaigns:
+                if new_campaign_id not in streamer.stream.campaigns:
+                    new_campaign = new_campaigns[new_campaign_id]
+                    logger.info(
+                        f"Streamer {streamer} has activated Drops Campaign: {new_campaign.name}. "
+                        f"Available drops: {oxford_comma_list([reward.name for group in new_campaign.reward_groups for reward in group.rewards])}"
+                    )
+
+            # Set the data
+            streamer.stream.campaigns = new_campaigns
         else:
             # Clear campaign ids when offline
-            streamer.stream.campaigns_ids = []
+            streamer.stream.campaigns.clear()

@@ -23,6 +23,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import (
 )
 from TwitchChannelPointsMiner.constants import URL
 from TwitchChannelPointsMiner.utils import millify
+from TwitchChannelPointsMiner.utils.Drops import is_campaign_progressable
 from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list, simple_repr
 
 logger = logging.getLogger(__name__)
@@ -293,7 +294,14 @@ class Streamer(object):
         return (
             self.settings.claim_drops is not DropsMode.NONE
             and self.is_online is True
-            and len(self.stream.campaigns_ids) > 0
+            and any(
+                campaign
+                for campaign in self.stream.campaigns.values()
+                if is_campaign_progressable(
+                    campaign,
+                    self.settings.claim_drops == DropsMode.ALL,
+                )
+            )
         )
 
     def viewer_has_points_multiplier(self):

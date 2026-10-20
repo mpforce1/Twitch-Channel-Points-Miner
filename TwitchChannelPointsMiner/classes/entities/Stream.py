@@ -1,12 +1,9 @@
 from collections import deque
-import json
 import logging
 import time
-from base64 import b64encode
 from datetime import datetime
 
 from TwitchChannelPointsMiner.classes.Settings import Settings
-from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
     PlaybackAccessToken,
 )
@@ -14,6 +11,7 @@ from TwitchChannelPointsMiner.classes.gql import Tag
 from TwitchChannelPointsMiner.classes.gql.data.response.BroadcastSettings import (
     GameBroadcastSettings,
 )
+from TwitchChannelPointsMiner.classes.gql.data.response.Drops import DropsCampaign
 from TwitchChannelPointsMiner.classes.gql.data.response.RewardList import (
     WatchStreakMilestone,
 )
@@ -30,7 +28,7 @@ class Stream(object):
         "game",
         "tags",
         "drops_tags",
-        "campaigns_ids",
+        "campaigns",
         "viewers_count",
         "spade_url",
         "payload",
@@ -54,7 +52,7 @@ class Stream(object):
         self.tags: list[Tag] = []
 
         self.drops_tags: bool = False
-        self.campaigns_ids: list[str] = []
+        self.campaigns: dict[str, DropsCampaign] = dict()
 
         self.viewers_count = 0
         self.__last_update = 0
