@@ -745,6 +745,17 @@ def drops_reward_progress_parser(value) -> Drops.DropsReward:
         is_account_connected=parse_expected_value(
             value, "isAccountConnected", expect_bool
         ),
+        account_link_url=parse_expected_value(
+            value, "accountLinkURL", optional_parser(expect_str)
+        ),
+    )
+
+
+def drops_progress_window_parser(value) -> Drops.DropsProgressWindow:
+    value = expect_dict(value)
+    return Drops.DropsProgressWindow(
+        started_at=parse_expected_value(value, "startedAt", expect_iso_8601),
+        expires_at=parse_expected_value(value, "expiresAt", expect_iso_8601),
     )
 
 
@@ -758,6 +769,9 @@ def drops_reward_group_self_edge_parser(value) -> Drops.DropsRewardGroupSelfEdge
         current_subs=parse_expected_value(
             value, "currentSubs", with_default(optional_parser(expect_int), 0)
         ),
+        current_window=parse_expected_value(
+            value, "currentWindow", optional_parser(drops_progress_window_parser)
+        ),
     )
 
 
@@ -766,6 +780,8 @@ def drops_reward_group_progress_parser(value) -> Drops.DropsRewardGroup:
     return Drops.DropsRewardGroup(
         id=parse_expected_value(value, "id", expect_str),
         name=parse_expected_value(value, "name", expect_str),
+        track=parse_expected_value(value, "track", optional_parser(expect_str)),
+        lane=parse_expected_value(value, "lane", optional_parser(expect_str)),
         progress_criteria=parse_expected_value(
             value, "progressCriteria", drops_progress_criteria_parser
         ),

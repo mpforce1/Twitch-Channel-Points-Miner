@@ -154,6 +154,13 @@ class DropsReward:
     id: str
     name: str
     is_account_connected: bool
+    account_link_url: str | None
+
+
+@dataclass
+class DropsProgressWindow:
+    started_at: datetime
+    expires_at: datetime
 
 
 @dataclass
@@ -162,12 +169,15 @@ class DropsRewardGroupSelfEdge:
     # These can both be None, just assume 0
     current_minutes_watched: int
     current_subs: int
+    current_window: DropsProgressWindow | None
 
 
 @dataclass
 class DropsRewardGroup:
     id: str
     name: str
+    track: str | None
+    lane: str | None
     progress_criteria: DropsProgressCriteria
     rewards: list[DropsReward]
     # This can be None if the integrity check fails
