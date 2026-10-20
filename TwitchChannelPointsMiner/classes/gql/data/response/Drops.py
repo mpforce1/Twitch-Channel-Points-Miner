@@ -117,10 +117,12 @@ class DropCampaignInProgress:
     def __init__(
         self,
         _id: str,
+        name: str,
         is_account_connected: bool,
         time_based_drops: list[TimeBasedDropInProgress],
     ):
         self.id = _id
+        self.name = name
         self.is_account_connected = is_account_connected
         self.time_based_drops = time_based_drops
 

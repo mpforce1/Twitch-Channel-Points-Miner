@@ -417,6 +417,7 @@ def drop_campaign_in_progress_parser(value: Any) -> Drops.DropCampaignInProgress
     expect_dict(value)
     return Drops.DropCampaignInProgress(
         _id=parse_expected_value(value, "id", expect_str),
+        name=parse_expected_value(value, "name", expect_str),
         is_account_connected=dig(value, ["self", "isAccountConnected"], expect_bool),
         time_based_drops=parse_expected_value(
             value, "timeBasedDrops", list_parser(time_based_drop_in_progress_parser)
