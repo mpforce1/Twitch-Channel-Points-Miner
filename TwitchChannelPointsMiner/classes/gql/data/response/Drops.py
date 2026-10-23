@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime
 
 from TwitchChannelPointsMiner.classes.gql.data.response.Games import Game
@@ -70,9 +71,8 @@ class TimeBasedDropInProgress:
 
 
 class GameDetails(Game):
-    def __init__(self, _id: str, slug: str, display_name: str):
+    def __init__(self, _id: str, display_name: str):
         super().__init__(_id)
-        self.slug = slug
         self.display_name = display_name
 
     def __repr__(self):
@@ -114,12 +114,109 @@ class DropCampaignDashboard:
 
 
 class DropCampaignInProgress:
-    def __init__(self, _id: str, time_based_drops: list[TimeBasedDropInProgress]):
+    def __init__(
+        self,
+        _id: str,
+        name: str,
+        start_at: datetime,
+        end_at: datetime,
+        status: str,
+        is_account_connected: bool,
+        account_link_url: str | None,
+        game: GameDetails | None,
+        time_based_drops: list[TimeBasedDropInProgress],
+    ):
         self.id = _id
+        self.name = name
+        self.start_at = start_at
+        self.end_at = end_at
+        self.status = status
+        self.is_account_connected = is_account_connected
+        self.account_link_url = account_link_url
+        self.game = game
         self.time_based_drops = time_based_drops
 
     def __repr__(self):
         return f"DropCampaign({self.__dict__})"
+
+
+# Channel Drop Campaigns Progress
+
+
+@dataclass
+class DropsUnlockRequirement:
+    # These can all be None, just assume 0
+    minutes_watched: int
+    subs: int
+    turbo_subs: int
+
+
+@dataclass
+class DropsRepeatableConfig:
+    repeatable_times: int
+    reset_interval_seconds: int
+    is_last_chance_extension_enabled: bool
+    should_complete_all_repeats_to_earn: bool
+
+
+@dataclass
+class DropsProgressCriteria:
+    requirement_type: str
+    requirements: DropsUnlockRequirement
+    repeatable_config: DropsRepeatableConfig | None
+    categories: list[GameDetails]
+
+
+#  User - DropChannelCampaignsProgress
+
+
+@dataclass
+class DropsReward:
+    id: str
+    name: str
+    is_account_connected: bool
+    account_link_url: str | None
+
+
+@dataclass
+class DropsProgressWindow:
+    started_at: datetime
+    expires_at: datetime
+
+
+@dataclass
+class DropsRewardGroupSelfEdge:
+    status: str  # IN_PROGRESS, CLAIMABLE, CLAIMED
+    # These can both be None, just assume 0
+    current_minutes_watched: int
+    current_subs: int
+    grant_count: int
+    current_window: DropsProgressWindow | None
+
+
+@dataclass
+class DropsRewardGroup:
+    id: str
+    name: str
+    track: str | None
+    lane: str | None
+    progress_criteria: DropsProgressCriteria
+    rewards: list[DropsReward]
+    # This can be None if the integrity check fails
+    self_edge: DropsRewardGroupSelfEdge | None
+
+
+@dataclass
+class DropsCampaign:
+    id: str
+    name: str
+    start_at: datetime
+    end_at: datetime
+    game: GameDetails | None
+    reward_groups: list[DropsRewardGroup]
+
+
+# Top level responses
 
 
 class DropsHighlightServiceAvailableDropsResponse:
@@ -154,11 +251,26 @@ class DropCampaignDetailsResponse:
         return f"DropCampaignDetailsResponse({self.__dict__})"
 
 
+@dataclass
+class DropsError:
+    code: str
+    message: str
+
+
 class DropsPageClaimDropsResponse:
-    def __init__(self, status: str | None, errors: list | None):
-        # The type of `errors` is unknown because I couldn't find an instance of it happening
+    def __init__(self, status: str | None, error: DropsError | None):
         self.status = status
-        self.errors = errors
+        self.error = error
 
     def __repr__(self):
         return f"DropsPageClaimDropsResponse({self.__dict__})"
+
+
+@dataclass
+class DropChannelCampaignsProgressResponse:
+    campaigns: list[DropsCampaign] | None
+
+
+@dataclass
+class ViewerRewardDropInventoryResponse:
+    campaigns: list[DropsCampaign] | None

@@ -21,21 +21,23 @@ def test_handles_all_data_types():
         stream_system=MagicMock(),
         prediction_system=MagicMock(),
         notification_system=MagicMock(),
+        drops_system=MagicMock(),
         parser=parser,
     )
 
     with pytest.MonkeyPatch.context() as patcher:
         patcher.setattr(PubSub, "logger", logger)
         for data_type in get_args(Model):
-            # Dynamically create subtypes for every Model type
-            dummy_event = MagicMock(spec=data_type)
-            dummy_event.id = ""
-            dummy_event.viewers = 1
+            if data_type.__name__ != "Model":
+                # Dynamically create subtypes for every Model type
+                dummy_event = MagicMock(spec=data_type)
+                dummy_event.id = ""
+                dummy_event.viewers = 1
 
-            parser.message_parser.return_value = dummy_event
+                parser.message_parser.return_value = dummy_event
 
-            # Should never throw an Exception
-            pubsub.on_message(MagicMock())
+                # Should never throw an Exception
+                pubsub.on_message(MagicMock())
         # Check error output
         logger.error.assert_not_called()
 

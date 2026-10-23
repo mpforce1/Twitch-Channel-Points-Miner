@@ -1,11 +1,9 @@
-import json
 import logging
 import time
-from base64 import b64encode
+from collections import deque
 from datetime import datetime
 
 from TwitchChannelPointsMiner.classes.Settings import Settings
-from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
     PlaybackAccessToken,
 )
@@ -30,7 +28,6 @@ class Stream(object):
         "tags",
         "drops_tags",
         "campaigns",
-        "campaigns_ids",
         "viewers_count",
         "spade_url",
         "payload",
@@ -43,6 +40,7 @@ class Stream(object):
         "__minute_watched_timestamp",
         "created_at",
         "watch_session_state",
+        "watched_segments",
     ]
 
     def __init__(self):
@@ -53,8 +51,7 @@ class Stream(object):
         self.tags: list[Tag] = []
 
         self.drops_tags: bool = False
-        self.campaigns: list[Campaign] = []
-        self.campaigns_ids: list[str] = []
+        self.campaigns: list[str] = []
 
         self.viewers_count = 0
         self.__last_update = 0
@@ -71,6 +68,8 @@ class Stream(object):
         # Start as None as we've yet to begin a watch session
         self.watch_session_state: datetime | None = None
         """The start time of the current watch session or None if we haven't started a session since the last WATCH."""
+
+        self.watched_segments: deque[str] = deque(maxlen=256)
 
         self.init_watch_streak()
 

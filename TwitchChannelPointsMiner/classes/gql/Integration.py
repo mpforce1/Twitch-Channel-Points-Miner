@@ -1,7 +1,7 @@
 import copy
 import logging
 from secrets import token_hex
-from typing import Callable, Any, Literal, Protocol
+from typing import Callable, Any, Literal, Protocol, Tuple
 
 import requests
 from requests import Response
@@ -145,8 +145,8 @@ class GQL:
         self,
         client_session: ClientSession,
         attempt_strategy: AttemptStrategy | None = None,
+        request_timeout: Tuple[float, float] | None = None,
         parser: Parser | None = None,
-        post_request: PostRequest | None = None,
     ):
         self.client_session = client_session
         """The client session for making requests."""
@@ -156,10 +156,12 @@ class GQL:
             else AttemptStrategy(attempts=3, attempt_interval_seconds=1)
         )
         """Strategy for handling failed requests."""
+        self.request_timeout = (
+            request_timeout if request_timeout is not None else (3.05, 5)
+        )
+        """The timeouts for making GQL requests"""
         self.parser = Parser() if parser is None else parser
         """The parser for parsing GQL responses."""
-        self.post_request = requests.post if post_request is None else post_request
-        """Function for posting GQL requests."""
 
     @staticmethod
     def __redact_request_json(json: dict | list[dict]) -> dict | list[dict]:
@@ -228,7 +230,7 @@ class GQL:
             return result
 
     def __post_gql_request(self, request_json: dict | list[dict]) -> Any:
-        response = self.post_request(
+        response = self.client_session.session.post(
             GQLOperations.url,
             json=request_json,
             headers={
@@ -236,9 +238,9 @@ class GQL:
                 "Client-Id": CLIENT_ID,
                 "Client-Session-Id": self.client_session.session_id,
                 "Client-Version": self.client_session.version,
-                "User-Agent": self.client_session.user_agent,
                 "X-Device-Id": self.client_session.device_id,
             },
+            timeout=self.request_timeout,
         )
 
         redacted_request_json = self.__redact_request_json(request_json)
@@ -807,6 +809,15 @@ class GQL:
             self.parser.parse_clips_cards_user,
         )
 
+    def drop_channel_campaigns_progress(self, channel_id: str):
+        json_data = copy.deepcopy(GQLOperations.DropChannelCampaignsProgress)
+        json_data["variables"] = {"channelID": channel_id}
+        return self.post_gql_request_single(
+            GQLOperations.DropChannelCampaignsProgress["operationName"],
+            json_data,
+            self.parser.parse_drop_channel_campaigns_progress,
+        )
+
 
 class GQLFactory:
     """Factory class for creating GQL objects."""
@@ -814,16 +825,24 @@ class GQLFactory:
     def __init__(
         self,
         parser: Parser | None = None,
-        post_request: PostRequest | None = None,
     ):
         self.parser = parser
-        self.post_request = post_request
 
-    def create(self, client_session: ClientSession, strategy: AttemptStrategy | None) -> GQL:
+    def create(
+        self,
+        client_session: ClientSession,
+        strategy: AttemptStrategy | None,
+        request_timeout: Tuple[float, float] | None = None,
+    ) -> GQL:
         """
         Creates a new GQL instance.
         :param client_session: The ClientSession for the instance.
         :param strategy: The Attempt Strategy to use.
         :return: The instance.
         """
-        return GQL(client_session, strategy, self.parser, self.post_request)
+        return GQL(
+            client_session=client_session,
+            attempt_strategy=strategy,
+            parser=self.parser,
+            request_timeout=request_timeout,
+        )

@@ -19,6 +19,7 @@ from TwitchChannelPointsMiner.JsonParser import (
 from TwitchChannelPointsMiner.classes.websocket.data import (
     CommunityMomentsChannel,
     CommunityPointsUser,
+    UserDropEvents,
     Predictions,
     Raid,
     UserSubscribeEvents,
@@ -120,6 +121,7 @@ class Parser:
             "user-subscribe-events-v1": self.user_subscribe_events_parser,
             "weekly-rewards": self.weekly_rewards_parser,
             "viewer-milestones": self.viewer_milestones_parser,
+            "user-drop-events": self.user_drop_events_parser,
         }
 
     def _sub_type_parser[Result](
@@ -247,7 +249,9 @@ class Parser:
         user = expect_dict(user)
         return Predictions.User(
             id=parse_expected_value(user, "user_id", expect_str),
-            display_name=parse_expected_value(user, "user_display_name", optional_parser(expect_str)),
+            display_name=parse_expected_value(
+                user, "user_display_name", optional_parser(expect_str)
+            ),
         )
 
     def prediction_result_parser(self, result):
@@ -552,6 +556,42 @@ class Parser:
             )
         else:
             logger.debug(f"Unknown viewer-milestones type: {type}")
+            return None
+
+    def drop_progress_parser(self, value) -> UserDropEvents.DropProgress | None:
+        value = expect_dict(value)
+        progress_type = parse_expected_value(value, "progress_type", expect_str)
+        if progress_type != "minutes_watched":
+            # ignore other progress types
+            return None
+        return UserDropEvents.DropProgress(
+            drop_id=parse_expected_value(value, "drop_id", expect_str),
+            channel_id=parse_expected_value(value, "channel_id", expect_str),
+            current_progress_min=parse_expected_value(
+                value, "current_progress_min", expect_int
+            ),
+            required_progress_min=parse_expected_value(
+                value, "required_progress_min", expect_int
+            ),
+            current_progress=parse_expected_value(
+                value, "current_progress", expect_int
+            ),
+            required_progress=parse_expected_value(
+                value, "required_progress", expect_int
+            ),
+            progress_type=progress_type,
+            is_sitewide=parse_expected_value(value, "is_sitewide", expect_bool),
+        )
+
+    def user_drop_events_parser(self, value) -> UserDropEvents.Model | None:
+        value = expect_dict(value)
+        _type = parse_expected_value(value, "type", expect_str)
+        if _type == "drop-progress":
+            return self.drop_progress_parser(
+                parse_expected_value(value, "data", expect_dict)
+            )
+        else:
+            logger.debug(f"Unknown user-drop-events type: {_type}")
             return None
 
     # All

@@ -119,6 +119,7 @@ def expect_float(value: Any) -> float:
     """
     return expect_is_type(value, float)
 
+
 def expect_numeric(value: Any) -> float | int:
     """
     Parser that checks that the value is numeric (float or int) and returns it.
@@ -133,6 +134,7 @@ def expect_numeric(value: Any) -> float | int:
             raise InvalidJsonShapeError(
                 [], f"int or float expected, got {describe_value(value)}"
             )
+
 
 def expect_bool(value: Any) -> bool:
     """
@@ -269,3 +271,20 @@ def dig[T](value, path: list[str | int], and_then: Callable[[Any], T]) -> T:
             )
     with JsonParentContext(index):
         return dig(next_value, path[1:], and_then)
+
+
+def with_default[T](
+    parser: Callable[[object], T | None], default: T
+) -> Callable[[object], T]:
+    """
+    Utility mapper function that converts a parser that can produce None values into one that doesn't.
+    :param parser: The base parser.
+    :param default: The default to use if the value is None.
+    :return: The mapped parser function.
+    """
+
+    def inner(value):
+        value = parser(value)
+        return value if value is not None else default
+
+    return inner

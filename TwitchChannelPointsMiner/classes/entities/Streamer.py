@@ -1,16 +1,20 @@
 import json
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum, auto
 from threading import Lock
-from typing import Literal
+from typing import Generator, Literal
 
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence
 from TwitchChannelPointsMiner.classes.Settings import Events, Settings, StreamerSource
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings
+from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
+from TwitchChannelPointsMiner.classes.entities.Drop import Drop
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.Raid import Raid
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
@@ -28,12 +32,29 @@ logger = logging.getLogger(__name__)
 
 
 class HLSSettings:
-    def __init__(self, refresh_before: int):
+    def __init__(
+        self,
+        refresh_before: int,
+        watch_all_segments: Literal["enable", "disable", "drops"] | None,
+    ):
         self.refresh_before = refresh_before
-        """ The number of seconds, before a token expires, to refresh it. """
+        """The number of seconds, before a token expires, to refresh it."""
+        self.watch_all_segments: Literal["enable", "disable", "drops"] = (
+            watch_all_segments if watch_all_segments is not None else "drops"
+        )
+        """If True, we will force watching all stream segments, if False it'll depend on whether drops can be progressed."""
 
     def __repr__(self):
         return simple_repr(self)
+
+
+class DropsMode(Enum):
+    NONE = auto()
+    """Don't progress drops"""
+    LINKED = auto()
+    """Only progress drops with a linked account"""
+    ALL = auto()
+    """Progress all drops"""
 
 
 class StreamerSettings(object):
@@ -55,7 +76,7 @@ class StreamerSettings(object):
         self,
         make_predictions: bool = None,
         follow_raid: bool = None,
-        claim_drops: bool = None,
+        claim_drops: bool | DropsMode = None,
         claim_moments: bool = None,
         watch_streak: bool = None,
         community_goals: bool = None,
@@ -67,7 +88,13 @@ class StreamerSettings(object):
     ):
         self.make_predictions = make_predictions
         self.follow_raid = follow_raid
-        self.claim_drops = claim_drops
+        # Convert claim_drops to DropsMode
+        if claim_drops is None or claim_drops is True:
+            self.claim_drops = DropsMode.LINKED
+        elif claim_drops is False:
+            self.claim_drops = DropsMode.NONE
+        else:
+            self.claim_drops = claim_drops
         self.claim_moments = claim_moments
         self.watch_streak = watch_streak
         self.community_goals = community_goals
@@ -85,7 +112,6 @@ class StreamerSettings(object):
         for name in [
             "make_predictions",
             "follow_raid",
-            "claim_drops",
             "claim_moments",
             "watch_streak",
             "weekly_rewards",
@@ -99,7 +125,9 @@ class StreamerSettings(object):
         if self.chat is None:
             self.chat = ChatPresence.ONLINE
         if self.simulate_hls_playback is None:
-            self.simulate_hls_playback = HLSSettings(refresh_before=2 * 60)
+            self.simulate_hls_playback = HLSSettings(
+                refresh_before=2 * 60, watch_all_segments="drops"
+            )
         if self.points_limit is None:
             self.points_limit = False
 
@@ -270,22 +298,105 @@ class Streamer(object):
     def stream_up_elapsed(self):
         return self.stream_up == 0 or ((time.time() - self.stream_up) > 120)
 
-    def should_sync_campaigns(self):
+    def watch_all_segments(self, campaigns: dict[str, Campaign]) -> bool:
+        match self.settings.simulate_hls_playback.watch_all_segments:
+            case "disable":
+                return False
+            case "enable":
+                return True
+            case "drops":
+                return self.any_campaign_has_progressable_drop(campaigns)
+            case _:
+                raise ValueError(
+                    f"{self} StreamerSettings.watch_all_segments must be one of 'enable', 'disable', or 'drops'"
+                )
+
+    def allows_unlinked_drops(self):
+        """
+        Returns True if settings allows progressing unlinked drops.
+        """
+        return self.settings.claim_drops == DropsMode.ALL
+
+    def progressable_campaigns(self, campaigns: dict[str, Campaign]):
+        """
+        Returns a generator of all progressable drops campaigns.
+        """
         return (
-            self.settings.claim_drops is True
-            and self.is_online is True
-            and self.stream.campaigns_ids != []
+            campaign
+            for campaign in campaigns.values()
+            if campaign.id in self.stream.campaigns
+            and campaign.progressable(self.allows_unlinked_drops())
         )
 
-    def any_campaign_has_claimable_drop(self):
-        return (
-            self.settings.claim_drops is True
-            and self.is_online is True
-            and any(
-                campaign
-                for campaign in self.stream.campaigns
-                if campaign.any_drop_claimable()
-            )
+    def any_campaign_has_progressable_drop(self, campaigns: dict[str, Campaign]):
+        """
+        Returns True if the stream has any drops that can be progressed.
+        """
+        return any(self.progressable_campaigns(campaigns))
+
+    def remaining_drop_count(self, campaigns: dict[str, Campaign]):
+        """
+        Returns the number of remaining progressable drops.
+        """
+        return sum(
+            1
+            for campaign in self.progressable_campaigns(campaigns)
+            for drop in campaign.drops.values()
+            if drop.is_progressable()
+        )
+
+    def min_drop_end_date(self, campaigns: dict[str, Campaign]) -> datetime | None:
+        """
+        Returns the minimum end date of progressable drops campaigns, or None if there aren't any.
+        """
+        return min(
+            (campaign.end_at for campaign in self.progressable_campaigns(campaigns)),
+            default=None,
+        )
+
+    def max_drop_end_date(self, campaigns: dict[str, Campaign]) -> datetime | None:
+        """
+        Returns the maximum end date of progressable drops campaigns, or None if there aren't any.
+        """
+        return max(
+            (campaign.end_at for campaign in self.progressable_campaigns(campaigns)),
+            default=None,
+        )
+
+    def current_drops(
+        self, campaigns: dict[str, Campaign]
+    ) -> Generator[Drop, None, None]:
+        """
+        Returns all of the current drops for all campaigns.
+        """
+        for campaign_id in self.stream.campaigns:
+            if campaign_id in campaigns:
+                drop = campaigns[campaign_id].current_drop(self.allows_unlinked_drops())
+                if drop is not None:
+                    yield drop
+
+    def min_drop_progress(self, campaigns: dict[str, Campaign]) -> int:
+        return min(
+            (drop.current_minutes_watched for drop in self.current_drops(campaigns)),
+            default=sys.maxsize,
+        )
+
+    def max_drop_progress(self, campaigns: dict[str, Campaign]) -> int:
+        return max(
+            (drop.current_minutes_watched for drop in self.current_drops(campaigns)),
+            default=-sys.maxsize,
+        )
+
+    def min_drop_percentage_progress(self, campaigns: dict[str, Campaign]):
+        return min(
+            (drop.percentage_progress for drop in self.current_drops(campaigns)),
+            default=sys.maxsize,
+        )
+
+    def max_drop_percentage_progress(self, campaigns: dict[str, Campaign]):
+        return max(
+            (drop.percentage_progress for drop in self.current_drops(campaigns)),
+            default=-sys.maxsize,
         )
 
     def viewer_has_points_multiplier(self):

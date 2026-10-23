@@ -91,7 +91,7 @@ class GQLOperations:
         "extensions": {
             "persistedQuery": {
                 "version": 1,
-                "sha256Hash": "a455deea71bdc9015b78eb49f4acfbce8baa7ccbedd28e549bb025bd0f751930",
+                "sha256Hash": "3b8a08f5a35dc95d7de229dea731a106a9aa9fa2e84c8f693fd159943f273e4f",
             }
         },
     }
@@ -129,7 +129,7 @@ class GQLOperations:
         "extensions": {
             "persistedQuery": {
                 "version": 1,
-                "sha256Hash": "8337eb8541b314040b0edde0c09c5c7a2783ba1960aa9edfbf3bac16d0fec404",
+                "sha256Hash": "3ab317a5753b25125f47d4ce962ebe928ff4e85047b77508340c94ebc20b6230",
             }
         },
     }
@@ -294,6 +294,27 @@ class GQLOperations:
         "extensions": {
             "persistedQuery": {
                 "sha256Hash": "1cd671bfa12cec480499c087319f26d21925e9695d1f80225aae6a4354f23088",
+                "version": 1,
+            }
+        },
+    }
+    DropChannelCampaignsProgress = {
+        "operationName": "DropChannelCampaignsProgress",
+        # "variables": {
+        #   "channelID": "[channel id]"
+        # },
+        "extensions": {
+            "persistedQuery": {
+                "sha256Hash": "3d9ce923899cbab5d7a8481da4e9918b1982a987bac68ac4347b5cf925a1d523",
+                "version": 1,
+            }
+        },
+    }
+    ViewerRewardDropInventory = {
+        "operationName": "ViewerRewardDropInventory",
+        "extensions": {
+            "persistedQuery": {
+                "sha256Hash": "828f9f0bdbc735ce3162519717f918b811902984580389a67ad733c684291e62",
                 "version": 1,
             }
         },

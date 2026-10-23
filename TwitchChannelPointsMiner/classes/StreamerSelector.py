@@ -7,6 +7,7 @@ from itertools import islice
 from typing import Protocol, Sequence, Callable
 
 from TwitchChannelPointsMiner.classes.Settings import Priority, StreamerSource
+from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
 from TwitchChannelPointsMiner.utils.LimitedSet import LimitedSet
 from TwitchChannelPointsMiner.utils.Utils import normalise_username
@@ -18,9 +19,15 @@ class StreamerSelector(abc.ABC):
     """Class for selecting streamers from a list."""
 
     @abc.abstractmethod
-    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+    def select(
+        self,
+        campaigns: dict[str, Campaign],
+        streamers: Sequence[Streamer],
+        max_amount: int,
+    ) -> list[str]:
         """
         Selects streamers from the list.
+        :param campaigns: The known drops campaigns.
         :param streamers: The streamers to consider.
         :param max_amount: The maximum amount of streamers to select.
         :return: The selected streamers.
@@ -41,7 +48,9 @@ def under_points_limit(streamer: Streamer):
     )
 
 
-def priority_order(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_order(
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     return [
         streamer.channel_id
         for streamer in islice(filter(under_points_limit, streamers), max_amount)
@@ -49,7 +58,10 @@ def priority_order(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
 
 
 def priority_points(
-    streamers: Sequence[Streamer], max_amount: int, descending: bool
+    campaigns: dict[str, Campaign],
+    streamers: Sequence[Streamer],
+    max_amount: int,
+    descending: bool,
 ) -> list[str]:
     items = [
         {"points": streamer.channel_points, "id": streamer.channel_id}
@@ -65,18 +77,20 @@ def priority_points(
 
 
 def priority_points_ascending(
-    streamers: Sequence[Streamer], max_amount: int
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
 ) -> list[str]:
-    return priority_points(streamers, max_amount, False)
+    return priority_points(campaigns, streamers, max_amount, False)
 
 
 def priority_points_descending(
-    streamers: Sequence[Streamer], max_amount: int
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
 ) -> list[str]:
-    return priority_points(streamers, max_amount, True)
+    return priority_points(campaigns, streamers, max_amount, True)
 
 
-def priority_streak(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_streak(
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     result = []
     for streamer in streamers:
         if len(result) >= max_amount:
@@ -93,15 +107,19 @@ def priority_streak(streamers: Sequence[Streamer], max_amount: int) -> list[str]
     return result
 
 
-def priority_drops(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_drops(
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     # max_amount can be ignored due to 1 drop limit
     for streamer in streamers:
-        if streamer.any_campaign_has_claimable_drop() is True:
+        if streamer.any_campaign_has_progressable_drop(campaigns):
             return [streamer.channel_id]
     return []
 
 
-def priority_subscribed(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_subscribed(
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     streamers_with_multiplier = [
         streamer
         for streamer in streamers
@@ -115,7 +133,9 @@ def priority_subscribed(streamers: Sequence[Streamer], max_amount: int) -> list[
     return [streamer.channel_id for streamer in streamers_with_multiplier[:max_amount]]
 
 
-def priority_watch(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_watch(
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     """
     Returns streamer ids that have yet to receive a WATCH for a watch attempt session, where the session has been less than
     7 minutes.
@@ -144,7 +164,7 @@ def priority_watch(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
 
 
 def priority_weekly_rewards(
-    streamers: Sequence[Streamer], max_amount: int
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
 ) -> list[str]:
     return list(
         islice(
@@ -161,7 +181,12 @@ def priority_weekly_rewards(
 
 
 class PriorityFunction(Protocol):
-    def __call__(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]: ...
+    def __call__(
+        self,
+        campaigns: dict[str, Campaign],
+        streamers: Sequence[Streamer],
+        max_amount: int,
+    ) -> list[str]: ...
 
 
 priority_functions: dict[Priority, PriorityFunction] = {
@@ -199,7 +224,12 @@ class PrioritySelector(StreamerSelector):
         else:
             self.priority_functions = priority_functions
 
-    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+    def select(
+        self,
+        campaigns: dict[str, Campaign],
+        streamers: Sequence[Streamer],
+        max_amount: int,
+    ) -> list[str]:
         selected = LimitedSet[str](max_amount)
         unselected = {streamer.channel_id: streamer for streamer in streamers}
         for priority in self.priorities:
@@ -208,7 +238,7 @@ class PrioritySelector(StreamerSelector):
 
             if priority in self.priority_functions:
                 to_add = self.priority_functions[priority](
-                    list(unselected.values()), selected.remaining()
+                    campaigns, list(unselected.values()), selected.remaining()
                 )
                 logger.debug(f"Selecting {to_add} for {priority}")
                 if not selected.add(*to_add):
@@ -330,9 +360,14 @@ class PriorityGroupSelector(StreamerSelector):
                 "Streamers must be one of list[str], StreamerSource, Callable, or None"
             )
 
-    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+    def select(
+        self,
+        campaigns: dict[str, Campaign],
+        streamers: Sequence[Streamer],
+        max_amount: int,
+    ) -> list[str]:
         sub_streamers = self._filter(streamers)
-        selection = self.selector.select(sub_streamers, max_amount)
+        selection = self.selector.select(campaigns, sub_streamers, max_amount)
         return selection[:max_amount]
 
 
@@ -342,11 +377,18 @@ class NestedSelector(StreamerSelector):
     def __init__(self, selectors: list[StreamerSelector]) -> None:
         self.selectors = selectors
 
-    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+    def select(
+        self,
+        campaigns: dict[str, Campaign],
+        streamers: Sequence[Streamer],
+        max_amount: int,
+    ) -> list[str]:
         selected = LimitedSet(max_amount)
         unselected = {streamer.channel_id: streamer for streamer in streamers}
         for selector in self.selectors:
-            selection = selector.select(list(unselected.values()), selected.remaining())
+            selection = selector.select(
+                campaigns, list(unselected.values()), selected.remaining()
+            )
             if not selected.add(*selection):
                 break
             else:
@@ -359,11 +401,12 @@ class NestedSelector(StreamerSelector):
 
 
 def priority_streak_by_earliest_stream_created_at(
-    streamers: Sequence[Streamer], max_amount: int
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
 ) -> list[str]:
     """
     Prioritises only streamers that have streaks, ordered by ascending stream.created_at to prioritise streams that came
     online first.
+    :param campaigns: The known drops campaigns.
     :param streamers: The streamers to consider.
     :param max_amount: The maximum amount of streamers to select.
     :return: The selected streamer ids.
@@ -377,11 +420,11 @@ def priority_streak_by_earliest_stream_created_at(
         ),
         reverse=False,
     )
-    return priority_streak(ordered, max_amount)
+    return priority_streak(campaigns, ordered, max_amount)
 
 
 def priority_subscribed_by_highest_multiplier_then_least_points(
-    streamers: Sequence[Streamer], max_amount: int
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
 ) -> list[str]:
     streamers_with_multiplier = [
         streamer
@@ -402,13 +445,15 @@ def priority_subscribed_by_highest_multiplier_then_least_points(
 class GetSortKey(Protocol):
     """A function that, given a Streamer, returns an object that supports rich comparison (<, >, <=, >=, ==, !=)."""
 
-    def __call__(self, streamer: Streamer) -> object: ...
+    def __call__(
+        self, campaigns: dict[str, Campaign], streamer: Streamer
+    ) -> object: ...
 
 
 class FilterFunction(Protocol):
     """A function that, given a Streamer, returns True if they pass the filter."""
 
-    def __call__(self, streamer: Streamer) -> bool: ...
+    def __call__(self, campaigns: dict[str, Campaign], streamer: Streamer) -> bool: ...
 
 
 class FilterSortSelector(StreamerSelector):
@@ -422,6 +467,7 @@ class FilterSortSelector(StreamerSelector):
         reason: object,
         _filter: FilterFunction,
         sorting: list[GetSortKey] | None = None,
+        max_select: int | None = None,
     ):
         self.reason = reason
         """A description of the reason for selection. (i.e. 'WATCH_STREAK')"""
@@ -432,20 +478,32 @@ class FilterSortSelector(StreamerSelector):
         A function that should return a sorting key.
         (i.e. `streamer.channel_points` or `-streamer.channel_points`)
         """
+        self.max_select = max_select
+        """An override to the maximum number of streamers to select."""
 
-    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+    def select(
+        self,
+        campaigns: dict[str, Campaign],
+        streamers: Sequence[Streamer],
+        max_amount: int,
+    ) -> list[str]:
         selected = list(
             islice(
                 map(
                     lambda streamer: streamer.channel_id,
                     sorted(
-                        (streamer for streamer in streamers if self.filter(streamer)),
+                        (
+                            streamer
+                            for streamer in streamers
+                            if self.filter(campaigns, streamer)
+                        ),
                         key=lambda streamer: [
-                            get_sort_key(streamer) for get_sort_key in self.sorting
+                            get_sort_key(campaigns, streamer)
+                            for get_sort_key in self.sorting
                         ],
                     ),
                 ),
-                max_amount,
+                max_amount if self.max_select is None else self.max_select,
             )
         )
         logger.debug(f"Selecting {selected} for {self.reason}")
@@ -455,15 +513,15 @@ class FilterSortSelector(StreamerSelector):
 # Filters
 
 
-def match_order(streamer: Streamer):
+def match_order(campaigns: dict[str, Campaign], streamer: Streamer):
     return under_points_limit(streamer)
 
 
-def match_points(streamer: Streamer):
+def match_points(campaigns: dict[str, Campaign], streamer: Streamer):
     return under_points_limit(streamer)
 
 
-def needs_watch_streak(streamer: Streamer):
+def needs_watch_streak(campaigns: dict[str, Campaign], streamer: Streamer):
     return (
         streamer.settings.watch_streak is True
         and streamer.stream.watch_streak_missing is True
@@ -473,15 +531,15 @@ def needs_watch_streak(streamer: Streamer):
     )
 
 
-def has_drops(streamer: Streamer):
-    return streamer.any_campaign_has_claimable_drop() is True
+def has_drops(campaigns: dict[str, Campaign], streamer: Streamer):
+    return streamer.any_campaign_has_progressable_drop(campaigns)
 
 
-def is_subscribed(streamer: Streamer):
+def is_subscribed(campaigns: dict[str, Campaign], streamer: Streamer):
     return under_points_limit(streamer) and streamer.viewer_has_points_multiplier()
 
 
-def in_watch_session(streamer: Streamer):
+def in_watch_session(campaigns: dict[str, Campaign], streamer: Streamer):
     return streamer.stream.watch_session_state is not None and (
         (
             datetime.datetime.now(datetime.timezone.utc)
@@ -491,7 +549,7 @@ def in_watch_session(streamer: Streamer):
     )
 
 
-def needs_weekly_reward(streamer: Streamer):
+def needs_weekly_reward(campaigns: dict[str, Campaign], streamer: Streamer):
     # We should have obtained the reward if we've already got the streak
     return (
         streamer.stream.watch_streak_missing is True
@@ -503,7 +561,7 @@ def needs_weekly_reward(streamer: Streamer):
 
 
 def sort_points(ascending: bool) -> GetSortKey:
-    return lambda streamer: (
+    return lambda campaigns, streamer: (
         streamer.channel_points if ascending else -streamer.channel_points
     )
 
@@ -512,7 +570,7 @@ sort_points_ascending = sort_points(ascending=True)
 sort_points_descending = sort_points(ascending=False)
 
 
-def sort_oldest_stream(streamer: Streamer):
+def sort_oldest_stream(campaigns: dict[str, Campaign], streamer: Streamer):
     return (
         streamer.stream.created_at.timestamp()
         if streamer.stream.created_at is not None
@@ -520,15 +578,16 @@ def sort_oldest_stream(streamer: Streamer):
     )
 
 
-def sort_newest_stream(streamer: Streamer):
-    return -sort_oldest_stream(streamer)
+def sort_newest_stream(campaigns: dict[str, Campaign], streamer: Streamer):
+    return -sort_oldest_stream(campaigns, streamer)
 
 
 def sort_multiplier(ascending: bool):
-    def inner(streamer: Streamer):
+    def inner(campaigns: dict[str, Campaign], streamer: Streamer):
         if streamer.total_points_multiplier() == 0:
             return sys.maxsize
         return streamer.total_points_multiplier() * (1 if ascending else -1)
+
     return inner
 
 
@@ -537,15 +596,99 @@ sort_multiplier_descending = sort_multiplier(ascending=False)
 
 
 def sort_subscription_ends_at(ascending: bool):
-    def inner(streamer: Streamer):
+    def inner(campaigns: dict[str, Campaign], streamer: Streamer):
         if streamer.gift_sub is None:
             return sys.maxsize
         return streamer.gift_sub.ends_at.timestamp() * (1 if ascending else -1)
+
     return inner
 
 
 sort_subscription_ends_at_ascending = sort_subscription_ends_at(ascending=True)
 sort_subscription_ends_at_descending = sort_subscription_ends_at(ascending=False)
+
+
+def sort_drop_count(ascending: bool):
+    """
+    Returns a sorting function that uses the total number of remaining drops.
+    :param ascending: True for ascending numbers of drops, False for descending.
+    """
+
+    def inner(campaigns: dict[str, Campaign], streamer: Streamer):
+        return streamer.remaining_drop_count(campaigns) * (1 if ascending else -1)
+
+    return inner
+
+
+sort_drop_count_ascending = sort_drop_count(ascending=True)
+sort_drop_count_descending = sort_drop_count(ascending=False)
+
+
+def sort_drop_end_date(soonest: bool):
+    """
+    Returns a sorting function that uses the drop campaign end date.
+    :param soonest: True for soonest end dates first, False for soonest last.
+    """
+
+    def inner(campaigns: dict[str, Campaign], streamer: Streamer):
+        date = (
+            streamer.min_drop_end_date(campaigns)
+            if soonest
+            else streamer.max_drop_end_date(campaigns)
+        )
+        if date is None:
+            return sys.maxsize
+        else:
+            return date.timestamp() * (1 if soonest else -1)
+
+    return inner
+
+
+sort_campaign_ending_soonest = sort_drop_end_date(soonest=True)
+sort_campaign_ending_latest = sort_drop_end_date(soonest=False)
+
+
+def sort_drop_progress(ascending: bool):
+    """
+    Returns a sorting function that uses the progress of the current reward group.
+    :param ascending: True to consider the current drop with the least progress first.
+                      False to consider the current drop with the most progress first.
+    """
+
+    def inner(campaigns: dict[str, Campaign], streamer: Streamer):
+        return (
+            streamer.min_drop_progress(campaigns)
+            if ascending
+            else (streamer.max_drop_progress(campaigns) * -1)
+        )
+
+    return inner
+
+
+sort_drop_progress_ascending = sort_drop_progress(ascending=True)
+sort_drop_progress_descending = sort_drop_progress(ascending=False)
+
+
+def sort_drop_percentage_progress(ascending: bool):
+    """
+    Returns a sorting function that uses the percentage progress of the current reward group.
+    :param ascending: True to consider the current drop with the least progress first.
+                      False to consider the current drop with the most progress first.
+    """
+
+    def inner(campaigns: dict[str, Campaign], streamer: Streamer):
+        return (
+            streamer.min_drop_percentage_progress(campaigns)
+            if ascending
+            else streamer.max_drop_percentage_progress(campaigns)
+        )
+
+    return inner
+
+
+sort_drop_percentage_progress_ascending = sort_drop_progress(ascending=True)
+sort_drop_percentage_progress_descending = sort_drop_progress(ascending=False)
+
 
 # Priorities
 
@@ -565,7 +708,9 @@ def watch_streak(sorting: list[GetSortKey] | None = None):
 
 
 def drops(sorting: list[GetSortKey] | None = None):
-    return FilterSortSelector(reason=Priority.DROPS, _filter=has_drops, sorting=sorting)
+    return FilterSortSelector(
+        reason=Priority.DROPS, _filter=has_drops, sorting=sorting, max_select=1
+    )
 
 
 def subscribed(sorting: list[GetSortKey] | None = None):

@@ -4,7 +4,6 @@ import logging
 import os
 import random
 import signal
-import string
 import sys
 import threading
 import time
@@ -12,11 +11,11 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
-from secrets import token_hex
 from typing import Literal
 
 from TwitchChannelPointsMiner.classes import WatchStreakRecovery, WeeklyRewardsProgressor
-from TwitchChannelPointsMiner.classes.ClientSession import ClientSession
+from TwitchChannelPointsMiner.classes.ClientSession import ClientSessionConfig, ClientSessionFactory, client_session_factory
+from TwitchChannelPointsMiner.classes.DropsCampaignUpdater import DropsCampaignUpdater, DropsClaimer
 from TwitchChannelPointsMiner.classes.Exceptions import StreamerDoesNotExistException
 from TwitchChannelPointsMiner.classes.PubSub import PubSubHandler
 from TwitchChannelPointsMiner.classes.Settings import FollowersOrder, Priority, Settings, StreamerSource
@@ -26,10 +25,11 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     StreamerSelectorFactory,
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
-from TwitchChannelPointsMiner.classes.TwitchLogin import TwitchLogin
 from TwitchChannelPointsMiner.classes.chat.Manager import ChatManagerFactory, chat_manager_factory
+from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
+    DropsMode,
     Streamer,
     StreamerSettings,
 )
@@ -43,6 +43,7 @@ from TwitchChannelPointsMiner.classes.events.managers import DefaultEventManager
 from TwitchChannelPointsMiner.classes.events.managers.Factory import EventManagerConfiguration, EventManagerFactory
 from TwitchChannelPointsMiner.classes.events.transformers.hooks import DefaultEventTransformerFactory
 from TwitchChannelPointsMiner.classes.gql.Integration import GQLFactory
+from TwitchChannelPointsMiner.classes.systems.Drops import DropsSystem
 from TwitchChannelPointsMiner.classes.systems.Notifications import NotificationsSystem
 from TwitchChannelPointsMiner.classes.systems.Streamers import StreamerSystem
 from TwitchChannelPointsMiner.classes.systems.Streams import StreamSystem
@@ -51,13 +52,11 @@ from TwitchChannelPointsMiner.classes.systems.predictions.Tracker import Predict
 from TwitchChannelPointsMiner.classes.websocket.Factory import DefaultWebSocketPoolFactory
 from TwitchChannelPointsMiner.classes.websocket.Pool import WebSocketPoolFactory
 from TwitchChannelPointsMiner.classes.websocket.data.Parser import Parser as WebSocketJsonParser
-from TwitchChannelPointsMiner.constants import CLIENT_ID, CLIENT_VERSION
 from TwitchChannelPointsMiner.logger import LoggerSettings, configure_loggers
 from TwitchChannelPointsMiner.utils import (
     millify,
     at_least_one_value_in_settings_is,
     check_versions,
-    get_user_agent,
     internet_connection_available,
     set_default_settings,
     AttemptStrategy,
@@ -95,6 +94,7 @@ class Factories:
     def __init__(
         self,
         streamer_selector: StreamerSelectorFactory | None = None,
+        client_session: ClientSessionFactory | None = None,
         clip_vod_watcher_runner: SlottedTaskRunnerFactory | None = None,
         gql: GQLFactory | None = None,
         ws_pool: WebSocketPoolFactory | None = None,
@@ -116,6 +116,10 @@ class Factories:
             else StreamerSelectorFactory()
         )
         """Factory that produces a streamer selector for use selecting streamers to watch"""
+        self.client_session: ClientSessionFactory = (
+            client_session if client_session is not None else client_session_factory
+        )
+        """Factory that produces ClientSessions"""
         clip_vod_watcher_runner = (
             clip_vod_watcher_runner if clip_vod_watcher_runner is not None else SlottedTaskRunnerThreadFactory()
         )
@@ -163,6 +167,7 @@ class TwitchChannelPointsMiner:
     __slots__ = [
         "username",
         "event_manager",
+        "client_session",
         "twitch",
         "claim_drops_startup",
         "enable_analytics",
@@ -170,6 +175,7 @@ class TwitchChannelPointsMiner:
         "disable_at_in_nickname",
         "streamer_selector",
         "chat_manager",
+        "campaigns",
         "streamers",
         "prediction_events",
         "background_tasks",
@@ -202,6 +208,8 @@ class TwitchChannelPointsMiner:
         gql: AttemptStrategy | None = None,
         # True if we want to use the new Hermes WebSocket API
         use_hermes: bool = False,
+        # Client session
+        client_session_config: ClientSessionConfig = ClientSessionConfig(),
         # Weekly Rewards Progression
         weekly_rewards: (
             WeeklyRewardsProgressor.BasicConfiguration | Literal[False] | None
@@ -273,10 +281,8 @@ class TwitchChannelPointsMiner:
         streamer_settings.bet.default()
         Settings.streamer_settings = streamer_settings
 
-        # user_agent = get_user_agent("FIREFOX")
-        user_agent = get_user_agent("CHROME")
-
         # State objects
+        self.campaigns: dict[str, Campaign] = dict()
         self.streamers: list[Streamer] = []
         self.prediction_events: dict[str, PredictionEvent] = dict()
         self.background_tasks: list[threading.Thread] = []
@@ -319,30 +325,26 @@ class TwitchChannelPointsMiner:
             )
 
         # Client session
-        device_id = "".join(
-            random.choice(string.ascii_letters + string.digits) for _ in range(32)
-        )
-        twitch_login = TwitchLogin(
-            CLIENT_ID, device_id, username, user_agent, password=password
-        )
-        client_session_id = token_hex(16)
-        client_session = ClientSession(
-            login=twitch_login,
-            user_agent=user_agent,
-            version=CLIENT_VERSION,
-            device_id=device_id,
-            session_id=client_session_id,
-            version_outdated=True,
+        self.client_session = factories.client_session(
+            username=username,
+            password=password,
+            config=client_session_config,
         )
 
         # GQL API
-        gql_api = factories.gql.create(client_session=client_session, strategy=gql)
+        # TODO timeout configuration
+        gql_request_timeout = None
+        gql_api = factories.gql.create(
+            client_session=self.client_session,
+            strategy=gql,
+            request_timeout=gql_request_timeout,
+        )
 
         # Twitch API
         self.twitch = Twitch(
             event_manager=self.event_manager,
             username=username,
-            client_session=client_session,
+            client_session=self.client_session,
             gql=gql_api,
         )
 
@@ -497,9 +499,6 @@ class TwitchChannelPointsMiner:
         try:
             self.twitch.login()
 
-            if self.claim_drops_startup is True:
-                self.twitch.claim_all_drops_from_inventory()
-
             streamers_pre_loaded: list[tuple[str, StreamerSource]] = []
             streamers_dict: dict[str, str | Streamer] = {}
 
@@ -605,6 +604,53 @@ class TwitchChannelPointsMiner:
                 streamer.channel_points for streamer in self.streamers
             ]
 
+            # Miner Systems
+            # TODO system config options
+
+            drops_system = DropsSystem(
+                campaigns=self.campaigns,
+                streamers=self.streamers,
+                twitch=self.twitch,
+                event_manager=self.event_manager,
+            )
+
+            streamer_system = StreamerSystem(
+                twitch=self.twitch,
+                streamers=self.streamers,
+                event_manager=self.event_manager,
+            )
+
+            stream_system = StreamSystem(
+                twitch=self.twitch,
+                campaigns=self.campaigns,
+                streamers=self.streamers,
+                event_manager=self.event_manager,
+            )
+
+            prediction_system_factory = PredictionTrackingSystemFactory()
+            predictor_factory = BasicPredictorFactory(create_timer=threading.Timer)
+            prediction_system = prediction_system_factory.create(
+                streamers=self.streamers,
+                prediction_events=self.prediction_events,
+                event_manager=self.event_manager,
+                predictor=predictor_factory.create(
+                    twitch=self.twitch,
+                    streamers=self.streamers,
+                    prediction_events=self.prediction_events,
+                    event_manager=self.event_manager
+                )
+            )
+
+            notification_system = NotificationsSystem(
+                streamers=self.streamers,
+                drops_system=drops_system,
+                event_manager=self.event_manager,
+            )
+
+            # Claim any drops now
+            if self.claim_drops_startup is True:
+                drops_system.claim_all_drops()
+
             # If we have at least one streamer with settings = make_predictions True
             make_predictions = at_least_one_value_in_settings_is(
                 self.streamers, "make_predictions", True
@@ -612,23 +658,34 @@ class TwitchChannelPointsMiner:
 
             background_task_sleep_step = timedelta(seconds=5).total_seconds()
 
-            # If we have at least one streamer with settings = claim_drops True
+            # If we have at least one streamer with settings.claim_drops ALL or LINKED
             # Spawn a thread for sync inventory and dashboard
-            if (
-                at_least_one_value_in_settings_is(self.streamers, "claim_drops", True)
-                is True
-            ):
-                sync_campaigns_thread = threading.Thread(
-                    target=self.twitch.sync_campaigns,
-                    args=(self.streamers,),
+            any_streamer_claim_drops = False
+            for streamer in self.streamers:
+                if streamer.settings.claim_drops in {DropsMode.ALL, DropsMode.LINKED}:
+                    any_streamer_claim_drops = True
+                    break
+            if any_streamer_claim_drops:
+                # TODO config + factory setup
+                drops_campaign_updater = DropsCampaignUpdater(
+                    streamers=self.streamers,
+                    twitch=self.twitch,
+                    stream_system=stream_system,
                 )
-                sync_campaigns_thread.name = "Sync campaigns/inventory"
-                sync_campaigns_thread.start()
-                self.background_tasks.append(sync_campaigns_thread)
+                drops_campaign_updater.start()
+                self.background_tasks.append(drops_campaign_updater)
+
+                drops_claimer = DropsClaimer(
+                    event_manager=self.event_manager,
+                    twitch=self.twitch,
+                    inventory_system=drops_system,
+                )
+                drops_claimer.start()
+                self.background_tasks.append(drops_claimer)
 
             minute_watcher_thread = threading.Thread(
                 target=self.twitch.send_minute_watched_events,
-                args=(self.streamers, self.streamer_selector),
+                args=(self.campaigns, self.streamers, self.streamer_selector),
             )
             minute_watcher_thread.name = "Minute watcher"
             minute_watcher_thread.start()
@@ -640,7 +697,7 @@ class TwitchChannelPointsMiner:
                 target=lambda: interruptible_repeating_task(
                     self.twitch.update_client_version,
                     lambda: self.running,
-                    lambda: self.twitch.client_session.version_outdated,
+                    lambda: self.client_session.version_outdated,
                     update_client_version_period,
                     background_task_sleep_step,
                 ),
@@ -664,40 +721,6 @@ class TwitchChannelPointsMiner:
             sync_gift_subs_thread.start()
             self.background_tasks.append(sync_gift_subs_thread)
 
-            # Miner Systems
-            # TODO system config options
-            streamer_system = StreamerSystem(
-                twitch=self.twitch,
-                streamers=self.streamers,
-                event_manager=self.event_manager,
-            )
-
-            stream_system = StreamSystem(
-                twitch=self.twitch,
-                streamers=self.streamers,
-                event_manager=self.event_manager,
-            )
-
-            prediction_system_factory = PredictionTrackingSystemFactory()
-            predictor_factory = BasicPredictorFactory(create_timer=threading.Timer)
-            prediction_system = prediction_system_factory.create(
-                streamers=self.streamers,
-                prediction_events=self.prediction_events,
-                event_manager=self.event_manager,
-                predictor=predictor_factory.create(
-                    twitch=self.twitch,
-                    streamers=self.streamers,
-                    prediction_events=self.prediction_events,
-                    event_manager=self.event_manager
-                )
-            )
-
-            notification_system = NotificationsSystem(
-                twitch=self.twitch,
-                streamers=self.streamers,
-                event_manager=self.event_manager,
-            )
-
             # WebSocket
             pubsub_handlers = [
                 PubSubHandler(
@@ -705,6 +728,7 @@ class TwitchChannelPointsMiner:
                     stream_system=stream_system,
                     prediction_system=prediction_system,
                     notification_system=notification_system,
+                    drops_system=drops_system,
                     parser=WebSocketJsonParser(),
                 )
             ]
@@ -713,7 +737,7 @@ class TwitchChannelPointsMiner:
             self.ws_pool.start()
 
             # Subscribe to community-points-user. Get update for points spent or gains
-            user_id = self.twitch.client_session.login.get_user_id()
+            user_id = self.client_session.login.get_user_id()
             # print(f"!!!!!!!!!!!!!! USER_ID: {user_id}")
 
             # Fixes 'ERR_BADAUTH'
@@ -751,6 +775,10 @@ class TwitchChannelPointsMiner:
 
             # viewer-milestones gives us information about recovered streaks
             self.ws_pool.submit(PubsubTopic("viewer-milestones", user_id=user_id))
+
+            # user-drop-events gives us information about drops campaigns
+            if any_streamer_claim_drops:
+                self.ws_pool.submit(PubsubTopic("user-drop-events", user_id=user_id))
 
             for streamer in self.streamers:
                 self.ws_pool.submit(
@@ -911,6 +939,10 @@ class TwitchChannelPointsMiner:
         logger.info("Shutting down websocket pool")
         if self.ws_pool is not None:
             self.ws_pool.end()
+
+        logger.info("Shutting down HTTP Session")
+        if self.client_session is not None:
+            self.client_session.session.close()
 
         # Check if all the mutex are unlocked.
         # Prevent breaks of .json file

@@ -85,6 +85,7 @@ class LoggerSettings:
         "colored",
         "color_palette",
         "auto_clear",
+        "drops_progress",
         "telegram",
         "discord",
         "webhook",
@@ -112,6 +113,7 @@ class LoggerSettings:
         colored: bool = False,
         color_palette: ColorPalette = ColorPalette(),
         auto_clear: bool = True,
+        drops_progress: bool = True,
         telegram: Telegram | None = None,
         discord: Discord | None = None,
         webhook: Webhook | None = None,
@@ -137,6 +139,7 @@ class LoggerSettings:
         self.colored = colored
         self.color_palette = color_palette
         self.auto_clear = auto_clear
+        self.drops_progress = drops_progress
         self.telegram = telegram
         self.discord = discord
         self.webhook = webhook
