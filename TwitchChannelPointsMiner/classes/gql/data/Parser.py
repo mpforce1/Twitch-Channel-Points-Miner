@@ -79,6 +79,7 @@ from TwitchChannelPointsMiner.classes.gql.data.response.WithIsStreamLiveQuery im
     WithIsStreamLiveQueryResponse,
 )
 
+
 # Parsers for GQL response types
 
 
@@ -418,7 +419,16 @@ def drop_campaign_in_progress_parser(value: Any) -> Drops.DropCampaignInProgress
     return Drops.DropCampaignInProgress(
         _id=parse_expected_value(value, "id", expect_str),
         name=parse_expected_value(value, "name", expect_str),
+        start_at=parse_expected_value(value, "startAt", expect_iso_8601),
+        end_at=parse_expected_value(value, "endAt", expect_iso_8601),
+        status=parse_expected_value(value, "status", expect_str),
         is_account_connected=dig(value, ["self", "isAccountConnected"], expect_bool),
+        account_link_url=parse_expected_value(
+            value, "accountLinkURL", optional_parser(expect_str)
+        ),
+        game=parse_expected_value(
+            value, "game", optional_parser(drops_game_details_parser("name"))
+        ),
         time_based_drops=parse_expected_value(
             value, "timeBasedDrops", list_parser(time_based_drop_in_progress_parser)
         ),
@@ -722,12 +732,31 @@ def drops_unlock_requirement_parser(value) -> Drops.DropsUnlockRequirement:
     )
 
 
+def drops_repeatable_config_parser(value) -> Drops.DropsRepeatableConfig:
+    value = expect_dict(value)
+    return Drops.DropsRepeatableConfig(
+        repeatable_times=parse_expected_value(value, "repeatableTimes", expect_int),
+        reset_interval_seconds=parse_expected_value(
+            value, "resetIntervalSeconds", expect_int
+        ),
+        is_last_chance_extension_enabled=parse_expected_value(
+            value, "isLastChanceExtensionEnabled", expect_bool
+        ),
+        should_complete_all_repeats_to_earn=parse_expected_value(
+            value, "shouldCompleteAllRepeatsToEarn", expect_bool
+        ),
+    )
+
+
 def drops_progress_criteria_parser(value) -> Drops.DropsProgressCriteria:
     value = expect_dict(value)
     return Drops.DropsProgressCriteria(
         requirement_type=parse_expected_value(value, "requirementType", expect_str),
         requirements=parse_expected_value(
             value, "requirements", drops_unlock_requirement_parser
+        ),
+        repeatable_config=parse_expected_value(
+            value, "repeatableConfig", optional_parser(drops_repeatable_config_parser)
         ),
         categories=parse_expected_value(
             value, "categories", list_parser(drops_game_details_parser("displayName"))
@@ -770,6 +799,7 @@ def drops_reward_group_self_edge_parser(value) -> Drops.DropsRewardGroupSelfEdge
         current_subs=parse_expected_value(
             value, "currentSubs", with_default(optional_parser(expect_int), 0)
         ),
+        grant_count=parse_expected_value(value, "grantCount", expect_int),
         current_window=parse_expected_value(
             value, "currentWindow", optional_parser(drops_progress_window_parser)
         ),

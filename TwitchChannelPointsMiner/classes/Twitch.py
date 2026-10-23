@@ -31,6 +31,7 @@ from TwitchChannelPointsMiner.classes.Settings import (
     Settings,
 )
 from TwitchChannelPointsMiner.classes.StreamerSelector import StreamerSelector
+from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub
 from TwitchChannelPointsMiner.classes.entities.PlaybackAccessToken import (
@@ -868,6 +869,7 @@ class Twitch(object):
 
     def send_minute_watched_events(
         self,
+        campaigns: dict[str, Campaign],
         streamers: list[Streamer],
         streamer_selector: StreamerSelector,
         chunk_size=3,
@@ -891,7 +893,7 @@ class Twitch(object):
                         # Please perform a manually update and check if the user it's online
                         self.check_streamer_online(streamer)
 
-                selected_streamer_ids = streamer_selector.select(online_streamers, 2)
+                selected_streamer_ids = streamer_selector.select(campaigns, online_streamers, 2)
                 streamers_watching = [
                     find_streamer(streamers, streamer_id) for streamer_id in selected_streamer_ids
                 ]
@@ -945,18 +947,13 @@ class Twitch(object):
                     )
 
                     try:
-                        if (
-                            streamer.settings.simulate_hls_playback is not False
-                            and not self.simulate_hls_playback(
+                        if streamer.settings.simulate_hls_playback is not False:
+                            if not self.simulate_hls_playback(
                                 streamer,
                                 streamer.channel_id not in watched_previous_iteration,
-                                (
-                                    streamer.any_campaign_has_progressable_drop()
-                                    or streamer.settings.simulate_hls_playback.watch_all_segments
-                                ),
-                            )
-                        ):
-                            continue
+                                streamer.watch_all_segments(campaigns),
+                            ):
+                                continue
 
                         if self.send_spade_minute_watched_event(streamer):
                             watched_this_iteration.add(streamer.channel_id)

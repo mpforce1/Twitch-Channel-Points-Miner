@@ -4,6 +4,8 @@ from threading import Thread
 
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+from TwitchChannelPointsMiner.classes.events.Event import Error
+from TwitchChannelPointsMiner.classes.events.Manager import EventManager
 from TwitchChannelPointsMiner.classes.systems.Drops import DropsSystem
 from TwitchChannelPointsMiner.classes.systems.Streams import StreamSystem
 from TwitchChannelPointsMiner.utils.Utils import interruptible_sleep
@@ -44,16 +46,27 @@ class DropsCampaignUpdater(Thread):
 class DropsClaimer(Thread):
     """Thread that periodically claims all available drops in the user's inventory."""
 
-    def __init__(self, twitch: Twitch, inventory_system: DropsSystem):
+    def __init__(
+        self, event_manager: EventManager, twitch: Twitch, inventory_system: DropsSystem
+    ):
         super().__init__(name="Drops Claimer", daemon=True)
+        self.event_manager = event_manager
         self.twitch = twitch
         self.drops_system = inventory_system
 
     def run(self):
-        while self.twitch.running:
-            self.drops_system.claim_all_drops()
-            # run every 15 minutes
-            interruptible_sleep(
-                lambda: self.twitch.running,
-                duration=datetime.timedelta(minutes=15).total_seconds(),
+        try:
+            while self.twitch.running:
+                self.drops_system.claim_all_drops()
+                # run every 15 minutes
+                interruptible_sleep(
+                    lambda: self.twitch.running,
+                    duration=datetime.timedelta(minutes=15).total_seconds(),
+                )
+        except Exception as e:
+            logger.error(f"Error in Drops Claimer: {e}")
+            self.event_manager.manage(
+                Error(
+                    context="Drops Claimer", message="Error in Drops Claimer", error=e
+                )
             )
