@@ -2,6 +2,7 @@ import logging
 import time
 
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
+from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.Streamer import DropsMode, Streamer
 from TwitchChannelPointsMiner.classes.events.Event import (
     Error,
@@ -16,17 +17,21 @@ from TwitchChannelPointsMiner.classes.gql.data.response.Drops import (
     DropsCampaign,
 )
 from TwitchChannelPointsMiner.utils.Entities import find_streamer
-from TwitchChannelPointsMiner.utils.Utils import oxford_comma_list
 
 logger = logging.getLogger(__name__)
 
 
 class StreamSystem:
     def __init__(
-        self, twitch: Twitch, streamers: list[Streamer], event_manager: EventManager
+        self,
+        twitch: Twitch,
+        campaigns: dict[str, Campaign],
+        streamers: list[Streamer],
+        event_manager: EventManager,
     ):
         self.twitch = twitch
         self.streamers = streamers
+        self.campaigns = campaigns
         self.event_manager = event_manager
 
     def bring_up(self, channel_id: str):
@@ -92,10 +97,8 @@ class StreamSystem:
         :param channel_id: The id of the Streamer
         """
         streamer = find_streamer(self.streamers, channel_id)
-        if streamer.is_online and streamer.settings.claim_drops in {
-            DropsMode.ALL,
-            DropsMode.LINKED,
-        }:
+        # Ignore streamers where claim_drops is NONE
+        if streamer.is_online and streamer.settings.claim_drops != DropsMode.NONE:
             # Get campaign data
             new_campaigns = {
                 campaign.id: campaign for campaign in self._fetch_progress(streamer)
@@ -103,20 +106,40 @@ class StreamSystem:
             # Log the difference
             for old_campaign_id in streamer.stream.campaigns:
                 if old_campaign_id not in new_campaigns:
-                    old_campaign = streamer.stream.campaigns[old_campaign_id]
-                    logger.info(
+                    old_campaign = self.campaigns.get(old_campaign_id, None)
+                    if old_campaign is None:
+                        # If we haven't synced the inventory yet, don't worry about logging this
+                        continue
+                    logger.debug(
                         f"Streamer {streamer} has deactivated Drops Campaign: {old_campaign.name}"
                     )
             for new_campaign_id in new_campaigns:
                 if new_campaign_id not in streamer.stream.campaigns:
                     new_campaign = new_campaigns[new_campaign_id]
-                    logger.info(
-                        f"Streamer {streamer} has activated Drops Campaign: {new_campaign.name}. "
-                        f"Available drops: {oxford_comma_list([reward.name for group in new_campaign.reward_groups for reward in group.rewards])}"
+                    logger.debug(
+                        f"Streamer {streamer} has activated Drops Campaign: {new_campaign.name}"
                     )
 
             # Set the data
-            streamer.stream.campaigns = new_campaigns
+            streamer.stream.campaigns = list(new_campaigns.keys())
+
+            # Add any new data to the inventory (the inventory won't have campaigns that haven't been started by the user)
+            for campaign_id in new_campaigns:
+                if campaign_id not in self.campaigns:
+                    campaign = new_campaigns[campaign_id]
+                    # Ignore track and lane drops for now
+                    can_convert = True
+                    for group in campaign.reward_groups:
+                        if group.track is not None or group.lane is not None:
+                            can_convert = False
+                            break
+                    if can_convert:
+                        self.campaigns[campaign_id] = Campaign.from_gql_stream(campaign)
+                        logger.debug(
+                            f"Adding new Campaign: {self.campaigns[campaign.id].name}, progressable: {self.campaigns[campaign.id].progressable(True)}"
+                        )
+                    else:
+                        logger.debug(f"Campaign {campaign.name} is invalid")
         else:
             # Clear campaign ids when offline
             streamer.stream.campaigns.clear()

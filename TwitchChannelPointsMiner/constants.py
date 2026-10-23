@@ -310,3 +310,12 @@ class GQLOperations:
             }
         },
     }
+    ViewerRewardDropInventory = {
+        "operationName": "ViewerRewardDropInventory",
+        "extensions": {
+            "persistedQuery": {
+                "sha256Hash": "828f9f0bdbc735ce3162519717f918b811902984580389a67ad733c684291e62",
+                "version": 1,
+            }
+        },
+    }

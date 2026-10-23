@@ -26,6 +26,7 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
 )
 from TwitchChannelPointsMiner.classes.Twitch import Twitch
 from TwitchChannelPointsMiner.classes.chat.Manager import ChatManagerFactory, chat_manager_factory
+from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.PubsubTopic import PubsubTopic
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     DropsMode,
@@ -174,6 +175,7 @@ class TwitchChannelPointsMiner:
         "disable_at_in_nickname",
         "streamer_selector",
         "chat_manager",
+        "campaigns",
         "streamers",
         "prediction_events",
         "background_tasks",
@@ -280,6 +282,7 @@ class TwitchChannelPointsMiner:
         Settings.streamer_settings = streamer_settings
 
         # State objects
+        self.campaigns: dict[str, Campaign] = dict()
         self.streamers: list[Streamer] = []
         self.prediction_events: dict[str, PredictionEvent] = dict()
         self.background_tasks: list[threading.Thread] = []
@@ -605,6 +608,7 @@ class TwitchChannelPointsMiner:
             # TODO system config options
 
             drops_system = DropsSystem(
+                campaigns=self.campaigns,
                 streamers=self.streamers,
                 twitch=self.twitch,
                 event_manager=self.event_manager,
@@ -618,6 +622,7 @@ class TwitchChannelPointsMiner:
 
             stream_system = StreamSystem(
                 twitch=self.twitch,
+                campaigns=self.campaigns,
                 streamers=self.streamers,
                 event_manager=self.event_manager,
             )
@@ -671,6 +676,7 @@ class TwitchChannelPointsMiner:
                 self.background_tasks.append(drops_campaign_updater)
 
                 drops_claimer = DropsClaimer(
+                    event_manager=self.event_manager,
                     twitch=self.twitch,
                     inventory_system=drops_system,
                 )
@@ -679,7 +685,7 @@ class TwitchChannelPointsMiner:
 
             minute_watcher_thread = threading.Thread(
                 target=self.twitch.send_minute_watched_events,
-                args=(self.streamers, self.streamer_selector),
+                args=(self.campaigns, self.streamers, self.streamer_selector),
             )
             minute_watcher_thread.name = "Minute watcher"
             minute_watcher_thread.start()

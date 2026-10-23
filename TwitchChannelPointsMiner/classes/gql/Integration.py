@@ -811,9 +811,7 @@ class GQL:
 
     def drop_channel_campaigns_progress(self, channel_id: str):
         json_data = copy.deepcopy(GQLOperations.DropChannelCampaignsProgress)
-        json_data["variables"] = {
-            "channelID": channel_id
-        }
+        json_data["variables"] = {"channelID": channel_id}
         return self.post_gql_request_single(
             GQLOperations.DropChannelCampaignsProgress["operationName"],
             json_data,

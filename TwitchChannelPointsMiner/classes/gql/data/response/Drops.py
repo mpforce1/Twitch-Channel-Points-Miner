@@ -118,12 +118,22 @@ class DropCampaignInProgress:
         self,
         _id: str,
         name: str,
+        start_at: datetime,
+        end_at: datetime,
+        status: str,
         is_account_connected: bool,
+        account_link_url: str | None,
+        game: GameDetails | None,
         time_based_drops: list[TimeBasedDropInProgress],
     ):
         self.id = _id
         self.name = name
+        self.start_at = start_at
+        self.end_at = end_at
+        self.status = status
         self.is_account_connected = is_account_connected
+        self.account_link_url = account_link_url
+        self.game = game
         self.time_based_drops = time_based_drops
 
     def __repr__(self):
@@ -142,9 +152,18 @@ class DropsUnlockRequirement:
 
 
 @dataclass
+class DropsRepeatableConfig:
+    repeatable_times: int
+    reset_interval_seconds: int
+    is_last_chance_extension_enabled: bool
+    should_complete_all_repeats_to_earn: bool
+
+
+@dataclass
 class DropsProgressCriteria:
     requirement_type: str
     requirements: DropsUnlockRequirement
+    repeatable_config: DropsRepeatableConfig | None
     categories: list[GameDetails]
 
 
@@ -171,6 +190,7 @@ class DropsRewardGroupSelfEdge:
     # These can both be None, just assume 0
     current_minutes_watched: int
     current_subs: int
+    grant_count: int
     current_window: DropsProgressWindow | None
 
 
@@ -248,4 +268,9 @@ class DropsPageClaimDropsResponse:
 
 @dataclass
 class DropChannelCampaignsProgressResponse:
+    campaigns: list[DropsCampaign] | None
+
+
+@dataclass
+class ViewerRewardDropInventoryResponse:
     campaigns: list[DropsCampaign] | None
