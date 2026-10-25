@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from TwitchChannelPointsMiner.classes.Anonymiser import Deanonymiser, RandomAnonymiser
+from TwitchChannelPointsMiner.classes.Anonymiser import Deanonymiser
 from TwitchChannelPointsMiner.classes.Settings import Settings
 from TwitchChannelPointsMiner.classes.entities.Streamer import (
     Streamer,
@@ -40,6 +40,7 @@ def test_bring_up():
     system = StreamSystem(
         twitch=MagicMock(),
         streamers=[streamer],
+        campaigns={},
         event_manager=event_manager,
     )
 
@@ -71,6 +72,7 @@ def test_bring_down():
     system = StreamSystem(
         twitch=MagicMock(),
         streamers=[streamer],
+        campaigns={},
         event_manager=event_manager,
     )
 
@@ -109,6 +111,7 @@ def test_update_view_count(stream_up_elapsed: bool):
     system = StreamSystem(
         twitch=twitch,
         streamers=[streamer],
+        campaigns={},
         event_manager=event_manager,
     )
 
@@ -171,6 +174,8 @@ test_update_campaigns_data = [
                     DropsRewardGroup(
                         id="01a14ae1-c8b9-743d-829d-e57cfa2fdd1d",
                         name="test reward group",
+                        track=None,
+                        lane=None,
                         progress_criteria=DropsProgressCriteria(
                             requirement_type="minutes_watched",
                             requirements=DropsUnlockRequirement(
@@ -179,18 +184,24 @@ test_update_campaigns_data = [
                                 turbo_subs=0,
                             ),
                             categories=[],
+                            repeatable_config=None,
                         ),
                         rewards=[],
                         self_edge=DropsRewardGroupSelfEdge(
                             status="IN_PROGRESS",
                             current_minutes_watched=100,
                             current_subs=0,
+                            grant_count=1,
+                            current_window=None,
                         ),
                     )
                 ],
             ),
         ],
-        [],
+        [
+            "01a14adc-f2f1-70c1-8772-1265b8b70839",
+            "01a14ae1-5610-74ed-b8a4-9733e49067cb",
+        ],
     ),
     # Progressible campaigns
     (
@@ -212,6 +223,8 @@ test_update_campaigns_data = [
                     DropsRewardGroup(
                         id="01a14ae5-8638-72ae-a726-892afe08f11f",
                         name="test reward group",
+                        track=None,
+                        lane=None,
                         progress_criteria=DropsProgressCriteria(
                             requirement_type="minutes_watched",
                             requirements=DropsUnlockRequirement(
@@ -220,18 +233,22 @@ test_update_campaigns_data = [
                                 turbo_subs=0,
                             ),
                             categories=[],
+                            repeatable_config=None,
                         ),
                         rewards=[
                             DropsReward(
                                 id="01a14aeb-4962-742c-adc1-9be8d562bc3e",
                                 name="test reward",
                                 is_account_connected=True,
+                                account_link_url="",
                             )
                         ],
                         self_edge=DropsRewardGroupSelfEdge(
                             status="IN_PROGRESS",
                             current_minutes_watched=10,
                             current_subs=0,
+                            grant_count=0,
+                            current_window=None,
                         ),
                     )
                 ],
@@ -255,10 +272,12 @@ def test_update_campaigns(
     event_manager = MagicMock()
 
     twitch = MagicMock()
+    campaign_store = dict()
 
     system = StreamSystem(
         twitch=twitch,
         streamers=[streamer],
+        campaigns=campaign_store,
         event_manager=event_manager,
     )
     system._fetch_progress = MagicMock()
@@ -271,4 +290,11 @@ def test_update_campaigns(
         patcher.setattr(datetime, "datetime", mock_datetime)
         system.update_campaigns(streamer.channel_id)
 
-    assert streamer.stream.campaigns_ids == expected_ids
+    assert len(streamer.stream.campaigns) == len(expected_ids)
+    for item in streamer.stream.campaigns:
+        assert item in expected_ids
+    for item in expected_ids:
+        assert item in streamer.stream.campaigns
+
+    for campaign in campaigns:
+        assert campaign.id in campaign_store

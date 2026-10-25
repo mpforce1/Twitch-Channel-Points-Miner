@@ -41,9 +41,7 @@ class Drop:
             and self.subs_required == 0
         )
         self.percentage_progress: float = (
-            100 * current_minutes_watched / minutes_required
-            if minutes_required != 0
-            else 0
+            current_minutes_watched / minutes_required if minutes_required != 0 else 0
         )
 
         self.end_at = end_at

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+import datetime
 from urllib.parse import urlsplit
 
 from TwitchChannelPointsMiner.classes.Settings import Settings
@@ -17,8 +17,8 @@ class Campaign:
         game: GameDetails | None,
         name: str,
         status: str,
-        end_at: datetime,
-        start_at: datetime,
+        end_at: datetime.datetime,
+        start_at: datetime.datetime,
         is_account_connected: bool,
         account_link_url: str | None,
         drops: list[Drop],
@@ -31,7 +31,9 @@ class Campaign:
         self.start_at = start_at
         self.is_account_connected = is_account_connected
         self.account_link_url = account_link_url
-        self.dt_match = self.start_at < datetime.now(timezone.utc) < self.end_at
+        self.dt_match = (
+            self.start_at < datetime.datetime.now(datetime.timezone.utc) < self.end_at
+        )
         self.in_inventory = False
         self.drops = {drop.id: drop for drop in drops}
 
@@ -110,7 +112,7 @@ class Campaign:
 
     def ended(self):
         """Returns True if this Campaign has ended."""
-        return self.end_at <= datetime.now(timezone.utc)
+        return self.end_at <= datetime.datetime.now(datetime.timezone.utc)
 
     def progressable_drops(self):
         return (drop for drop in self.drops.values() if drop.is_progressable())
@@ -121,8 +123,10 @@ class Campaign:
 
     def requires_account_link(self):
         if self.is_account_connected:
+            # Account already linked
             return False
         if self.account_link_url is None or self.account_link_url.strip() == "":
+            # No link URL
             return False
         hostname = urlsplit(self.account_link_url).hostname
         # Assume we require linking if there's no host
