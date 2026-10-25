@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -317,16 +316,34 @@ class Streamer(object):
         """
         return self.settings.claim_drops == DropsMode.ALL
 
+    def campaigns(self, campaigns: dict[str, Campaign]):
+        return (
+            campaign
+            for campaign in campaigns.values()
+            if campaign.id in self.stream.campaigns
+        )
+
     def progressable_campaigns(self, campaigns: dict[str, Campaign]):
         """
         Returns a generator of all progressable drops campaigns.
         """
         return (
             campaign
-            for campaign in campaigns.values()
-            if campaign.id in self.stream.campaigns
-            and campaign.progressable(self.allows_unlinked_drops())
+            for campaign in self.campaigns(campaigns)
+            if campaign.progressable(self.allows_unlinked_drops())
         )
+
+    def current_drops(
+        self, campaigns: dict[str, Campaign]
+    ) -> Generator[Drop, None, None]:
+        """
+        Returns all of the current drops for all progressable campaigns.
+        """
+        for campaign in self.progressable_campaigns(campaigns):
+            drop = campaign.current_drop(self.allows_unlinked_drops())
+            # This shouldn't really happen, if a campaign is progressable it should have a current drop
+            if drop is not None:
+                yield drop
 
     def any_campaign_has_progressable_drop(self, campaigns: dict[str, Campaign]):
         """
@@ -341,8 +358,7 @@ class Streamer(object):
         return sum(
             1
             for campaign in self.progressable_campaigns(campaigns)
-            for drop in campaign.drops.values()
-            if drop.is_progressable()
+            for _ in campaign.progressable_drops()
         )
 
     def min_drop_end_date(self, campaigns: dict[str, Campaign]) -> datetime | None:
@@ -363,40 +379,32 @@ class Streamer(object):
             default=None,
         )
 
-    def current_drops(
+    def min_drop_progress(self, campaigns: dict[str, Campaign]) -> int | None:
+        return min(
+            (drop.current_minutes_watched for drop in self.current_drops(campaigns)),
+            default=None,
+        )
+
+    def max_drop_progress(self, campaigns: dict[str, Campaign]) -> int | None:
+        return max(
+            (drop.current_minutes_watched for drop in self.current_drops(campaigns)),
+            default=None,
+        )
+
+    def min_drop_percentage_progress(
         self, campaigns: dict[str, Campaign]
-    ) -> Generator[Drop, None, None]:
-        """
-        Returns all of the current drops for all campaigns.
-        """
-        for campaign_id in self.stream.campaigns:
-            if campaign_id in campaigns:
-                drop = campaigns[campaign_id].current_drop(self.allows_unlinked_drops())
-                if drop is not None:
-                    yield drop
-
-    def min_drop_progress(self, campaigns: dict[str, Campaign]) -> int:
-        return min(
-            (drop.current_minutes_watched for drop in self.current_drops(campaigns)),
-            default=sys.maxsize,
-        )
-
-    def max_drop_progress(self, campaigns: dict[str, Campaign]) -> int:
-        return max(
-            (drop.current_minutes_watched for drop in self.current_drops(campaigns)),
-            default=-sys.maxsize,
-        )
-
-    def min_drop_percentage_progress(self, campaigns: dict[str, Campaign]):
+    ) -> float | None:
         return min(
             (drop.percentage_progress for drop in self.current_drops(campaigns)),
-            default=sys.maxsize,
+            default=None,
         )
 
-    def max_drop_percentage_progress(self, campaigns: dict[str, Campaign]):
+    def max_drop_percentage_progress(
+        self, campaigns: dict[str, Campaign]
+    ) -> float | None:
         return max(
             (drop.percentage_progress for drop in self.current_drops(campaigns)),
-            default=-sys.maxsize,
+            default=None,
         )
 
     def viewer_has_points_multiplier(self):

@@ -45,7 +45,16 @@ from TwitchChannelPointsMiner.classes.StreamerSelector import (
     watch_session,
     watch_streak,
     weekly_rewards,
+    sort_drop_count_ascending,
+    sort_drop_count_descending,
+    sort_campaign_ending_soonest,
+    sort_campaign_ending_latest,
+    sort_drop_progress_ascending,
+    sort_drop_progress_descending,
+    sort_drop_percentage_progress_ascending,
+    sort_drop_percentage_progress_descending,
 )
+from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub, Target
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
@@ -185,12 +194,13 @@ priority_order_data = [
 def test_priority_order(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
+    campaigns = dict()
     init_settings(streamers)
     expected_calls = min(max_amount, len(streamers))
     with patch(
         "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
     ) as under_points_limit_mock:
-        streamer_ids = priority_order(streamers, max_amount)
+        streamer_ids = priority_order(campaigns, streamers, max_amount)
         assert (
             under_points_limit_mock.call_count == expected_calls
         ), f"under_points_limit should be called {expected_calls} time(s) (min({max_amount}, {len(streamers)}))"
@@ -251,12 +261,13 @@ priority_points_ascending_data = [
 def test_priority_points_ascending(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
+    campaigns = dict()
     init_settings(streamers)
     expected_calls = len(streamers)
     with patch(
         "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
     ) as under_points_limit_mock:
-        streamer_ids = priority_points_ascending(streamers, max_amount)
+        streamer_ids = priority_points_ascending(campaigns, streamers, max_amount)
         assert (
             under_points_limit_mock.call_count == expected_calls
         ), f"under_points_limit should be called {expected_calls} time(s)"
@@ -317,12 +328,13 @@ priority_points_descending_data = [
 def test_priority_points_descending(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
+    campaigns = dict()
     init_settings(streamers)
     expected_calls = len(streamers)
     with patch(
         "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
     ) as under_points_limit_mock:
-        streamer_ids = priority_points_descending(streamers, max_amount)
+        streamer_ids = priority_points_descending(campaigns, streamers, max_amount)
         assert (
             under_points_limit_mock.call_count == expected_calls
         ), f"under_points_limit should be called {expected_calls} time(s)"
@@ -686,7 +698,8 @@ priority_streak_data = [
 def test_priority_streak(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
-    streamer_ids = priority_streak(streamers, max_amount)
+    campaigns = dict()
+    streamer_ids = priority_streak(campaigns, streamers, max_amount)
     assert streamer_ids == expected_ids
 
 
@@ -698,7 +711,8 @@ priority_drops_data = []
 def test_priority_drops(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
-    streamer_ids = priority_drops(streamers, max_amount)
+    campaigns = dict()
+    streamer_ids = priority_drops(campaigns, streamers, max_amount)
     assert streamer_ids == expected_ids
 
 
@@ -765,23 +779,28 @@ priority_subscribed_data = [
 def test_priority_subscribed(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
+    campaigns = dict()
     init_settings(streamers)
     expected_calls = len(streamers)
     with patch(
         "TwitchChannelPointsMiner.classes.StreamerSelector.under_points_limit"
     ) as under_points_limit_mock:
-        streamer_ids = priority_subscribed(streamers, max_amount)
+        streamer_ids = priority_subscribed(campaigns, streamers, max_amount)
         assert (
             under_points_limit_mock.call_count == expected_calls
         ), f"under_points_limit should be called {expected_calls} time(s)"
         assert streamer_ids == expected_ids
 
 
-def priority_selects_none(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_selects_none(
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     return []
 
 
-def priority_selects_first(streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+def priority_selects_first(
+    campaigns: dict[str, Campaign], streamers: Sequence[Streamer], max_amount: int
+) -> list[str]:
     return [streamers[0].channel_id]
 
 
@@ -841,9 +860,10 @@ class TestPrioritySelector:
         priorities: list[Priority],
         expected_ids: list[str],
     ):
+        campaigns = dict()
         streamer_ids = PrioritySelector(
             priorities, self.priority_function_overrides_all_selects_none
-        ).select(streamers, max_amount)
+        ).select(campaigns, streamers, max_amount)
         assert streamer_ids == expected_ids
 
     @pytest.mark.parametrize(
@@ -857,13 +877,15 @@ class TestPrioritySelector:
         priorities: list[Priority],
         expected_ids: list[str],
     ):
+        campaigns = dict()
         streamer_ids = PrioritySelector(
             priorities, self.priority_function_overrides_all_selects_first
-        ).select(streamers, max_amount)
+        ).select(campaigns, streamers, max_amount)
         # Normalise to handle set ordering
         assert set(streamer_ids) == set(expected_ids)
 
     def test_priority_selector_order_unchanged(self):
+        campaigns = dict()
         streamers = [
             Streamer("2", "b", settings=settings_watch_streak_true),
             Streamer("1", "a", settings=settings_watch_streak_true),
@@ -871,7 +893,7 @@ class TestPrioritySelector:
         selector = PrioritySelector(
             [Priority.STREAK, Priority.DROPS, Priority.SUBSCRIBED, Priority.ORDER],
         )
-        selector.select(streamers, 2)
+        selector.select(campaigns, streamers, 2)
         assert [streamer.username for streamer in streamers] == ["2", "1"]
 
 
@@ -1044,6 +1066,7 @@ class TestPriorityGroupSelector:
         expected_filtered_ids: list[str],
         expected_ids: list[str],
     ):
+        campaigns = dict()
         # Mocks
 
         selector = MagicMock()
@@ -1052,7 +1075,7 @@ class TestPriorityGroupSelector:
         # Test
 
         streamer_ids = PriorityGroupSelector(streamer_filter, selector).select(
-            streamers, max_amount
+            campaigns, streamers, max_amount
         )
 
         # Assertions
@@ -1060,14 +1083,21 @@ class TestPriorityGroupSelector:
         # Normalise to handle set ordering
         assert set(streamer_ids) == set(expected_ids)
 
-        selector.select.assert_called_once_with(expected_filtered_ids, max_amount)
+        selector.select.assert_called_once_with(
+            campaigns, expected_filtered_ids, max_amount
+        )
 
 
 class SelectAmount(StreamerSelector):
     def __init__(self, amount: int):
         self.amount = amount
 
-    def select(self, streamers: Sequence[Streamer], max_amount: int) -> list[str]:
+    def select(
+        self,
+        campaigns: dict[str, Campaign],
+        streamers: Sequence[Streamer],
+        max_amount: int,
+    ) -> list[str]:
         return [
             streamer.channel_id
             for streamer in streamers[: min(self.amount, max_amount)]
@@ -1090,8 +1120,11 @@ class TestNestedSelector:
 
     @pytest.mark.parametrize("streamers,max_amount", select_none_data)
     def test_select_none(self, streamers: list[Streamer], max_amount: int):
+        campaigns = dict()
         selectors = []
-        streamer_ids = NestedSelector(selectors).select(streamers, max_amount)
+        streamer_ids = NestedSelector(selectors).select(
+            campaigns, streamers, max_amount
+        )
 
         # Normalise to handle set ordering
         assert set(streamer_ids) == set()
@@ -1112,10 +1145,13 @@ class TestNestedSelector:
     def test_select_first(
         self, streamers: list[Streamer], max_amount: int, expected_ids: list[str]
     ):
+        campaigns = dict()
         select_first = SelectAmount(1)
         selectors: list[StreamerSelector] = [select_first]
 
-        streamer_ids = NestedSelector(selectors).select(streamers, max_amount)
+        streamer_ids = NestedSelector(selectors).select(
+            campaigns, streamers, max_amount
+        )
 
         # Normalise to handle set ordering
         assert set(streamer_ids) == set(expected_ids)
@@ -1145,11 +1181,14 @@ class TestNestedSelector:
     def test_multi_selectors(
         self, streamers: list[Streamer], max_amount: int, expected_ids: list[str]
     ):
+        campaigns = dict()
         select_first = SelectAmount(1)
         select_2 = SelectAmount(2)
         selectors: list[StreamerSelector] = [select_first, select_2]
 
-        streamer_ids = NestedSelector(selectors).select(streamers, max_amount)
+        streamer_ids = NestedSelector(selectors).select(
+            campaigns, streamers, max_amount
+        )
 
         # Normalise to handle set ordering
         assert set(streamer_ids) == set(expected_ids)
@@ -1259,7 +1298,10 @@ priority_streak_by_earliest_stream_created_at_data = [
 def test_priority_streak_by_earliest_stream_created_at(
     streamers: list[Streamer], max_amount: int, expected_ids: list[str]
 ):
-    streamer_ids = priority_streak_by_earliest_stream_created_at(streamers, max_amount)
+    campaigns = dict()
+    streamer_ids = priority_streak_by_earliest_stream_created_at(
+        campaigns, streamers, max_amount
+    )
 
     # Normalise to handle set ordering
     assert set(streamer_ids) == set(expected_ids)
@@ -1376,9 +1418,10 @@ test_priority_subscribed_by_highest_multiplier_then_least_points_data = [
 def test_priority_subscribed_by_highest_multiplier_then_least_points(
     streamers: list[Streamer], max_amount: int, expected
 ):
+    campaigns = dict()
     assert (
         priority_subscribed_by_highest_multiplier_then_least_points(
-            streamers, max_amount
+            campaigns, streamers, max_amount
         )
         == expected
     )
@@ -1394,28 +1437,28 @@ def streamer(_id: str, points: int = 0):
 test_filter_sort_selector_data = [
     # All match, None sorting
     (
-        lambda s: True,
+        lambda c, s: True,
         None,
         [],
         1,
         [],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         None,
         [streamer("a")],
         1,
         ["a"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         None,
         [streamer("a"), streamer("b")],
         1,
         ["a"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         None,
         [streamer("a"), streamer("b")],
         2,
@@ -1423,42 +1466,42 @@ test_filter_sort_selector_data = [
     ),
     # All match, custom sorts
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [],
         1,
         [],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [streamer("a", 0)],
         1,
         ["a"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [streamer("a", 0), streamer("b", 100)],
         1,
         ["a"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [streamer("a", 0), streamer("b", 100)],
         2,
         ["a", "b"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [streamer("a", 100), streamer("b", 0)],
         2,
         ["b", "a"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [streamer("a", 200), streamer("b", 100), streamer("c", 0)],
         2,
@@ -1466,21 +1509,21 @@ test_filter_sort_selector_data = [
     ),
     # the default sort is order so, on this tie-break, "b" gets priority over "c"
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [streamer("a", 200), streamer("b", 100), streamer("c", 100), streamer("d", 0)],
         2,
         ["d", "b"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [streamer("a", 200), streamer("b", 100), streamer("c", 100), streamer("d", 0)],
         3,
         ["d", "b", "c"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_ascending],
         [
             streamer("a", 200),
@@ -1495,7 +1538,7 @@ test_filter_sort_selector_data = [
         ["d", "f", "b", "c", "a", "g", "e"],
     ),
     (
-        lambda s: True,
+        lambda c, s: True,
         [sort_points_descending],
         [
             streamer("a", 200),
@@ -1511,7 +1554,7 @@ test_filter_sort_selector_data = [
     ),
     # Custom filter, no sort
     (
-        lambda s: s.channel_id in {"a", "b", "c"},
+        lambda c, s: s.channel_id in {"a", "b", "c"},
         None,
         [
             streamer("a", 200),
@@ -1526,7 +1569,7 @@ test_filter_sort_selector_data = [
         ["a", "b", "c"],
     ),
     (
-        lambda s: s.channel_id in {"e", "f", "g"},
+        lambda c, s: s.channel_id in {"e", "f", "g"},
         None,
         [
             streamer("a", 200),
@@ -1542,7 +1585,7 @@ test_filter_sort_selector_data = [
     ),
     # Custom filter and sort
     (
-        lambda s: s.channel_id in {"e", "f", "g"},
+        lambda c, s: s.channel_id in {"e", "f", "g"},
         [sort_points_ascending],
         [
             streamer("a", 200),
@@ -1564,8 +1607,8 @@ test_filter_sort_selector_data = [
 )
 def test_filter_sort_selector(_filter, sorting, streamers, max_amount, expected):
     selector = FilterSortSelector(reason="test", _filter=_filter, sorting=sorting)
-
-    assert selector.select(streamers, max_amount) == expected
+    campaigns = dict()
+    assert selector.select(campaigns, streamers, max_amount) == expected
 
 
 test_match_order_data = [
@@ -1594,7 +1637,8 @@ test_match_order_data = [
 
 @pytest.mark.parametrize("streamer,expected", test_match_order_data)
 def test_match_order(streamer, expected):
-    assert match_order(streamer) == expected
+    campaigns = dict()
+    assert match_order(campaigns, streamer) == expected
 
 
 # They have exactly the same requirements
@@ -1603,7 +1647,8 @@ test_match_points_data = test_match_order_data
 
 @pytest.mark.parametrize("streamer,expected", test_match_points_data)
 def test_match_points(streamer, expected):
-    assert match_points(streamer) == expected
+    campaigns = dict()
+    assert match_points(campaigns, streamer) == expected
 
 
 stream_watch_streak_not_missing = Stream()
@@ -1645,12 +1690,14 @@ test_needs_watch_streak_data = [
 
 @pytest.mark.parametrize("streamer,expected", test_needs_watch_streak_data)
 def test_needs_watch_streak(streamer, expected):
-    assert needs_watch_streak(streamer) == expected
+    campaigns = dict()
+    assert needs_watch_streak(campaigns, streamer) == expected
 
 
 def test_has_drops():
+    campaigns = dict()
     streamer_1 = Streamer("a", settings=StreamerSettings(claim_drops=False))
-    assert has_drops(streamer_1) is False
+    assert has_drops(campaigns, streamer_1) is False
     drop = Drop(
         _id="",
         name="",
@@ -1660,12 +1707,32 @@ def test_has_drops():
         minutes_required=10,
         subs_required=0,
     )
+    campaign = Campaign(
+        _id="01a14a7a-1186-7308-817b-7a815283b3f2",
+        game=None,
+        name="",
+        status="",
+        end_at=datetime.datetime.fromisoformat("2026-10-25T07:50:00Z"),
+        start_at=datetime.datetime.fromisoformat("2026-10-24T07:50:00Z"),
+        is_account_connected=True,
+        account_link_url=None,
+        drops=[drop],
+    )
+    campaigns[campaign.id] = campaign
     stream = Stream()
-    stream.campaigns_ids = ["01a14a7a-1186-7308-817b-7a815283b3f2"]
+    stream.campaigns = ["01a14a7a-1186-7308-817b-7a815283b3f2"]
     streamer_2 = Streamer(
         "b", is_online=True, settings=StreamerSettings(claim_drops=True), stream=stream
     )
-    assert has_drops(streamer_2) is True
+    with pytest.MonkeyPatch.context() as patcher:
+        # Set up datetime.now
+        mock_datetime = MagicMock()
+        mock_datetime.now = MagicMock()
+        mock_datetime.now.return_value = datetime.datetime.fromisoformat(
+            "2026-10-25T07:30:00Z"
+        )
+        patcher.setattr(datetime, "datetime", mock_datetime)
+        assert has_drops(campaigns, streamer_2) is True
 
 
 teat_is_subscribed_data = [
@@ -1722,7 +1789,8 @@ teat_is_subscribed_data = [
 
 @pytest.mark.parametrize("streamer,expected", teat_is_subscribed_data)
 def teat_is_subscribed(streamer, expected):
-    assert is_subscribed(streamer) == expected
+    campaigns = dict()
+    assert is_subscribed(campaigns, streamer) == expected
 
 
 test_in_watch_session_data = [
@@ -1738,6 +1806,7 @@ test_in_watch_session_data = [
 
 @pytest.mark.parametrize("watch_session_state,expected", test_in_watch_session_data)
 def test_in_watch_session(watch_session_state, expected):
+    campaigns = dict()
     now_time = datetime.datetime.fromisoformat("2026-07-14T20:00:00")
     streamer = Streamer("a")
     streamer.stream = Stream()
@@ -1750,7 +1819,7 @@ def test_in_watch_session(watch_session_state, expected):
                 return now_time
 
         patcher.setattr(datetime, "datetime", MockDateTime)
-        assert in_watch_session(streamer) == expected
+        assert in_watch_session(campaigns, streamer) == expected
 
 
 test_needs_weekly_reward_data = [
@@ -1796,92 +1865,77 @@ test_needs_weekly_reward_data = [
     "streamer,watch_streak_missing,expected", test_needs_weekly_reward_data
 )
 def test_needs_weekly_reward(streamer, watch_streak_missing, expected):
+    campaigns = dict()
     stream = Stream()
     stream.watch_streak_missing = watch_streak_missing
     streamer.stream = stream
-    assert needs_weekly_reward(streamer) == expected
+    assert needs_weekly_reward(campaigns, streamer) == expected
 
 
 def test_sort_points_ascending():
-    assert sort_points_ascending(Streamer("a", channel_points=0)) == 0
-    assert sort_points_ascending(Streamer("a", channel_points=100)) == 100
-    assert sort_points_ascending(Streamer("a", channel_points=200)) == 200
-    assert sort_points_ascending(Streamer("a", channel_points=300)) == 300
+    campaigns = dict()
+    assert sort_points_ascending(campaigns, Streamer("a", channel_points=0)) == 0
+    assert sort_points_ascending(campaigns, Streamer("a", channel_points=100)) == 100
+    assert sort_points_ascending(campaigns, Streamer("a", channel_points=200)) == 200
+    assert sort_points_ascending(campaigns, Streamer("a", channel_points=300)) == 300
 
 
 def test_sort_points_descending():
-    assert sort_points_descending(Streamer("a", channel_points=0)) == 0
-    assert sort_points_descending(Streamer("a", channel_points=100)) == -100
-    assert sort_points_descending(Streamer("a", channel_points=200)) == -200
-    assert sort_points_descending(Streamer("a", channel_points=300)) == -300
+    campaigns = dict()
+    assert sort_points_descending(campaigns, Streamer("a", channel_points=0)) == 0
+    assert sort_points_descending(campaigns, Streamer("a", channel_points=100)) == -100
+    assert sort_points_descending(campaigns, Streamer("a", channel_points=200)) == -200
+    assert sort_points_descending(campaigns, Streamer("a", channel_points=300)) == -300
 
 
 def test_sort_oldest_stream():
-    assert sort_oldest_stream(Streamer("a", stream=None)) == 0
+    campaigns = dict()
+    assert sort_oldest_stream(campaigns, Streamer("a", stream=None)) == 0
 
     stream = Stream()
     stream.created_at = None
-    assert sort_oldest_stream(Streamer("a", stream=stream)) == 0
+    assert sort_oldest_stream(campaigns, Streamer("a", stream=stream)) == 0
 
     stream = Stream()
     time.time()
     stream.created_at = datetime.datetime.fromtimestamp(1784121062)
-    assert sort_oldest_stream(Streamer("a", stream=stream)) == 1784121062
+    assert sort_oldest_stream(campaigns, Streamer("a", stream=stream)) == 1784121062
 
 
 def test_sort_multiplier_ascending():
+    campaigns = dict()
     assert (
-        sort_multiplier_ascending(Streamer("a", active_multipliers=[])) == sys.maxsize
+        sort_multiplier_ascending(campaigns, Streamer("a", active_multipliers=[]))
+        == sys.maxsize
     )
 
     assert (
         sort_multiplier_ascending(
-            Streamer("a", active_multipliers=[Properties.Multiplier(1.2)])
+            campaigns, Streamer("a", active_multipliers=[Properties.Multiplier(1.2)])
         )
         == 1.2
     )
 
 
 def test_sort_multiplier_descending():
+    campaigns = dict()
     assert (
-        sort_multiplier_descending(Streamer("a", active_multipliers=[])) == sys.maxsize
+        sort_multiplier_descending(campaigns, Streamer("a", active_multipliers=[]))
+        == sys.maxsize
     )
 
     assert (
         sort_multiplier_descending(
-            Streamer("a", active_multipliers=[Properties.Multiplier(1.2)])
+            campaigns, Streamer("a", active_multipliers=[Properties.Multiplier(1.2)])
         )
         == -1.2
     )
 
 
 def test_sort_subscription_ends_at_ascending():
+    campaigns = dict()
     assert (
-        sort_subscription_ends_at_ascending(Streamer("a", gift_sub=None)) == sys.maxsize
-    )
-
-    gift_sub = GiftSub(
-        _id="aa",
-        target=Target(
-            _id="bb",
-            username="targetusername",
-            display_name="TargetDisplayName",
-        ),
-        gifter=None,
-        tier=1,
-        display_name="sub",
-        ends_at=datetime.datetime.fromtimestamp(1784121062),
-    )
-
-    assert (
-        sort_subscription_ends_at_ascending(Streamer("a", gift_sub=gift_sub))
-        == 1784121062
-    )
-
-
-def test_sort_subscription_ends_at_descending():
-    assert (
-        sort_subscription_ends_at_descending(Streamer("a", gift_sub=None))
+        sort_subscription_ends_at_ascending(campaigns, Streamer("a", gift_sub=None))
         == sys.maxsize
     )
 
@@ -1899,9 +1953,175 @@ def test_sort_subscription_ends_at_descending():
     )
 
     assert (
-        sort_subscription_ends_at_descending(Streamer("a", gift_sub=gift_sub))
+        sort_subscription_ends_at_ascending(campaigns, Streamer("a", gift_sub=gift_sub))
+        == 1784121062
+    )
+
+
+def test_sort_subscription_ends_at_descending():
+    campaigns = dict()
+    assert (
+        sort_subscription_ends_at_descending(campaigns, Streamer("a", gift_sub=None))
+        == sys.maxsize
+    )
+
+    gift_sub = GiftSub(
+        _id="aa",
+        target=Target(
+            _id="bb",
+            username="targetusername",
+            display_name="TargetDisplayName",
+        ),
+        gifter=None,
+        tier=1,
+        display_name="sub",
+        ends_at=datetime.datetime.fromtimestamp(1784121062),
+    )
+
+    assert (
+        sort_subscription_ends_at_descending(
+            campaigns, Streamer("a", gift_sub=gift_sub)
+        )
         == -1784121062
     )
+
+
+test_sort_drop_count_ascending_data = [
+    (0, 0),
+    (1, 1),
+    (2, 2),
+    (200, 200),
+    (sys.maxsize, sys.maxsize),
+]
+
+
+@pytest.mark.parametrize("count,expected", test_sort_drop_count_ascending_data)
+def test_sort_drop_count_ascending(count: int, expected: int):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.remaining_drop_count.return_value = count
+    assert sort_drop_count_ascending(campaigns, streamer) == expected
+
+
+test_sort_drop_count_descending_data = [
+    (0, 0),
+    (1, -1),
+    (2, -2),
+    (200, -200),
+    (sys.maxsize, -sys.maxsize),
+]
+
+
+@pytest.mark.parametrize("count,expected", test_sort_drop_count_descending_data)
+def test_sort_drop_count_descending(count: int, expected: int):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.remaining_drop_count.return_value = count
+    assert sort_drop_count_descending(campaigns, streamer) == expected
+
+
+test_sort_drop_end_date_soonest_data = [
+    (None, sys.maxsize),
+    (datetime.datetime.fromtimestamp(1792922446), 1792922446),
+    (datetime.datetime.fromtimestamp(1792962534), 1792962534),
+]
+
+
+@pytest.mark.parametrize("end_at,expected", test_sort_drop_end_date_soonest_data)
+def test_sort_drop_end_date_soonest(end_at: datetime.datetime | None, expected: float):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.min_drop_end_date.return_value = end_at
+    assert sort_campaign_ending_soonest(campaigns, streamer) == expected
+
+
+test_sort_drop_end_date_latest_data = [
+    (None, sys.maxsize),
+    (datetime.datetime.fromtimestamp(1792922446), -1792922446),
+    (datetime.datetime.fromtimestamp(1792962534), -1792962534),
+]
+
+
+@pytest.mark.parametrize("end_at,expected", test_sort_drop_end_date_latest_data)
+def test_sort_drop_end_date_latest(end_at: datetime.datetime | None, expected: float):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.max_drop_end_date.return_value = end_at
+    assert sort_campaign_ending_latest(campaigns, streamer) == expected
+
+
+test_sort_drop_progress_ascending_data = [
+    (None, sys.maxsize),
+    (0, 0),
+    (5, 5),
+    (10, 10),
+    (100, 100),
+    (12345, 12345),
+]
+
+
+@pytest.mark.parametrize("progress,expected", test_sort_drop_progress_ascending_data)
+def test_sort_drop_progress_ascending(progress: int, expected: int):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.min_drop_progress.return_value = progress
+    assert sort_drop_progress_ascending(campaigns, streamer) == expected
+
+
+test_sort_drop_progress_descending_data = [
+    (None, sys.maxsize),
+    (0, 0),
+    (5, -5),
+    (10, -10),
+    (100, -100),
+    (12345, -12345),
+]
+
+
+@pytest.mark.parametrize("progress,expected", test_sort_drop_progress_descending_data)
+def test_sort_drop_progress_descending(progress: int, expected: int):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.max_drop_progress.return_value = progress
+    assert sort_drop_progress_descending(campaigns, streamer) == expected
+
+
+test_sort_drop_percentage_progress_ascending_data = [
+    (None, sys.maxsize),
+    (0, 0),
+    (5, 5),
+    (10, 10),
+    (100, 100),
+]
+
+
+@pytest.mark.parametrize(
+    "progress,expected", test_sort_drop_percentage_progress_ascending_data
+)
+def test_sort_drop_percentage_progress_ascending(progress: int, expected: int):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.min_drop_progress.return_value = progress
+    assert sort_drop_percentage_progress_ascending(campaigns, streamer) == expected
+
+
+test_sort_drop_percentage_progress_descending_data = [
+    (None, sys.maxsize),
+    (0, 0),
+    (5, -5),
+    (10, -10),
+    (100, -100),
+]
+
+
+@pytest.mark.parametrize(
+    "progress,expected", test_sort_drop_percentage_progress_descending_data
+)
+def test_sort_drop_percentage_progress_descending(progress: int, expected: int):
+    campaigns = {}
+    streamer = MagicMock()
+    streamer.max_drop_progress.return_value = progress
+    assert sort_drop_percentage_progress_descending(campaigns, streamer) == expected
 
 
 def test_order():

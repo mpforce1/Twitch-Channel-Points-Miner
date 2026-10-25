@@ -656,11 +656,14 @@ def sort_drop_progress(ascending: bool):
     """
 
     def inner(campaigns: dict[str, Campaign], streamer: Streamer):
-        return (
+        progress = (
             streamer.min_drop_progress(campaigns)
             if ascending
-            else (streamer.max_drop_progress(campaigns) * -1)
+            else (streamer.max_drop_progress(campaigns))
         )
+        if progress is None:
+            return sys.maxsize
+        return progress * (1 if ascending else -1)
 
     return inner
 
@@ -708,6 +711,8 @@ def watch_streak(sorting: list[GetSortKey] | None = None):
 
 
 def drops(sorting: list[GetSortKey] | None = None):
+    if sorting is None:
+        sorting = [sort_drop_progress_descending]
     return FilterSortSelector(
         reason=Priority.DROPS, _filter=has_drops, sorting=sorting, max_select=1
     )
