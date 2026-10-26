@@ -66,13 +66,13 @@ twitch_miner = TwitchChannelPointsMiner(
             chat_id=123456789,                                                      # Chat ID to send messages @getmyid_bot
             token="123456789:shfuihreuifheuifhiu34578347",                          # Telegram API token @BotFather
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION],                          # Only these events will be sent to the chat
+                    Events.PREDICTION_LOSE, Events.CHAT_MENTION],                          # Only these events will be sent to the chat
             disable_notification=True,                                              # Revoke the notification (sound/vibration)
         ),
         discord(
             webhook_api_url="https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J",  # Discord Webhook URL
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION],                                       # Only these events will be sent to the chat
+                    Events.PREDICTION_LOSE, Events.CHAT_MENTION],                                       # Only these events will be sent to the chat
         ),
         discord(                                                                                 # Add as many additional handlers, of each type, as required
             webhook_api_url="https://discord.com/api/webhooks/9876543210/78ad737ba0e951cdfbde",
@@ -80,17 +80,18 @@ twitch_miner = TwitchChannelPointsMiner(
                     Events.GAIN_FOR_CLAIM, Events.GAIN_FOR_WATCH_STREAK],
         ),
         webhook(
-            endpoint="https://example.com/webhook",                                 # Webhook URL
-            method="GET",                                                           # GET or POST
+            webhook_api_url="https://example.com/webhook",                                 # Webhook URL
+            method="get",                                                           # GET or POST
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION],                          # Only these events will be sent to the endpoint
+                    Events.PREDICTION_LOSE, Events.CHAT_MENTION],                          # Only these events will be sent to the endpoint
         ),
         matrix(
             username="twitch_miner",                                                   # Matrix username (without homeserver)
             password="...",                                                            # Matrix password
             homeserver="matrix.org",                                                   # Matrix homeserver
             room_id="...",                                                             # Room ID
-            events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE, Events.BET_LOSE], # Only these events will be sent
+            events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
+                    Events.PREDICTION_LOSE],                                           # Only these events will be sent
         ),
         pushover(
             userkey="YOUR-ACCOUNT-TOKEN",                                             # Login to https://pushover.net/, the user token is on the main page
@@ -100,10 +101,10 @@ twitch_miner = TwitchChannelPointsMiner(
             events=[Events.CHAT_MENTION, Events.DROP_CLAIM],                          # Only these events will be sent
         ),
         gotify(
-            endpoint="https://example.com/message?token=TOKEN",       # The URL of the Gotify server
+            webhook_api_url="https://example.com/message?token=TOKEN",       # The URL of the Gotify server
             priority=8,                                               # The message priority (higher is more important) (https://gotify.net/docs/priority#how-clients-handle-priorities)
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
-                    Events.BET_LOSE, Events.CHAT_MENTION],            # Only these events will be sent
+                    Events.PREDICTION_LOSE, Events.CHAT_MENTION],            # Only these events will be sent
         ),
     ],
     streamer_settings=StreamerSettings(
@@ -116,6 +117,7 @@ twitch_miner = TwitchChannelPointsMiner(
         chat=ChatPresence.ONLINE,               # Join irc chat to increase watch-time [ALWAYS, NEVER, ONLINE, OFFLINE]
         simulate_hls_playback=HLSSettings(      # Set to False to disable HLS playback.
             refresh_before=120,                 # Set to the number of seconds before expiry to refresh the PlaybackAccessToken.
+            watch_all_segments="drops",         # Set to "enable", "disable", or "drops" to control the playback mode
         ),
         weekly_rewards=True,                    # Automatically progress Weekly Rewards
         points_limit=50000,                     # The limit on the number of points the miner will attempt to mine for the` Streamer

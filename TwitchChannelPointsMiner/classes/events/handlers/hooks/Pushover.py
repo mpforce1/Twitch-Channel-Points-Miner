@@ -15,14 +15,14 @@ class PushoverTransformer(EventTransformer[dict]):
         token: str,
         priority,
         sound,
-        title: str | None,
+        title: str,
         get_message: EventTransformer[str],
     ):
         self.userkey = userkey
         self.token = token
         self.priority = priority
         self.sound = sound
-        self.title = title if title is not None else "Twitch Channel Points Miner"
+        self.title = title
         self.get_message = get_message
 
     def transform(self, event: Event) -> dict:
@@ -41,8 +41,8 @@ def pushover(
     token: str,
     priority,
     sound,
-    title: str | None,
-    webhook_api_url: str,
+    title: str = "Twitch Channel Points Miner",
+    webhook_api_url: str = "https://api.pushover.net/1/messages.json",
     name: str = "Pushover",
     events: list[Events] | Events | None = None,
     transformer: EventTransformer[dict] | None = None,
