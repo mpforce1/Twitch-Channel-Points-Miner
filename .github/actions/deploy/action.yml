@@ -1,8 +1,7 @@
 name: Deploy To Docker Hub & GitHub Container Registry
 description: |
   Reusable action that can build and publish Docker images,
-  update the Docker Hub description,
-  and tag the Git repository with the version number.
+  and update the Docker Hub description.
   NOTE `contents` and `package` write permissions are required for this action.
 
 inputs:
@@ -76,15 +75,6 @@ runs:
         password: ${{ inputs.docker_hub_token }}
         repository: mpforce1/twitch-channel-points-miner
         enable-url-completion: true
-
-    - name: Create Tag
-      # Creates a tag for the new version
-      shell: bash
-      run: |
-        git config user.name "GitHub Actions"
-        git config user.email "github-actions@users.noreply.github.com"
-        git tag ${{ inputs.version }}
-        git push origin ${{ inputs.version }}
 
     - name: Image digest AMD64, ARM64, ARMv7
       # Print digest
