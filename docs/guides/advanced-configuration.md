@@ -24,6 +24,7 @@ expand more on their usage.
 | `disable_ssl_cert_verification` | `bool`                                                                          | `False`                                                                 |
 | `disable_at_in_nickname`        | `bool`                                                                          | `False`                                                                 |
 | `use_hermes`                    | `bool`                                                                          | `False`                                                                 |
+| `client_session_config`| `ClientSessionConfig`| `ClientSessionConfig()`|
 | `logger_settings`               | `LoggerSettings`                                                                | (see [here](#logger_settings))                                          |
 | `streamer_settings`             | `StreamerSettings`                                                              | (see [here](#streamer_settings))                                        |
 | `gql`                           | `AttemptStrategy` or `None`                                               | `GQLFactory`                                                            |
@@ -341,6 +342,47 @@ both `Hi @myusername` and `Hi myusername` will trigger the `Event`.
 If set to `True` the miner will use the Twitch Hermes WebSocket API when listening for events. This is a more recent API
 that the current Twitch Web Client uses. We default to `False` as the old PubSub WebSocket API hasn't yet been disabled
 and still works.
+
+### `client_session_config`
+
+This allows you to override parts of the client session object, which is used to make requests to Twitch's servers. This
+allows, among other things, you to set the connection pool max size, when set to a high enough value you can avoid
+connections not being cached (and an annoying warning log from a 3rd party library), which speeds up requests and
+reduces CPU usage. There are other values you can change here (the client id, user agent, etc...) but I would avoid
+changing those unless you have some specific requirement. E.g.:
+
+```python
+client_session=ClientSessionConfig(
+  maxsize=100,
+)
+```
+
+This sets the miner to use a single Session with a max HTTP(S) connection pool size of 100. This value is difficult for
+the miner to automatically assign due to the concurrent nature of the application. However, as a general guide, the
+value should increase linearly with the number of Streamers in your run file.
+
+The default is:
+
+```python
+client_session_config=ClientSessionConfig(
+    client_id=None,
+    user_agent=None,
+    device_id=None,
+    session_id=None,
+    version=None,
+    maxsize=20,
+    connections=10,
+)
+```
+
+`client_id` is the id of the Twitch Client we use when making requests.
+`user_agent` is the HTTP `User-Agent` Header we use when making requests.
+`device_id` is a unique value that identifies your device to Twitch, this is randomly generated when the miner starts.
+`session_id` is a unique value that identifies your request session to Twitch, this is also randomly generated when the
+miner starts.
+`version` is the Twitch Client Version we use when making request, this value is updated automatically over time.
+`maxsize` is the max connection pool size, it's the number of connections to keep alive simultaneously.
+`connections` is the number of connection pools to cache.
 
 ### `logger_settings`
 
@@ -683,6 +725,12 @@ NestedSelector(
 ```
 The end result is a selector that works according to the configuration rules defined [above](#priority).
 
+
+#### `client_session`
+
+This produces a `ClientSession` for use in the application. See [here](#client_session_config) for more information. It
+should be a function that takes the config's `username`, `password`, and `client_session_config` and produces a
+`ClientSession`.
 
 #### `clip_vod_watcher_runner`
 

@@ -15,6 +15,7 @@ This allows you to configure logging options. See [here](logs.md) for some examp
 | `less`             | `bool`                           | `False`             |
 | `colored`          | `bool`                           | `True`              |
 | `color_palette`    | `ColorPalette`                   | `None`              |
+| `drops_progress` | `bool`| `True`|
 | `redact_secrets`   | `bool`                           | `False`             |
 | `anonymiser`       | `Anonymiser` or `bool` or `None` | `None`              |
 | `username`| `str` or `None`| `None`|
@@ -106,6 +107,36 @@ ColorPalette(
 
 In this case, `STREAMER_ONLINE` events will be logged in `GREEN`, `STREAMER_OFFLINE` events will be logged in `RED`, and
 `BET_WIN` events will be logged in `MAGENTA`.
+
+
+## `drops_progress`
+
+Set this control whether drops progress is logged. When `True` drops progress will be logged as we get updates from
+Twitch. This is usually infrequently at the start of progression, but more frequently in the last 10 mins or so. When
+`False` no drops progress will be logged. E.g.:
+
+```python
+drops_progress=True, # Causes progress to be printed
+```
+
+```python
+drops_progress=False, # Causes progress to not be printed
+```
+
+The logs look like:
+
+```text
+|████████  |    83.33% [50/60]: streamer1: Category: Drop name: 1/5
+```
+
+Where the first part (`|████████  |`) is a progress bar that shows you at a glance the progress made on this Drop. The
+next bit (`83.33%`) is the percentage progress made on this drop, and next to that (`[50/60]`) is the actual minutes
+watched progress shown out of the number of minutes required. Next we log the name of the streamer (`streamer`),
+followed by the category name (`Category`), and the Drop name (`Drop name`). Finally we show the Campaign progress
+(`1/5`), which is the number of the current Drop shown out of the total count of progressable Drops. In this case,
+we're currently 50 out of 60 minutes into progressing "Drop name" for the "Category" category, progress is happening via
+watching Streamer "streamer1". The Campaign has 5 total progressable Drops and this is the first progressable Drop in
+the Campaign.
 
 ## `redact_secrets`
 

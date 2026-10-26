@@ -12,8 +12,24 @@ Set to `True` if you want to follow raids for this streamer and receive the raid
 
 ## `claim_drops`
 
-Set to `True` if you want to claim Drops for Campaigns this streamer is in. Will claim all drops for which you've met
-the watch time requirements once every 15 minutes.
+> [!NOTE]
+> Linking your Twitch account is now a requirement for most Drops Campaigns, exceptions **may** include Drops that
+> reward just Twitch badges.
+
+This setting controls whether we consider the active, progressable Drops Campaigns for this Streamer when selecting them
+to watch. This can be set to `True`, `False`, or one of the `DropsMode` enums. Your options are:
+
+- `DropsMode.NONE` or `False`, in this case the miner will not consider Drops Campaigns for this Streamer.
+  to watch.
+- `DropsMode.ALL`, in this case the miner will always consider all progressable Drops Campaigns for this Streamer.
+- `DropsMode.LINKED` or `True` (default), in this case the miner will only consider Drops Campaigns for Categories that
+  require account linking for which you've linked your Twitch account. Campaigns that don't require linking are still
+  considered.
+
+Since Twitch now generally requires account linking, the default case `True` is equivalent to `DropsMode.LINKED`.
+
+Despite the name, this setting does not, and never did, affect drops claiming. Claiming is done at the account level,
+not the Streamer level.
 
 ## `claim_moments`
 
@@ -41,23 +57,41 @@ Join the streamer's IRC chat, can be set to one of these `ChatPresence`:
 
 ## `simulate_hls_playback`
 
-This enables what was previously called M3U8 playback, essentially we simulate "watching" by making a HEAD request to 
-the latest stream segment. This does not result in the miner downloading **any** stream video. In the process, we also
-get a `PlaybackAccessToken` from Twitch. This may result in better watch simulation, users have reported getting more
-gift subs with this enabled.
+This enables what was previously called M3U8 playback, essentially we simulate "watching" by making a HEAD request to
+stream segments. This does not result in the miner downloading **any** stream video. In the process, we also get a
+`PlaybackAccessToken` from Twitch. This may result in better watch simulation, users have reported getting more gift
+subs with this enabled.
 
 This can be set to either `False`, in which case HLS playback is disabled, or an `HLSSettings` object which allows you
-to set the number of seconds before expiry to refresh the `PlaybackAccessToken`:
+to set the number of seconds before expiry to refresh the `PlaybackAccessToken`, and the playback method:
 
 ```python
 HLSSettings(
-    refresh_before=5 * 60
+    refresh_before=5 * 60,
+    watch_all_segments="enable",  # "enable", "disable", or "drops"
 )
 ```
 
 In this example, I've set the number of seconds to `5 * 60` or 5 minutes. This will cause the token to get refreshed
 once we get to 5 minutes before the token expires. Tokens typically last for 20 minutes. The default is 120 seconds (2
-minutes).
+minutes). We also set the `watch_all_segments` to `"enable"` which causes the miner to always request all stream
+segments when simulating HLS playback. It can be set to any of the following strings:
+
+- `"enable"`, always attempt to watch every stream segment.
+- `"disable"`, never attempt to watch every stream segment, only watch the last available segment.
+- `"drops"` (default), only attempt to watch every stream segment if the Stream has an active, progressable Drops
+  Campaign.
+
+When requesting all stream segments, we make about 10 times as many network requests as when only requesting the last
+segment. So this playback mode has higher network traffic than just requesting the last segment, but it's closer to
+simulating the actual playback of Twitch's video players.
+
+`"disable"` is a great option if you don't care about drops, this will allow you to collect channel points with the
+least network traffic. `"enable"` is a great option if you want closer playback simulation to the actual Twitch players.
+`"drops"` is a middle option, for if you want to progress Drops but want to reduce network traffic as much as possible
+given that.
+
+In the default case, HLS Playback is enabled with `refresh_before=2 * 60` (2 minutes) and `watch_all_segments="drops"`.
 
 ## `weekly_rewards`
 
@@ -70,12 +104,11 @@ Set this to a whole positive number (e.g. `1000`, `50000`) to enable a limit on 
 attempt to get for this Streamer. This only applies to `Priority.ORDER`, `Priority.POINTS_ASCENDING`,
 `Priority.POINTS_DESCENDING`, and `Priority.SUBSCRIBED`. Set this to `None` or `False` to disable.
 
-
 ## `bet`
 
 > [!NOTE]
 > Terminology:
-> 
+>
 > - "Prediction Event" refers to the event on which you can make predictions.
 > - "Outcome" refers to one of the options you can select in a prediction event.
 > - "Prediction" refers to an individual wager on an outcome in a prediction event.
@@ -98,11 +131,11 @@ Set this to a `BetStrategy` to configure how the miner makes predictions for pre
 ### Example
 
 - If you want to make a prediction ONLY if the total of predictors in the event is greater than 200:
-  - `FilterCondition(by=OutcomeKeys.TOTAL_USERS, where=Condition.GT, value=200)`
+    - `FilterCondition(by=OutcomeKeys.TOTAL_USERS, where=Condition.GT, value=200)`
 - If you want to make a prediction ONLY if the winning odds of your decision is greater than or equal to 1.3:
-  - `FilterCondition(by=OutcomeKeys.ODDS, where=Condition.GTE, value=1.3)`
+    - `FilterCondition(by=OutcomeKeys.ODDS, where=Condition.GTE, value=1.3)`
 - If you want to make a prediction ONLY if the prediction with the most points is lower than 2000:
-  - `FilterCondition(by=OutcomeKeys.TOP_POINTS, where=Condition.LT, value=2000)`
+    - `FilterCondition(by=OutcomeKeys.TOP_POINTS, where=Condition.LT, value=2000)`
 
 ### `strategy`
 
