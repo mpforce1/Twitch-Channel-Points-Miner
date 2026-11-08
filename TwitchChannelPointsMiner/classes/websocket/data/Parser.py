@@ -457,7 +457,12 @@ class Parser:
         body = parse_expected_value(notification, "body_md", expect_str)
         with JsonParentContext("body_md"):
             # The badge name is in the first set of quotes
-            badge_name = parse_wrapped_markdown_segment(body, '"')
+            try:
+                badge_name = parse_wrapped_markdown_segment(body, '"')
+            except InvalidJsonShapeError:
+                # Ignore cases where there are no quotes in the body (i.e. different locales)
+                badge_name = "Unknown"
+
         image_url = dig(
             notification,
             ["data_blocks", 0, "content", "image_block", "url"],
