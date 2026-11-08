@@ -138,16 +138,20 @@ class Campaign:
             # Must not have ended
             not self.ended()
             # If account linking is required, the account must be linked
-            and (allow_unlinked or self.is_account_connected)
+            and (
+                allow_unlinked
+                or not self.requires_account_link()
+                or self.is_account_connected
+            )
             # At least 1 drop must be progressable
             and self.any_drop_progressable()
         )
 
     def current_drop(self, allow_unlinked: bool) -> Drop | None:
         """Returns the current Drop that can be progressed."""
-        if allow_unlinked or self.is_account_connected:
+        if self.progressable(allow_unlinked):
             return min(
-                (drop for drop in self.drops.values() if drop.is_progressable()),
+                self.progressable_drops(),
                 key=lambda drop: drop.minutes_required,
                 default=None,
             )
