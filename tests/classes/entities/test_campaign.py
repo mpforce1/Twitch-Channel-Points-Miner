@@ -255,6 +255,7 @@ test_progressable_data = [
         campaign(
             end_at=datetime.datetime.fromisoformat("2026-10-24T11:00:00Z"),
             is_account_connected=False,
+            account_link_url="https://example.com",
         ),
         False,
         datetime.datetime.fromisoformat("2026-10-24T10:00:00Z"),
@@ -298,6 +299,7 @@ test_progressable_data = [
         campaign(
             end_at=datetime.datetime.fromisoformat("2026-10-24T11:00:00Z"),
             is_account_connected=False,
+            account_link_url="https://twitch.tv",
             drops=[
                 drop(
                     _id="01a16d3f-4d94-7691-86e2-0c40199bd916",
@@ -379,6 +381,7 @@ test_current_drop_data = [
     (
         campaign(
             is_account_connected=False,
+            account_link_url="https://example.com",
             drops=[
                 test_drop_0,
                 test_drop_1,
@@ -402,6 +405,7 @@ test_current_drop_data = [
     (
         campaign(
             is_account_connected=False,
+            account_link_url="https://example.com",
             drops=[
                 test_drop_2,
                 test_drop_0,
@@ -428,4 +432,5 @@ test_current_drop_data = [
 
 @pytest.mark.parametrize("campaign,allow_unlinked,expected", test_current_drop_data)
 def test_current_drop(campaign: Campaign, allow_unlinked: bool, expected: Drop | None):
+    campaign.ended = lambda: False
     assert campaign.current_drop(allow_unlinked) == expected
