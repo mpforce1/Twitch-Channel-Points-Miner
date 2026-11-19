@@ -43,22 +43,25 @@ class QueueRunner[Item](Thread):
 
     def run(self):
         self.running = True
-        while self.running:
-            # Process all items until the queue is empty
+        try:
             while self.running:
-                with self._lock:
-                    has_item = len(self.queue) > 0
-                # drop the lock early to avoid holding it for too long
-                # this is the only place we remove items so it should be fine
-                if has_item:
-                    item = self.queue[0]
-                    if self.process_item(item) or self.remove_on_failure:
-                        # Remove from the queue
-                        with self._lock:
-                            self.queue.popleft()
-                else:
-                    break
-            time.sleep(self.sleep_interval_seconds)
+                # Process all items until the queue is empty
+                while self.running:
+                    with self._lock:
+                        has_item = len(self.queue) > 0
+                    # drop the lock early to avoid holding it for too long
+                    # this is the only place we remove items so it should be fine
+                    if has_item:
+                        item = self.queue[0]
+                        if self.process_item(item) or self.remove_on_failure:
+                            # Remove from the queue
+                            with self._lock:
+                                self.queue.popleft()
+                    else:
+                        break
+                time.sleep(self.sleep_interval_seconds)
+        except Exception as e:
+            logger.error(f"Error in {self.name}: {e}")
 
     def shutdown(self):
         self.running = False

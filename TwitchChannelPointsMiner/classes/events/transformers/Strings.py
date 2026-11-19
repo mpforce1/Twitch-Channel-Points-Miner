@@ -667,7 +667,7 @@ class TranslatorTransformer(EventTransformer[str]):
             self.locale,
         )
 
-        remaining = data.seconds_remaining(datetime.datetime.now())
+        remaining = data.seconds_remaining(datetime.datetime.now(datetime.timezone.utc))
 
         return self.translator.translate(
             lambda t: t.predictions.event_update,

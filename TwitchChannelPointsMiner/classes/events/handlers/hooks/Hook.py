@@ -120,13 +120,17 @@ class WebhookHandler(EventHandler):
 
     def _process_item(self, item: Event):
         """Makes attempts and turns the result into a bool"""
-        data = self.transformer.transform(item)
-        result = self.attempt_strategy.make_attempts(
-            lambda: self._make_request(data),
-            self._validate,
-            self._retryable,
-            self._exception_context,
-        )
+        try:
+            data = self.transformer.transform(item)
+            result = self.attempt_strategy.make_attempts(
+                lambda: self._make_request(data),
+                self._validate,
+                self._retryable,
+                self._exception_context,
+            )
+        except Exception as e:
+            logger.error(f"Error processing Event {item.type.name}: {e}")
+            return False
         if isinstance(result, SuccessResult):
             return True
         else:
