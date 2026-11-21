@@ -252,6 +252,9 @@ def reasons_parser(value):
         not_enough_points=parse_expected_value(
             value, "not_enough_points", requires_parser(ArgNotEnoughPoints)
         ),
+        already_made=parse_expected_value(
+            value, "already_made", expect_str,
+        ),
         not_active=parse_expected_value(
             value, "not_active", requires_parser(ArgStatus)
         ),

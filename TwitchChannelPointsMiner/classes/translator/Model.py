@@ -309,6 +309,7 @@ class PredictionMade:
 class Reasons:
     too_short: Requires[ArgTime]
     not_enough_points: Requires[ArgNotEnoughPoints]
+    already_made: str
     not_active: Requires[ArgStatus]
     below_minimum: Requires[ArgStake]
     settings: Requires[ArgConditional]

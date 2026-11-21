@@ -99,6 +99,7 @@
       "reasons": {
         "too_short": "Chosen prediction time is in the past: {time}",
         "not_enough_points": "You don't have enough channel points: {channel_points} < {minimum_points}",
+        "already_made": "A prediction has already been made",
         "not_active": "Event is not longer active: {status}",
         "below_minimum": "Chosen stake ({stake}) is less than 0",
         "settings": "Filtered by your bet settings: {conditional}"

@@ -31,6 +31,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     MomentClaimAvailable,
     NotEnoughPoints,
     PointsSpent,
+    PredictionAlreadyMade,
     PredictionEventClosed,
     PredictionEventCreated,
     PredictionEventUpdated,
@@ -540,6 +541,11 @@ class TranslatorTransformer(EventTransformer[str]):
                         "channel_points": reason.channel_points,
                         "minimum_points": reason.minimum_points,
                     },
+                )
+            case PredictionAlreadyMade():
+                return self.translator.translate_str(
+                    lambda t: t.predictions.filters.reasons.already_made,
+                    locale=self.locale,
                 )
             case EventNotActive():
                 return self.translator.translate(
