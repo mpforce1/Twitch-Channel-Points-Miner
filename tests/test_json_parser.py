@@ -242,6 +242,32 @@ test_expect_iso_8601_data = [
             tzinfo=tzlocal(),
         ),
     ),
+    (
+        "2026-11-21 14:53:32.145873041 +0000 UTC m=+3213.123456789",
+        datetime(
+            year=2026,
+            month=11,
+            day=21,
+            hour=14,
+            minute=53,
+            second=32,
+            microsecond=0,
+            tzinfo=tzlocal(),
+        ),
+    ),
+    (
+        "2026-11-21 14:53:32.145873041 +0130 UTC m=+3213.123456789",
+        datetime(
+            year=2026,
+            month=11,
+            day=21,
+            hour=13,
+            minute=23,
+            second=32,
+            microsecond=0,
+            tzinfo=tzlocal(),
+        ),
+    ),
 ]
 
 

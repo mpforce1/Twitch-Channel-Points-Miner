@@ -1,8 +1,11 @@
 import abc
 import datetime
+import re
 from typing import ContextManager, Any, Callable
 
 import dateutil
+from dateutil.tz import tzlocal
+import pytz
 
 
 class JsonParserError(abc.ABC, Exception):
@@ -147,6 +150,12 @@ def expect_bool(value: Any) -> bool:
 def expect_iso_8601(value: Any) -> datetime.datetime:
     """
     Parser that checks that the value is a valid ISO8601 string and returns it as a datetime.
+    It can also handle go time.Time object representations including the monotonic component, i.e.:
+
+    2026-11-21 14:53:32.145873041 +0130 UTC m=+3213.123456789
+
+    This is useful because Twitch sometimes sends these (probably in error).
+
     :raises InvalidJsonShapeError: if the value is not a valid ISO8601 string.
     """
     value = expect_str(value)
@@ -154,7 +163,34 @@ def expect_iso_8601(value: Any) -> datetime.datetime:
     try:
         return dateutil.parser.parse(value)
     except ValueError:
-        pass
+        # Check for go timestamp including a monotonic offset
+        match = re.search(
+            r"(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}).\d{1,9} ([+\-]\d{4}) UTC m=\+\d+\.\d+",
+            value,
+        )
+        if match is not None:
+            # Create datetime object from each match
+            timezone_sign = 1 if match.group(7)[0] == "+" else -1
+            timezone_offset_hours = timezone_sign * int(match.group(7)[1:3])
+            timezone_offset_minutes = timezone_sign * int(match.group(7)[3:5])
+            base_result = datetime.datetime(
+                year=int(match.group(1)),
+                month=int(match.group(2)),
+                day=int(match.group(3)),
+                hour=int(match.group(4)),
+                minute=int(match.group(5)),
+                second=int(match.group(6)),
+                microsecond=0,
+                tzinfo=datetime.timezone(
+                    datetime.timedelta(
+                        hours=timezone_offset_hours,
+                        minutes=timezone_offset_minutes,
+                    )
+                ),
+            )
+            # Convert to the local timezone
+            return base_result.astimezone()
+
     raise InvalidJsonShapeError([], f"time data '{value}' does not match format")
 
 
