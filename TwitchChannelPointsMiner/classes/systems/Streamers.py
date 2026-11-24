@@ -12,6 +12,8 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     JoinRaid,
     MomentClaim,
     PointsSpent,
+    WatchStreakMilestoneProgress,
+    WatchStreakProgress,
     WatchStreakRecovery,
     gain_for,
 )
@@ -51,7 +53,9 @@ class StreamerSystem:
         try:
             streamer = find_streamer(self.streamers, data.channel_id)
         except KeyError:
-            logger.debug(f"Ignoring points-earned for untracked streamer {data.channel_id}")
+            logger.debug(
+                f"Ignoring points-earned for untracked streamer {data.channel_id}"
+            )
             return
         self._update_points_change(streamer, data.balance, data.reason)
         if data.reason == "WATCH":
@@ -80,7 +84,9 @@ class StreamerSystem:
         try:
             streamer = find_streamer(self.streamers, data.channel_id)
         except KeyError:
-            logger.debug(f"Ignoring points-spent for untracked streamer {data.channel_id}")
+            logger.debug(
+                f"Ignoring points-spent for untracked streamer {data.channel_id}"
+            )
             return
         # We have to estimate this as Twitch doesn't give us the amount in the WS message
         spent_estimate = streamer.channel_points - data.balance
@@ -129,7 +135,9 @@ class StreamerSystem:
         try:
             streamer = find_streamer(self.streamers, data.channel_id)
         except KeyError:
-            logger.debug(f"Ignoring claim-available for untracked streamer {data.channel_id}")
+            logger.debug(
+                f"Ignoring claim-available for untracked streamer {data.channel_id}"
+            )
             return
         # Send the Available event before claiming
         self.event_manager.manage(
@@ -262,4 +270,24 @@ class StreamerSystem:
         except KeyError:
             logger.debug(
                 f"Watch Streak Recovery for non-miner channel: {Settings.logger.anonymiser.channel_id(recovery.channel_id)}"
+            )
+
+    def watch_streak_achieved(self, achieved: ViewerMilestones.StreakAchieved):
+        try:
+            streamer = find_streamer(self.streamers, achieved.channel_id)
+            logger.info(
+                f"Watch Streak Milestone Progressed for {streamer}: {achieved.value}/{achieved.threshold}",
+                extra={"emoji": ":fire:"},
+            )
+            streamer.stream.watch_streak_missing = False
+            self.event_manager.manage(
+                WatchStreakMilestoneProgress(
+                    streamer=streamer,
+                    threshold=achieved.threshold,
+                    value=achieved.value,
+                )
+            )
+        except KeyError:
+            logger.debug(
+                f"Watch Streak Milestone Achieved for non-miner channel: {Settings.logger.anonymiser.channel_id(achieved.channel_id)}"
             )

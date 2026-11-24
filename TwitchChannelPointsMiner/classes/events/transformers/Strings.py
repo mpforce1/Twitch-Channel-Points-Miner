@@ -47,6 +47,7 @@ from TwitchChannelPointsMiner.classes.events.Event import (
     StreamerOffline,
     StreamerOnline,
     StreamViewCount,
+    WatchStreakMilestoneProgress,
     WatchStreakMissing,
     WatchStreakProgress,
     WatchStreakRecovery,
@@ -102,6 +103,7 @@ def _setup_default_emojis():
         Events.WATCH_STREAK_PROGRESS: ":fire:",
         Events.WATCH_STREAK_MISSING: ":red_question_mark:",
         Events.WATCH_STREAK_RECOVERY: ":ambulance:",
+        Events.WATCH_STREAK_MILESTONE_PROGRESS: ":fire:",
         Events.WEEKLY_REWARDS_UPDATE: _weekly_rewards_update_emoji,  # pyright: ignore [reportAssignmentType]
         Events.MOMENT_CLAIM_AVAILABLE: ":video_camera:",
         Events.DROP_STATUS: ":package:",
@@ -185,6 +187,7 @@ class TranslatorTransformer(EventTransformer[str]):
             Events.WATCH_STREAK_PROGRESS: self.watch_streak_progress,
             Events.WATCH_STREAK_MISSING: self.watch_streak_missing,
             Events.WATCH_STREAK_RECOVERY: self.watch_streak_recovery,
+            Events.WATCH_STREAK_MILESTONE_PROGRESS: self.watch_streak_milestone_progress,
             Events.WEEKLY_REWARDS_UPDATE: self.weekly_rewards_update,
             Events.POINTS_SPENT: self.points_spent,
             Events.PREDICTION_EVENT_START: self.prediction_event_created,
@@ -316,6 +319,17 @@ class TranslatorTransformer(EventTransformer[str]):
             arg={
                 "streamer": event.streamer,
             },
+        )
+
+    def watch_streak_milestone_progress(self, event: WatchStreakMilestoneProgress):
+        return self.translator.translate(
+            lambda t: t.watch_streak_milestone_progress,
+            locale=self.locale,
+            arg={
+                "streamer": event.streamer,
+                "threshold": event.threshold,
+                "value": event.value,
+            }
         )
 
     def weekly_rewards_update(self, event: WeeklyRewardsUpdate):

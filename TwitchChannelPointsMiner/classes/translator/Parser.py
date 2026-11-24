@@ -46,6 +46,7 @@ from TwitchChannelPointsMiner.classes.translator.Model import (
     ArgType,
     ArgUserPrediction,
     ArgValue,
+    ArgWatchStreakMilestoneProgress,
     ArgWeeklyRewardsUpdate,
     ArgWinningOutcome,
     ChangingWatchSlots,
@@ -253,7 +254,9 @@ def reasons_parser(value):
             value, "not_enough_points", requires_parser(ArgNotEnoughPoints)
         ),
         already_made=parse_expected_value(
-            value, "already_made", expect_str,
+            value,
+            "already_made",
+            expect_str,
         ),
         not_active=parse_expected_value(
             value, "not_active", requires_parser(ArgStatus)
@@ -281,7 +284,7 @@ def user_result_parser(value):
         win=parse_expected_value(value, "win", requires_parser(ArgResultWin)),
         lose=parse_expected_value(value, "lose", requires_parser(ArgPoints)),
         refund=parse_expected_value(value, "refund", expect_str),
-        main=parse_expected_value(value, "main", requires_parser(ArgType))
+        main=parse_expected_value(value, "main", requires_parser(ArgType)),
     )
 
 
@@ -295,7 +298,9 @@ def prediction_result_parser(value):
             value, "user_prediction", requires_parser(ArgUserPrediction)
         ),
         user_result=parse_expected_value(
-            value, "user_result", user_result_parser,
+            value,
+            "user_result",
+            user_result_parser,
         ),
         main=parse_expected_value(value, "main", requires_parser(ArgPredictionResult)),
     )
@@ -458,6 +463,11 @@ def translation_parser(root):
         ),
         watch_streak_recovery=parse_expected_value(
             root, "watch_streak_recovery", requires_parser(ArgStreamer)
+        ),
+        watch_streak_milestone_progress=parse_expected_value(
+            root,
+            "watch_streak_milestone_progress",
+            requires_parser(ArgWatchStreakMilestoneProgress),
         ),
         weekly_rewards_update=parse_expected_value(
             root, "weekly_rewards_update", weekly_rewards_update_parser

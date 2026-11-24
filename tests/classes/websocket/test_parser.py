@@ -6,7 +6,6 @@ import pytest
 
 from TwitchChannelPointsMiner.classes.entities.GiftSub import GiftSub, Gifter, Target
 from TwitchChannelPointsMiner.classes.gql.data.Parser import subscription_benefit_parser
-from TwitchChannelPointsMiner.classes.websocket.data import WeeklyRewards
 from TwitchChannelPointsMiner.classes.websocket.data import (
     CommunityPointsUser,
     Predictions,
@@ -15,6 +14,9 @@ from TwitchChannelPointsMiner.classes.websocket.data import (
     Raid,
     VideoPlaybackById,
     WeeklyRewards,
+)
+from TwitchChannelPointsMiner.classes.websocket.data import (
+    ViewerMilestones,
 )
 from TwitchChannelPointsMiner.classes.websocket.data.OnsiteNotification import (
     UserDropRewardReminderNotification,
@@ -366,7 +368,9 @@ def test_prediction_result(parser: Parser):
             user_display_name=None,
         ),
     )
-    file_json_test("prediction-result-01.json", parser.predictions_user_parser, expected)
+    file_json_test(
+        "prediction-result-01.json", parser.predictions_user_parser, expected
+    )
 
 
 def test_raid_update(parser: Parser):
@@ -399,3 +403,16 @@ def test_viewcount(parser: Parser):
         viewers=20,
     )
     file_json_test("viewcount-01.json", parser.video_playback_by_id_parser, expected)
+
+
+def test_viewer_milestones_update(parser: Parser):
+    expected = ViewerMilestones.StreakAchieved(
+        channel_id="123456789",
+        value="99",
+        threshold=100,
+    )
+    file_json_test(
+        "viewer-milestones-update-01.json",
+        parser.viewer_milestones_update_parser,
+        expected,
+    )

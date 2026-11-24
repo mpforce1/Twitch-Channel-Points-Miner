@@ -25,6 +25,7 @@ class Events(Flag):
     WATCH_STREAK_PROGRESS = auto()
     WATCH_STREAK_MISSING = auto()
     WATCH_STREAK_RECOVERY = auto()
+    WATCH_STREAK_MILESTONE_PROGRESS = auto()
     #  Weekly Rewards
     WEEKLY_REWARDS_UPDATE = auto()
     #  Predictions

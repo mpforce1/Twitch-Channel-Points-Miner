@@ -238,6 +238,10 @@ class ArgErrorOccurred(TypedDict):
 class ArgJoinRaid(ArgStreamer, TypedDict):
     target: str
 
+@dataclass(kw_only=True)
+class ArgWatchStreakMilestoneProgress(ArgStreamer, TypedDict):
+    threshold: int
+    value: str
 
 # Formatters
 @dataclass(kw_only=True)
@@ -413,6 +417,7 @@ class Translation:
     watch_streak_progress: Requires[ArgStreamer]
     watch_streak_missing: Requires[ArgStreamer]
     watch_streak_recovery: Requires[ArgStreamer]
+    watch_streak_milestone_progress: Requires[ArgWatchStreakMilestoneProgress]
     weekly_rewards_update: WeeklyRewardsUpdate
     predictions: Predictions
     moment_claim_available: Requires[ArgStreamer]

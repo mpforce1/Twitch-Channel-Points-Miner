@@ -105,6 +105,8 @@ class PubSubHandler(MessageListener):
                     self.streamer_system.weekly_reward_update(data)
                 case ViewerMilestones.StreakRecovered():
                     self.streamer_system.watch_streak_recovered(data)
+                case ViewerMilestones.StreakAchieved():
+                    self.streamer_system.watch_streak_achieved(data)
                 case UserDropEvents.DropProgress():
                     self.drops_system.drop_progress(data)
                 case None:

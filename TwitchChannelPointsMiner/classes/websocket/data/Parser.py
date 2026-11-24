@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Literal
+from typing import Callable, Literal, Mapping
 
 from TwitchChannelPointsMiner.JsonParser import (
     InvalidJsonShapeError,
@@ -109,6 +109,14 @@ class Parser:
             "user_drop_reward_reminder_notification": self.user_drop_reward_reminder_notification_parser,
             "quests_viewer_reward_campaign_earned_badge": self.quests_viewer_reward_campaign_earned_badge_parser,
         }
+        self.viewer_milestones_update_parsers = {
+            "achieved": self.streak_achieved_parser
+        }
+        self.viewer_milestones_parsers = {
+            "streak-recovered": self.streak_recovered_parser,
+            "viewer-milestones-update": self.viewer_milestones_update_parser,
+        }
+        self.user_drop_events_parsers = {"drop-progress": self.drop_progress_parser}
         self.parsers = {
             "community-points-user-v1": self.community_points_user_parser,
             "video-playback-by-id": self.video_playback_by_id_parser,
@@ -127,9 +135,10 @@ class Parser:
     def _sub_type_parser[Result](
         self,
         message,
-        sub_types: dict[str, Callable[[object], Result]],
+        sub_types: Mapping[str, Callable[[object], Result]],
         type_field: str | Literal["type"] = "type",
         data_field: str | Literal["data"] | None = "data",
+        context: str = "",
     ) -> Result | None:
         """
         Parses the "data" field of the given message (or the whole message) using the sub parser mapped to the value of
@@ -138,6 +147,7 @@ class Parser:
         :param sub_types: A dict of sub parser functions.
         :param type_field: The name of the "type" field.
         :param data_field: The name of the "data" field, or None if the whole message should be used.
+        :param context: Some context to use when logging unknown types.
         """
         message = expect_dict(message)
         _type = parse_expected_value(message, type_field, expect_str)
@@ -148,6 +158,7 @@ class Parser:
             else:
                 return parse_expected_value(message, data_field, sub_parser)
         else:
+            logger.debug(f"Ignoring {context} {type_field}: {_type}")
             return None
 
     # community-points-user-v1
@@ -487,16 +498,13 @@ class Parser:
                 return None
 
     def onsite_notification_parser(self, value) -> OnsiteNotification.Model | None:
-        value = expect_dict(value)
-        _type = parse_expected_value(value, "type", expect_str)
-        if _type in self.onsite_notification_parsers:
-            return parse_expected_value(
-                value, "data", self.onsite_notification_parsers[_type]
-            )
-        else:
-            if _type not in self.ignorable_onsite_notification_types:
-                logger.debug(f"Unknown onsite-notification type: {_type}")
-            return None
+        return self._sub_type_parser(
+            value,
+            self.onsite_notification_parsers,
+            "type",
+            "data",
+            "onsite-notification",
+        )
 
     # user-subscribe-events-v1
 
@@ -552,16 +560,28 @@ class Parser:
             channel_id=parse_expected_value(value, "channel_id", expect_str)
         )
 
+    def streak_achieved_parser(self, value):
+        return ViewerMilestones.StreakAchieved(
+            channel_id=parse_expected_value(value, "channel_id", expect_str),
+            value=parse_expected_value(value, "watch_streak_value", expect_str),
+            threshold=parse_expected_value(value, "watch_streak_threshold", expect_int),
+        )
+
+    def viewer_milestones_update_parser(
+        self, value
+    ) -> ViewerMilestones.ViewerMilestonesUpdate | None:
+        return self._sub_type_parser(
+            value,
+            self.viewer_milestones_update_parsers,
+            "event_type",
+            None,
+            "viewer-milestones-update",
+        )
+
     def viewer_milestones_parser(self, value) -> ViewerMilestones.Model | None:
-        value = expect_dict(value)
-        type = parse_expected_value(value, "type", expect_str)
-        if type == "streak-recovered":
-            return self.streak_recovered_parser(
-                parse_expected_value(value, "data", expect_dict)
-            )
-        else:
-            logger.debug(f"Unknown viewer-milestones type: {type}")
-            return None
+        return self._sub_type_parser(
+            value, self.viewer_milestones_parsers, "type", "data", "viewer-milestones"
+        )
 
     def drop_progress_parser(self, value) -> UserDropEvents.DropProgress | None:
         value = expect_dict(value)
@@ -589,15 +609,13 @@ class Parser:
         )
 
     def user_drop_events_parser(self, value) -> UserDropEvents.Model | None:
-        value = expect_dict(value)
-        _type = parse_expected_value(value, "type", expect_str)
-        if _type == "drop-progress":
-            return self.drop_progress_parser(
-                parse_expected_value(value, "data", expect_dict)
-            )
-        else:
-            logger.debug(f"Unknown user-drop-events type: {_type}")
-            return None
+        return self._sub_type_parser(
+            value,
+            self.user_drop_events_parsers,
+            "type",
+            "data",
+            "user-drop-events",
+        )
 
     # All
     def message_parser(self, data, topic: str) -> Model | None:

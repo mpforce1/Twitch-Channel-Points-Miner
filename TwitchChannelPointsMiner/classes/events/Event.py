@@ -13,7 +13,9 @@ from TwitchChannelPointsMiner.classes.entities.predictions.PredictionEvent impor
     PredictionEvent,
 )
 from TwitchChannelPointsMiner.classes.events.Events import Events
-from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import WeeklyRewards
+from TwitchChannelPointsMiner.classes.gql.data.response.WeeklyRewards import (
+    WeeklyRewards,
+)
 from TwitchChannelPointsMiner.utils.Utils import simple_repr
 
 
@@ -36,9 +38,11 @@ class ChannelEvent(Event, abc.ABC):
 class StreamUp(ChannelEvent):
     type: Events = Events.STREAM_UP
 
+
 @dataclass(kw_only=True)
 class StreamDown(ChannelEvent):
     type: Events = Events.STREAM_DOWN
+
 
 @dataclass(kw_only=True)
 class StreamerOnline(ChannelEvent):
@@ -109,10 +113,12 @@ class GainForPrediction(GainPoints):
     reason: str = "PREDICTION"
     type: Events = Events.GAIN_FOR_PREDICTION
 
+
 @dataclass(kw_only=True)
 class GainForRefund(GainPoints):
     reason: str = "REFUND"
     type: Events = Events.GAIN_FOR_REFUND
+
 
 @dataclass(kw_only=True)
 class WatchStreakProgress(ChannelEvent):
@@ -128,11 +134,20 @@ class WatchStreakMissing(ChannelEvent):
 class WatchStreakRecovery(ChannelEvent):
     type: Events = Events.WATCH_STREAK_RECOVERY
 
+
+@dataclass(kw_only=True)
+class WatchStreakMilestoneProgress(ChannelEvent):
+    threshold: int
+    value: str
+    type: Events = Events.WATCH_STREAK_MILESTONE_PROGRESS
+
+
 @dataclass(kw_only=True)
 class WeeklyRewardsUpdate(ChannelEvent):
     weekly_rewards: WeeklyRewards
     update_type: str
     type: Events = Events.WEEKLY_REWARDS_UPDATE
+
 
 @dataclass(kw_only=True)
 class PointsSpent(ChannelEvent):
@@ -334,10 +349,12 @@ class CommunityGoalContribution(ChannelEvent):
     amount: int
     type: Events = Events.COMMUNITY_GOAL_CONTRIBUTION
 
+
 @dataclass(kw_only=True)
 class Shutdown(Event):
     reason: str
     type: Events = Events.SHUTDOWN
+
 
 # Other
 

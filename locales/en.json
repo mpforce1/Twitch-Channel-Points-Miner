@@ -25,6 +25,7 @@
     "WATCH_STREAK_PROGRESS": "Watch Streak Progress",
     "WATCH_STREAK_MISSING": "Watch Streak Missing",
     "WATCH_STREAK_RECOVERY": "Watch Streak Recovery",
+    "WATCH_STREAK_MILESTONE_PROGRESS": "Watch Streak Milestone Progress",
     "WEEKLY_REWARDS_UPDATE": "Weekly Rewards Update",
     "PREDICTION_EVENT_START": "Prediction Started",
     "PREDICTION_EVENT_UPDATE": "Prediction Updated",
@@ -72,6 +73,7 @@
   "watch_streak_progress": "Detected Watch Streak for {streamer}",
   "watch_streak_missing": "Missing Watch Streak for {streamer}",
   "watch_streak_recovery": "Watch Streak recovered for {streamer}",
+  "watch_streak_milestone_progress": "Watch Streak Milestone Progress for {streamer}: {value}/{threshold}",
   "weekly_rewards_update": {
     "days": {
       "singular": "{count} day",
