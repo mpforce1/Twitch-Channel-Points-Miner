@@ -1,6 +1,4 @@
-import copy
 import logging
-from secrets import token_hex
 from typing import Callable, Any, Literal, Protocol, Tuple
 
 import requests
@@ -53,6 +51,7 @@ from TwitchChannelPointsMiner.utils.AttemptStrategy import (
     ErrorResult,
     AttemptStrategy,
 )
+from TwitchChannelPointsMiner.classes.gql.data.request.Query import GQLQuery, operations
 
 logger = logging.getLogger(__name__)
 
@@ -163,73 +162,9 @@ class GQL:
         self.parser = Parser() if parser is None else parser
         """The parser for parsing GQL responses."""
 
-    @staticmethod
-    def __redact_request_json(json: dict | list[dict]) -> dict | list[dict]:
-        """
-        Creates a copy of the given request JSON with identifying information redacted.
-
-        TODO It would be nice for this to be a function on each operation
-
-        :param json: The JSON to redact.
-        :return: The redacted JSON.
-        """
-
-        def redact_dict(value: dict) -> dict:
-            value = copy.deepcopy(value)
-            operation_name = value["operationName"]
-            variables = value.get("variables", None)
-            if variables is not None:
-                channel = variables.get("channel", None)
-                if channel is not None:
-                    variables["channel"] = Settings.logger.anonymiser.username(channel)
-                login = variables.get("login", None)
-                if login is not None:
-                    variables["login"] = Settings.logger.anonymiser.username(login)
-                channel_login = variables.get("channelLogin", None)
-                if channel_login is not None:
-                    # Annoyingly "channelLogin" is both a username and a channel id in different operations
-                    if operation_name in [
-                        GQLOperations.ChannelPointsContext["operationName"],
-                        GQLOperations.UserPointsContribution["operationName"],
-                    ]:
-                        variables["channelLogin"] = Settings.logger.anonymiser.username(
-                            channel_login
-                        )
-                    elif (
-                        operation_name
-                        == GQLOperations.DropCampaignDetails["operationName"]
-                    ):
-                        variables["channelLogin"] = (
-                            Settings.logger.anonymiser.channel_id(channel_login)
-                        )
-                channel_id = variables.get("channelID", None)
-                if channel_id is not None:
-                    variables["channelID"] = Settings.logger.anonymiser.channel_id(
-                        channel_id
-                    )
-                if (
-                    operation_name
-                    == GQLOperations.WithIsStreamLiveQuery["operationName"]
-                ):
-                    variables["id"] = Settings.logger.anonymiser.channel_id(
-                        variables["id"]
-                    )
-                target_user_id = variables.get("targetUserID", None)
-                if target_user_id is not None:
-                    variables["targetUserID"] = Settings.logger.anonymiser.channel_id(
-                        target_user_id
-                    )
-            return value
-
-        if isinstance(json, dict):
-            return redact_dict(json)
-        else:
-            result = []
-            for item in json:
-                result.append(redact_dict(item))
-            return result
-
-    def __post_gql_request(self, request_json: dict | list[dict]) -> Any:
+    def __post_gql_request(
+        self, request_json: dict | list[dict], redacted_request_json: dict | list[dict]
+    ) -> Any:
         response = self.client_session.session.post(
             GQLOperations.url,
             json=request_json,
@@ -243,8 +178,6 @@ class GQL:
             timeout=self.request_timeout,
         )
 
-        redacted_request_json = self.__redact_request_json(request_json)
-
         response_text = (
             "REDACTED" if Settings.logger.anonymiser.strict else response.text
         )
@@ -256,16 +189,17 @@ class GQL:
         return response.json()
 
     def __post_gql_request_single[T](
-        self, request_json: dict, parse: Callable[[Any], T]
+        self, request_json: dict, redacted_request_json: dict, parse: Callable[[Any], T]
     ):
-        return parse(self.__post_gql_request(request_json))
+        return parse(self.__post_gql_request(request_json, redacted_request_json))
 
     def __post_gql_request_batch[T](
         self,
         request_json: list[dict],
+        redacted_request_json: list[dict],
         parser: Callable[[Any], T],
     ):
-        response_json = self.__post_gql_request(request_json)
+        response_json = self.__post_gql_request(request_json, redacted_request_json)
         if isinstance(response_json, list):
             return parse_list(parser, response_json)
         else:
@@ -276,9 +210,10 @@ class GQL:
     def __post_gql_request_batch_mapped[T](
         self,
         request_json: list[dict],
+        redacted_request_json: list[dict],
         parsers: list[Callable[[Any], Any]],
     ):
-        response_json = self.__post_gql_request(request_json)
+        response_json = self.__post_gql_request(request_json, redacted_request_json)
         if isinstance(response_json, list):
             return parse_list_sub_parsers(parsers, response_json)
         else:
@@ -303,48 +238,55 @@ class GQL:
             return result.result
 
     def post_gql_request_single[T](
-        self, operation_name: str, request_json: dict, parse: Callable[[Any], T]
+        self, prepared_query: GQLQuery, parse: Callable[[Any], T]
     ) -> T:
         """
         Posts the given GQL request. Handles automatic retries according to the `attempt_strategy`.
-        :param operation_name: The name of the GQL operation.
-        :param request_json: The data to send.
+        :param prepared_query: The query data.
         :param parse: The function to use to parse the data.
         :return: The parsed response.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
         result = self.attempt_strategy.make_attempts(
-            lambda: self.__post_gql_request_single(request_json, parse),
+            lambda: self.__post_gql_request_single(
+                prepared_query.data, prepared_query.redacted_data, parse
+            ),
             validate_response,
             is_recoverable_error,
             error_context,
         )
-        return self.__handle_result(result, operation_name)
+        return self.__handle_result(result, prepared_query.name)
 
     def post_gql_request_batch[T](
-        self, operation_name: str, request_json: list[dict], parser: Callable[[Any], T]
+        self, queries: list[GQLQuery], parser: Callable[[Any], T]
     ) -> list[T]:
         """
         Posts the given GQL request batch. Every item represents the same operation. Handles automatic retries according
         to the `attempt_strategy`.
-        :param operation_name: The name of the GQL operation.
-        :param request_json: The data to send as a list of the batched items.
+        :param queries: The queries to send.
         :param parser: The function to use to parse each item in the response list.
         :return: The parsed response as a list.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        result = self.attempt_strategy.make_attempts(
-            lambda: self.__post_gql_request_batch(request_json, parser),
-            validate_response,
-            is_recoverable_error,
-            error_context,
-        )
-        return self.__handle_result(result, f"Batch {operation_name}")
+        if len(queries) > 0:
+            result = self.attempt_strategy.make_attempts(
+                lambda: self.__post_gql_request_batch(
+                    [query.data for query in queries],
+                    [query.redacted_data for query in queries],
+                    parser,
+                ),
+                validate_response,
+                is_recoverable_error,
+                error_context,
+            )
+            return self.__handle_result(result, f"Batch {queries[0].name}")
+        return []
 
     def post_gql_request_batch_mapped(
         self,
         operation_names: list[str],
         request_json: list[dict],
+        redacted_request_json: list[dict],
         parser: list[Callable[[Any], Any]],
     ) -> list:
         """
@@ -357,7 +299,9 @@ class GQL:
         :return: The parsed response as a list.
         """
         result = self.attempt_strategy.make_attempts(
-            lambda: self.__post_gql_request_batch_mapped(request_json, parser),
+            lambda: self.__post_gql_request_batch_mapped(
+                request_json, redacted_request_json, parser
+            ),
             validate_response,
             is_recoverable_error,
             error_context,
@@ -373,11 +317,10 @@ class GQL:
         :return: The information.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.VideoPlayerStreamInfoOverlayChannel)
-        json_data["variables"] = {"channel": streamer_username}
         return self.post_gql_request_single(
-            GQLOperations.VideoPlayerStreamInfoOverlayChannel["operationName"],
-            json_data,
+            operations.video_player_stream_info_overlay_channel.prepare(
+                channel=streamer_username
+            ),
             self.parser.parse_video_player_stream_info_overlay_channel_data,
         )
 
@@ -388,11 +331,8 @@ class GQL:
         :return: The id or an empty string if the user doesn't exist.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.GetIDFromLogin)
-        json_data["variables"]["login"] = streamer_username
         return self.post_gql_request_single(
-            GQLOperations.GetIDFromLogin["operationName"],
-            json_data,
+            operations.get_id_from_login.prepare(login=streamer_username),
             self.parser.parse_get_id_from_login_response,
         )
 
@@ -406,23 +346,21 @@ class GQL:
         :return: The list of followers, returns none if there was an error.
         :raises RetryError: If one or more errors occurred while attempting the request(s).
         """
-        json_data = copy.deepcopy(GQLOperations.ChannelFollows)
-        json_data["variables"] = {"limit": limit, "order": str(order)}
         has_next = True
         last_cursor = ""
         follows: list[str] = []
         while has_next is True:
-            json_data["variables"]["cursor"] = last_cursor
             parsed_response = self.post_gql_request_single(
-                GQLOperations.ChannelFollows["operationName"],
-                json_data,
+                operations.channel_follows.prepare(
+                    limit=limit, order=str(order), cursor=last_cursor
+                ),
                 self.parser.parse_channel_follows_response,
             )
             if parsed_response is not None:
                 for edge in parsed_response.follows.edges:
                     follow = edge.node
                     follows.append(follow.login)
-                    last_cursor = edge.cursor
+                    last_cursor = edge.cursor if edge.cursor is not None else ""
                 has_next = parsed_response.follows.page_info.has_next_page
             else:
                 logger.warning("Unable to get follower list.")
@@ -435,11 +373,8 @@ class GQL:
         :param raid_id: The id of the raid to join.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.JoinRaid)
-        json_data["variables"] = {"input": {"raidID": raid_id}}
         self.post_gql_request_single(
-            GQLOperations.JoinRaid["operationName"],
-            json_data,
+            operations.join_raid.prepare(raid_id),
             self.parser.parse_join_raid_response,
         )
 
@@ -450,18 +385,8 @@ class GQL:
         :return: The playback access token.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.PlaybackAccessToken)
-        json_data["variables"] = {
-            "login": username,
-            "isLive": True,
-            "isVod": False,
-            "vodID": "",
-            "playerType": "site",
-            "platform": "web",
-        }
         return self.post_gql_request_single(
-            GQLOperations.PlaybackAccessToken["operationName"],
-            json_data,
+            operations.playback_access_token.prepare(login=username),
             self.parser.parse_playback_access_token_response,
         )
 
@@ -475,18 +400,10 @@ class GQL:
         :return: The playback access token.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.PlaybackAccessToken)
-        json_data["variables"] = {
-            "login": username,
-            "isLive": False,
-            "isVod": True,
-            "vodID": vod_id,
-            "playerType": "site",
-            "platform": "web",
-        }
         return self.post_gql_request_single(
-            GQLOperations.PlaybackAccessToken["operationName"],
-            json_data,
+            operations.playback_access_token.prepare(
+                login=username, vod_id=vod_id, is_vod=True, is_live=False
+            ),
             self.parser.parse_vod_playback_access_token_response,
         )
 
@@ -497,11 +414,8 @@ class GQL:
         :return: The channel points context.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.ChannelPointsContext)
-        json_data["variables"] = {"channelLogin": username}
         return self.post_gql_request_single(
-            GQLOperations.ChannelPointsContext["operationName"],
-            json_data,
+            operations.channel_points_context.prepare(username),
             self.parser.parse_channel_points_context_response,
         )
 
@@ -516,18 +430,10 @@ class GQL:
         :return: The response.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.MakePrediction)
-        json_data["variables"] = {
-            "input": {
-                "eventID": event_id,
-                "outcomeID": outcome_id,
-                "points": points,
-                "transactionID": token_hex(16),
-            }
-        }
         return self.post_gql_request_single(
-            GQLOperations.MakePrediction["operationName"],
-            json_data,
+            operations.make_prediction.prepare(
+                event_id=event_id, outcome_id=outcome_id, points=points
+            ),
             self.parser.parse_make_prediction_response,
         )
 
@@ -538,13 +444,10 @@ class GQL:
         :param claim_id: The id of the claim.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.ClaimCommunityPoints)
-        json_data["variables"] = {
-            "input": {"channelID": channel_id, "claimID": claim_id}
-        }
         self.post_gql_request_single(
-            GQLOperations.ClaimCommunityPoints["operationName"],
-            json_data,
+            operations.claim_community_points.prepare(
+                channel_id=channel_id, claim_id=claim_id
+            ),
             self.parser.parse_claim_community_points_response,
         )
 
@@ -554,11 +457,8 @@ class GQL:
         :param moment_id: The id of the moment to claim.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.CommunityMomentCallout_Claim)
-        json_data["variables"] = {"input": {"momentID": moment_id}}
         self.post_gql_request_single(
-            GQLOperations.CommunityMomentCallout_Claim["operationName"],
-            json_data,
+            operations.community_moment_callout_claim.prepare(moment_id),
             self.parser.parse_community_moment_callout_claim_response,
         )
 
@@ -571,11 +471,8 @@ class GQL:
         :return: The response.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.DropsHighlightService_AvailableDrops)
-        json_data["variables"] = {"channelID": channel_id}
         return self.post_gql_request_single(
-            GQLOperations.DropsHighlightService_AvailableDrops["operationName"],
-            json_data,
+            operations.drops_highlight_service_available_drops.prepare(channel_id),
             self.parser.parse_drops_highlight_service_available_drops,
         )
 
@@ -586,8 +483,7 @@ class GQL:
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
         return self.post_gql_request_single(
-            GQLOperations.Inventory["operationName"],
-            GQLOperations.Inventory,
+            operations.inventory.prepare(),
             self.parser.parse_inventory_response,
         )
 
@@ -598,8 +494,7 @@ class GQL:
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
         return self.post_gql_request_single(
-            GQLOperations.ViewerDropsDashboard["operationName"],
-            GQLOperations.ViewerDropsDashboard,
+            operations.viewer_drops_dashboard.prepare(),
             self.parser.parse_viewer_drops_dashboard_response,
         )
 
@@ -616,17 +511,16 @@ class GQL:
         # Batch the requests into chunks of 20
         chunks = create_chunks(campaign_ids, 20)
         for chunk in chunks:
-            json_data = []
-            for campaign in chunk:
-                json_data.append(copy.deepcopy(GQLOperations.DropCampaignDetails))
-                json_data[-1]["variables"] = {
-                    "dropID": campaign,
-                    "channelLogin": f"{self.client_session.login.get_user_id()}",
-                }
+            user_id = self.client_session.login.get_user_id()
+            queries = [
+                operations.drop_campaign_details.prepare(
+                    drop_id=campaign, user_id=user_id
+                )
+                for campaign in chunk
+            ]
 
             response = self.post_gql_request_batch(
-                GQLOperations.DropCampaignDetails["operationName"],
-                json_data,
+                queries,
                 self.parser.parse_drop_campaign_details_response,
             )
 
@@ -645,11 +539,8 @@ class GQL:
         :return: The response.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.DropsPage_ClaimDropRewards)
-        json_data["variables"] = {"input": {"dropInstanceID": drop_instance_id}}
         return self.post_gql_request_single(
-            GQLOperations.DropsPage_ClaimDropRewards["operationName"],
-            json_data,
+            operations.drops_page_claim_drop_rewards.prepare(drop_instance_id),
             self.parser.parse_drop_page_claim_drop_rewards,
         )
 
@@ -662,11 +553,8 @@ class GQL:
         :return: The response.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.UserPointsContribution)
-        json_data["variables"] = {"channelLogin": username}
         return self.post_gql_request_single(
-            GQLOperations.UserPointsContribution["operationName"],
-            json_data,
+            operations.user_points_contribution.prepare(username),
             self.parser.parse_user_points_contribution,
         )
 
@@ -680,18 +568,10 @@ class GQL:
         :param amount: The amount to contribute.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.ContributeCommunityPointsCommunityGoal)
-        json_data["variables"] = {
-            "input": {
-                "amount": amount,
-                "channelID": channel_id,
-                "goalID": goal_id,
-                "transactionID": token_hex(16),
-            }
-        }
         return self.post_gql_request_single(
-            GQLOperations.ContributeCommunityPointsCommunityGoal["operationName"],
-            json_data,
+            operations.contribute_community_points_community_goal.prepare(
+                amount=amount, channel_id=channel_id, goal_id=goal_id
+            ),
             self.parser.parse_contribute_community_points_community_goal,
         )
 
@@ -702,13 +582,8 @@ class GQL:
         :return: The response.
         :raises RetryError: If one or more errors occurred while attempting the request.
         """
-        json_data = copy.deepcopy(GQLOperations.WithIsStreamLiveQuery)
-        json_data["variables"] = {
-            "id": channel_id,
-        }
         return self.post_gql_request_single(
-            GQLOperations.WithIsStreamLiveQuery["operationName"],
-            json_data,
+            operations.with_is_stream_live.prepare(channel_id),
             self.parser.parse_with_is_stream_live_query,
         )
 
@@ -718,11 +593,8 @@ class GQL:
         :param channel_id: The id of the channel.
         :return: The response.
         """
-        json_data = copy.deepcopy(GQLOperations.RewardList)
-        json_data["variables"]["channelID"] = channel_id
         return self.post_gql_request_single(
-            GQLOperations.RewardList["operationName"],
-            json_data,
+            operations.reward_list.prepare(channel_id),
             self.parser.parse_reward_list,
         )
 
@@ -735,11 +607,10 @@ class GQL:
         :param channel_id: The id of the channel.
         :return: The response.
         """
-        json_data = copy.deepcopy(GQLOperations.ChatRoomBanStatus)
-        json_data["variables"] = {"targetUserID": f"{user_id}", "channelID": channel_id}
         return self.post_gql_request_single(
-            GQLOperations.ChatRoomBanStatus["operationName"],
-            json_data,
+            operations.chat_room_ban_status.prepare(
+                user_id=user_id, channel_id=channel_id
+            ),
             self.parser.parse_chat_room_ban_status,
         )
 
@@ -749,45 +620,33 @@ class GQL:
         :param limit: The maximum number of subs to acquire per request.
         :return: The gift sub(s).
         """
-        json_data = copy.deepcopy(
-            GQLOperations.SubscriptionsManagement_SubscriptionBenefits
-        )
         has_next = True
         last_cursor = ""
         gift_subs: list[GiftSub] = []
-        json_data["variables"]["limit"] = limit
         while has_next:
-            json_data["variables"]["cursor"] = last_cursor
             parsed_response = self.post_gql_request_single(
-                GQLOperations.SubscriptionsManagement_SubscriptionBenefits[
-                    "operationName"
-                ],
-                json_data,
+                operations.subscriptions_management_subscription_benefits.prepare(
+                    cursor=last_cursor, limit=limit
+                ),
                 self.parser.parse_subscriptions_management_subscription_benefits,
             )
             for edge in parsed_response.pages.edges:
                 gift_subs.append(edge.node)
-                last_cursor = edge.cursor
+                last_cursor = edge.cursor if edge.cursor is not None else ""
             has_next = parsed_response.pages.page_info.has_next_page
         return gift_subs
 
     def weekly_rewards(self, channel_id: str):
-        json_data = copy.deepcopy(GQLOperations.WeeklyVisitRewardsQuery)
-        json_data["variables"] = {"channelID": channel_id}
-
         return self.post_gql_request_single(
-            GQLOperations.WeeklyVisitRewardsQuery["operationName"],
-            json_data,
+            operations.weekly_visit_rewards_query.prepare(channel_id),
             self.parser.parse_weekly_rewards,
         )
 
     def recent_broadcasts(self, channel_login: str, limit: int):
-        json_data = copy.deepcopy(GQLOperations.FilterableVideoTower_Videos)
-        json_data["variables"]["channelOwnerLogin"] = channel_login
-        json_data["variables"]["limit"] = limit
         return self.post_gql_request_single(
-            GQLOperations.FilterableVideoTower_Videos["operationName"],
-            json_data,
+            operations.filterable_video_tower_videos.prepare(
+                channel_owner_login=channel_login, limit=limit
+            ),
             self.parser.parse_filterable_video_tower_videos,
         )
 
@@ -799,22 +658,16 @@ class GQL:
             "ALL_TIME", "LAST_MONTH", "LAST_WEEK", "LAST_DAY"
         ] = "ALL_TIME",
     ):
-        json_data = copy.deepcopy(GQLOperations.ClipsCards__User)
-        json_data["variables"]["login"] = channel_login
-        json_data["variables"]["limit"] = limit
-        json_data["variables"]["criteria"]["filter"] = _filter
         return self.post_gql_request_single(
-            GQLOperations.ClipsCards__User["operationName"],
-            json_data,
+            operations.clips_cards_user.prepare(
+                login=channel_login, limit=limit, _filter=_filter
+            ),
             self.parser.parse_clips_cards_user,
         )
 
     def drop_channel_campaigns_progress(self, channel_id: str):
-        json_data = copy.deepcopy(GQLOperations.DropChannelCampaignsProgress)
-        json_data["variables"] = {"channelID": channel_id}
         return self.post_gql_request_single(
-            GQLOperations.DropChannelCampaignsProgress["operationName"],
-            json_data,
+            operations.drop_channel_campaigns_progress.prepare(channel_id),
             self.parser.parse_drop_channel_campaigns_progress,
         )
 

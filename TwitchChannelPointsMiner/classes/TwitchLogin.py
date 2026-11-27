@@ -2,25 +2,20 @@
 # Original Copyright (c) 2020 Rodney
 # The MIT License (MIT)
 
-import copy
-# import getpass
 import logging
 import os
 import pickle
-
-# import webbrowser
-# import browser_cookie3
+from datetime import datetime, timedelta, timezone
+from time import sleep
 
 import requests
 
 from TwitchChannelPointsMiner.classes.Exceptions import (
-    BadCredentialsException,
     WrongCookiesException,
 )
 from TwitchChannelPointsMiner.constants import CLIENT_ID, GQLOperations, USER_AGENTS
+from TwitchChannelPointsMiner.classes.gql.data.request.Query import operations
 
-from datetime import datetime, timedelta, timezone
-from time import sleep
 
 logger = logging.getLogger(__name__)
 
@@ -341,8 +336,7 @@ class TwitchLogin(object):
         return user_id
 
     def __set_user_id(self):
-        json_data = copy.deepcopy(GQLOperations.GetIDFromLogin)
-        json_data["variables"]["login"] = self.username
+        json_data = operations.get_id_from_login.prepare(login=str(self.username)).data
         response = self.session.post(GQLOperations.url, json=json_data)
 
         if response.status_code == 200:
